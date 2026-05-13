@@ -8,9 +8,8 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "langchain>=0.3",
+    "deepagents",
     "langchain-anthropic>=0.3",
-    "langgraph>=0.4",
     "podman",
     "pydantic>=2",
     "sarif-om>=1.0",
@@ -18,6 +17,10 @@ dependencies = [
 
 [project.scripts]
 llmpuffin = "llmpuffin.__main__:main"
+llmpuffin-check = "llmpuffin_dev.check:main"
+
+[tool.ruff]
+src = ["src"]
 
 [tool.uv.sources]
 podman = { path = "../podman-py", editable = true }

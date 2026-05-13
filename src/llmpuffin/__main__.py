@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from pathlib import Path
 
-from llmpuffin.agent import run_audit
+from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
 
@@ -44,8 +45,8 @@ def main() -> None:
     parser.add_argument(
         "--max-iterations",
         type=int,
-        default=50,
-        help="Maximum agent loop iterations per scenario (default: 50)",
+        default=200,
+        help="Maximum agent loop iterations (default: 200)",
     )
 
     parser.add_argument(
@@ -65,9 +66,13 @@ def main() -> None:
         output_path=args.output,
     )
 
-    report = asyncio.run(run_audit(config, model_name=args.model))
-    n = len(report.findings)
-    print(f"Audit complete. {n} finding{'s' if n != 1 else ''} written to {args.output}")
+    result = asyncio.run(run_audit(config, model_name=args.model))
+    n = len(result.report.findings)
+    print(f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} written to {args.output}")
+    if result.error:
+        print(f"  Note: {result.error}")
+    if result.status != AuditStatus.COMPLETED:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

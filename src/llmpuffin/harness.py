@@ -63,8 +63,8 @@ class HarnessConfig:
     threat_model_dir: Path
     # Container image containing the codebase to audit
     container_image: str
-    # Maximum number of agentic loop iterations
-    max_iterations: int = 50
+    # Maximum number of agentic loop iterations (matches deepagents default)
+    max_iterations: int = 200
     # Working directory inside the container where code lives
     code_dir: str = "/src"
     # Output path for the SARIF results file

@@ -1,24 +1,99 @@
 """
-LangChain tools that execute inside the AuditExecution container.
+Custom tools for the security audit agent.
 
-These tools form the **tool integration layer** of the harness.
-The agent never touches the host — all side effects happen inside
-the container.  Each tool wraps AuditExecution methods and returns
-string results suitable for LLM consumption.
+Threat model query and finding reporting tools. Codebase tools (read, grep,
+ls, execute) are provided by the ContainerBackend via deepagents.
 """
 
 from __future__ import annotations
 
-from langchain_core.tools import StructuredTool
+from typing import Callable
 
-from llmpuffin.audit_environment import AuditExecution
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
+from llmpuffin.threat_model import ThreatModel
 
 
-def make_tools(execution: AuditExecution, report: SarifReport, scenario_id: str) -> list[StructuredTool]:
-    """Create tool instances bound to a specific AuditExecution and SarifReport."""
+def make_tools(
+    report: SarifReport,
+    threat_model: ThreatModel,
+) -> list[Callable]:
+    """Create threat model and finding tools."""
+
+    def get_threat_model() -> str:
+        """Get an overview of the threat model: components, trust zones, connections, and threat scenarios.
+
+        Call this first to understand what you are auditing.
+        """
+        lines = []
+        lines.append("# Components")
+        for c in threat_model.components:
+            lines.append(f"  - {c.id}: {c.name} — {c.description}")
+            for sub in c.components:
+                lines.append(f"    - {sub.id}: {sub.name} — {sub.description}")
+
+        lines.append("\n# Trust Zones")
+        for z in threat_model.trust_zones:
+            lines.append(f"  - {z.id}: {z.name} — {z.description} (components: {', '.join(z.component_ids)})")
+            for sub in z.trust_zones:
+                lines.append(f"    - {sub.id}: {sub.name} — {sub.description} (components: {', '.join(sub.component_ids)})")
+
+        lines.append("\n# Connections")
+        for conn in threat_model.connections:
+            lines.append(f"  - {conn.id}: {conn.source_component_id} → {conn.destination_component_id} ({conn.protocol}) — {conn.description}")
+
+        lines.append("\n# Threat Scenarios")
+        for s in threat_model.threat_scenarios:
+            lines.append(f"  - {s.id}: {s.name} [{s.severity}/{s.category}]")
+
+        return "\n".join(lines)
+
+    def get_threat_scenario(scenario_id: str) -> str:
+        """Get full details of a specific threat scenario by ID.
+
+        Args:
+            scenario_id: The scenario ID (e.g. "sqli", "auth_bypass")
+        """
+        scenario = next((s for s in threat_model.threat_scenarios if s.id == scenario_id), None)
+        if scenario is None:
+            return f"Scenario '{scenario_id}' not found"
+
+        components = []
+        for cid in scenario.affected_component_ids:
+            comp = threat_model.get_component(cid)
+            if comp:
+                components.append(f"  - {comp.name} ({comp.id}): {comp.description}")
+
+        connections = []
+        for conn_id in scenario.connection_ids:
+            for conn in threat_model.connections:
+                if conn.id == conn_id:
+                    connections.append(
+                        f"  - {conn.id}: {conn.source_component_id} → "
+                        f"{conn.destination_component_id} ({conn.protocol}): "
+                        f"{conn.description}"
+                    )
+
+        mitigations = "\n".join(f"  - {m}" for m in scenario.mitigations)
+
+        return f"""\
+**{scenario.name}** ({scenario.id})
+Category: {scenario.category}
+Severity: {scenario.severity}
+
+Description:
+{scenario.description}
+
+Affected components:
+{chr(10).join(components)}
+
+Relevant connections:
+{chr(10).join(connections)}
+
+Existing mitigations to verify:
+{mitigations}"""
 
     def report_finding(
+        scenario_id: str,
         severity: str,
         difficulty: str,
         description: str,
@@ -29,6 +104,7 @@ def make_tools(execution: AuditExecution, report: SarifReport, scenario_id: str)
         """Record a security finding. Call this for each vulnerability you discover.
 
         Args:
+            scenario_id: The threat scenario ID this finding relates to (e.g. "sqli")
             severity: How severe the issue is: "high", "medium", "low", or "informational"
             difficulty: How hard it is to exploit: "high", "medium", or "low"
             description: What the vulnerability is and where it occurs. Include code evidence.
@@ -61,51 +137,8 @@ def make_tools(execution: AuditExecution, report: SarifReport, scenario_id: str)
         report.add_finding(finding)
         return f"Finding recorded: {finding.rule_id}"
 
-    def read_file(path: str) -> str:
-        """Read the contents of a file in the codebase.
-
-        Args:
-            path: File path relative to the code directory (e.g. "src/main.py")
-        """
-        return execution.read_file(path)
-
-    def grep_code(pattern: str, path: str = ".") -> str:
-        """Search the codebase for a regex pattern. Returns matching lines with file:line prefixes.
-
-        Args:
-            pattern: Regex pattern to search for
-            path: Directory or file to search in (default: entire codebase)
-        """
-        return execution.grep(pattern, path)
-
-    def list_files(path: str = ".", pattern: str = "*") -> str:
-        """List files in the codebase matching a glob pattern.
-
-        Args:
-            path: Directory to search in (default: root)
-            pattern: Filename glob pattern (default: all files)
-        """
-        files = execution.list_files(path, pattern)
-        return "\n".join(files) if files else "(no files found)"
-
-    def run_command(command: str) -> str:
-        """Run a shell command inside the container. Use for static analysis tools, dependency checks, etc.
-
-        Args:
-            command: Shell command to execute (e.g. "semgrep --config auto .")
-        """
-        result = execution.exec(["sh", "-c", command], timeout=60)
-        output = result.stdout
-        if result.stderr:
-            output += f"\n[stderr]\n{result.stderr}"
-        if not result.ok:
-            output += f"\n[exit code: {result.exit_code}]"
-        return output
-
     return [
-        StructuredTool.from_function(read_file),
-        StructuredTool.from_function(grep_code),
-        StructuredTool.from_function(list_files),
-        StructuredTool.from_function(run_command),
-        StructuredTool.from_function(report_finding),
+        get_threat_model,
+        get_threat_scenario,
+        report_finding,
     ]

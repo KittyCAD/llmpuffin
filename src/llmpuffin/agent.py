@@ -27,103 +27,60 @@ The agentic loop — LangGraph orchestrator for security audits.
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from enum import StrEnum
 
-from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain.agents import create_agent
+from deepagents import create_deep_agent
+from langchain_core.messages import AIMessage, ToolMessage
+from langgraph.errors import GraphRecursionError
 
+from llmpuffin.backend import ContainerBackend
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.sarif import SarifReport
-from llmpuffin.threat_model import Severity, ThreatModel, ThreatScenario
 from llmpuffin.log import log
 from llmpuffin.tools import make_tools
 
-# System prompt grounding the agent in its role and the threat model.
-# This is the **context engineering** layer of the harness: we dynamically
-# curate what the model sees each turn.
+
+class AuditStatus(StrEnum):
+    COMPLETED = "completed"
+    RECURSION_LIMIT = "recursion_limit"
+    ERROR = "error"
+
+
+@dataclass
+class AuditResult:
+    report: SarifReport
+    status: AuditStatus
+    error: str | None = None
+
 SYSTEM_PROMPT = """\
 You are a security auditor performing a code review guided by a threat model.
-The source code is in the current working directory.
+The source code is in the current working directory of a container.
 
-Your task is to investigate specific threat scenarios by examining the codebase
-inside a container.  For each scenario you will:
-
-1. Understand the threat scenario and which components/connections are involved
-2. Use the provided tools to examine relevant code paths
-3. Look for concrete vulnerabilities that match the scenario
-4. Use the report_finding tool to record each finding you discover
+Your workflow:
+1. Call get_threat_model to understand the system architecture and threat scenarios
+2. For each threat scenario, call get_threat_scenario to get full details
+3. Use the codebase tools (read_file, grep_code, list_files, run_command) to investigate
+4. Call report_finding for each confirmed vulnerability
 
 Guidelines:
-- Focus on the specific threat scenario — don't try to find everything at once
+- Work through scenarios systematically, prioritizing high severity first
 - Provide concrete evidence: file paths, line numbers, code snippets
 - Distinguish between confirmed vulnerabilities and potential concerns
-- Consider the existing mitigations listed in the scenario
+- Check whether existing mitigations are properly implemented
 - Call report_finding as soon as you confirm a vulnerability — don't wait until the end
-- If you find no vulnerabilities for the scenario, explain why
-"""
-
-
-def build_scenario_prompt(
-    threat_model: ThreatModel, scenario: ThreatScenario
-) -> str:
-    """Build a human message with context for investigating one scenario."""
-    # Gather relevant components
-    components = []
-    for cid in scenario.affected_component_ids:
-        comp = threat_model.get_component(cid)
-        if comp:
-            components.append(f"  - {comp.name} ({comp.id}): {comp.description}")
-
-    # Gather relevant connections
-    connections = []
-    for conn_id in scenario.connection_ids:
-        for conn in threat_model.connections:
-            if conn.id == conn_id:
-                connections.append(
-                    f"  - {conn.id}: {conn.source_component_id} → "
-                    f"{conn.destination_component_id} ({conn.protocol}): "
-                    f"{conn.description}"
-                )
-
-    mitigations = "\n".join(f"  - {m}" for m in scenario.mitigations)
-
-    return f"""\
-Investigate the following threat scenario:
-
-**{scenario.name}** ({scenario.id})
-Category: {scenario.category}
-Severity: {scenario.severity}
-
-Description:
-{scenario.description}
-
-Affected components:
-{chr(10).join(components)}
-
-Relevant connections:
-{chr(10).join(connections)}
-
-Existing mitigations to verify:
-{mitigations}
-
-Examine the codebase to determine if this threat scenario represents a real
-vulnerability. Look at the relevant code paths, check if mitigations are
-properly implemented, and report any findings.
 """
 
 
 async def run_audit(
     config: HarnessConfig,
     model_name: str = "claude-sonnet-4-20250514",
-) -> SarifReport:
+) -> AuditResult:
     """Run a full security audit driven by the threat model.
 
-    This is the main entry point.  It:
-      1. Loads the threat model
-      2. Starts the audit environment (container)
-      3. For each threat scenario, runs the agent
-      4. Collects findings into a SARIF report
+    The agent drives its own investigation: it fetches the threat model,
+    chooses which scenarios to investigate, examines code, and records
+    findings — all via tools.
     """
     harness = Harness(config)
     threat_model = harness.load_threat_model()
@@ -133,90 +90,51 @@ async def run_audit(
              len(threat_model.components), len(threat_model.threat_scenarios))
 
     log.info("Starting container: %s", config.container_image)
-    with harness.start_environment() as execution:
-        llm = ChatAnthropic(model=model_name)
+    status = AuditStatus.COMPLETED
+    error: str | None = None
 
-        scenarios = sorted(
-            threat_model.threat_scenarios,
-            key=lambda s: _SEVERITY_ORDER.get(s.severity, 3),
+    with harness.start_environment() as execution:
+        backend = ContainerBackend(execution)
+        tools = make_tools(report, threat_model)
+        agent = create_deep_agent(
+            model=f"anthropic:{model_name}",
+            tools=tools,
+            backend=backend,
+            system_prompt=SYSTEM_PROMPT,
         )
 
-        for i, scenario in enumerate(scenarios, 1):
-            log.info("[%d/%d] Scenario: %s (%s/%s)",
-                     i, len(scenarios), scenario.name, scenario.severity, scenario.category)
+        try:
+            async for chunk in agent.astream(
+                {"messages": [{"role": "user", "content": "Begin the security audit."}]},
+                config={"recursion_limit": config.max_iterations},
+                stream_mode="updates",
+            ):
+                for node, updates in chunk.items():
+                    if updates is None:
+                        continue
+                    for msg in updates.get("messages", []):
+                        if isinstance(msg, AIMessage):
+                            if msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    log.info("  tool: %s(%s)", tc["name"],
+                                             _truncate(str(tc["args"]), 120))
+                            elif msg.content:
+                                log.info("  agent: %s", _truncate(str(msg.content), 200))
+                        elif isinstance(msg, ToolMessage):
+                            log.debug("  result: %s", _truncate(str(msg.content), 200))
+        except GraphRecursionError:
+            status = AuditStatus.RECURSION_LIMIT
+            error = f"Agent hit recursion limit ({config.max_iterations} iterations)"
+            log.warning("  %s", error)
+        except Exception as exc:
+            status = AuditStatus.ERROR
+            error = str(exc)
+            log.error("  Agent error: %s", error)
 
-            before = len(report.findings)
-            tools = make_tools(execution, report, scenario.id)
-            agent = create_agent(llm, tools)
-            await _run_scenario(agent, threat_model, scenario, config.max_iterations)
-            added = len(report.findings) - before
-            log.info("  %d finding(s) for scenario %s", added, scenario.id)
-
-    log.info("Container stopped")
+    log.info("Container stopped. %d finding(s) recorded. Status: %s",
+             len(report.findings), status)
     report.write(config.output_path)
-    return report
-
-
-_SEVERITY_ORDER = {Severity.HIGH: 0, Severity.LOW: 1, Severity.INFORMATIONAL: 2}
-
-
-async def run_single_scenario(
-    config: HarnessConfig,
-    scenario_id: str,
-    model_name: str = "claude-sonnet-4-20250514",
-) -> SarifReport:
-    """Run the audit for a single threat scenario (useful for testing)."""
-    harness = Harness(config)
-    threat_model = harness.load_threat_model()
-    report = SarifReport()
-
-    scenario = next(
-        (s for s in threat_model.threat_scenarios if s.id == scenario_id), None
-    )
-    if scenario is None:
-        raise ValueError(f"Scenario '{scenario_id}' not found in threat model")
-
-    log.info("Starting container: %s", config.container_image)
-    with harness.start_environment() as execution:
-        llm = ChatAnthropic(model=model_name)
-        tools = make_tools(execution, report, scenario.id)
-        agent = create_agent(llm, tools)
-        await _run_scenario(agent, threat_model, scenario, config.max_iterations)
-
-    log.info("Container stopped")
-    report.write(config.output_path)
-    return report
-
-
-async def _run_scenario(
-    agent: Any,
-    threat_model: ThreatModel,
-    scenario: ThreatScenario,
-    max_iterations: int,
-) -> None:
-    """Run agent for one scenario. Findings are recorded via the report_finding tool."""
-    scenario_prompt = build_scenario_prompt(threat_model, scenario)
-    messages: list[Any] = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        HumanMessage(content=scenario_prompt),
-    ]
-
-    async for chunk in agent.astream(
-        {"messages": messages},
-        config={"recursion_limit": max_iterations},
-        stream_mode="updates",
-    ):
-        for node, updates in chunk.items():
-            for msg in updates.get("messages", []):
-                if isinstance(msg, AIMessage):
-                    if msg.tool_calls:
-                        for tc in msg.tool_calls:
-                            log.info("  tool: %s(%s)", tc["name"],
-                                     _truncate(str(tc["args"]), 120))
-                    elif msg.content:
-                        log.info("  agent: %s", _truncate(str(msg.content), 200))
-                elif isinstance(msg, ToolMessage):
-                    log.debug("  result: %s", _truncate(str(msg.content), 200))
+    return AuditResult(report=report, status=status, error=error)
 
 
 def _truncate(s: str, n: int) -> str:
