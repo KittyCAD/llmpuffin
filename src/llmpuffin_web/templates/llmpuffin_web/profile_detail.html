@@ -1,0 +1,39 @@
+{% extends "llmpuffin_web/base.html" %}
+{% block title %}{{ profile.name }}{% endblock %}
+{% block content %}
+<p><a href="/profiles/">← all profiles</a></p>
+<h1>{{ profile.name }}</h1>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+
+<form method="post" action="/profiles/{{ profile.id }}/">
+  {% csrf_token %}
+  <p><label>Name: <input type="text" name="name" value="{{ profile.name }}" required></label></p>
+  <p><label>Config (TOML):</label></p>
+  <textarea name="config_toml" rows="20" required>{{ profile.config_toml }}</textarea>
+  <p>
+    <button type="submit">save</button>
+    <form method="post" action="/profiles/{{ profile.id }}/run/" class="inline">
+      {% csrf_token %}
+      <button type="submit">run audit</button>
+    </form>
+  </p>
+</form>
+
+{% if runs %}
+<h2>runs</h2>
+<table>
+<tr><th>Thread ID</th><th>Status</th><th>Model</th><th>Started</th><th>Finished</th></tr>
+{% for r in runs %}
+<tr>
+  <td><a href="/checkpoints/{{ r.thread_id }}/">{{ r.thread_id }}</a></td>
+  <td>{{ r.status }}</td>
+  <td>{{ r.model_name }}</td>
+  <td>{{ r.started_at|date:"Y-m-d H:i" }}</td>
+  <td>{{ r.finished_at|date:"Y-m-d H:i"|default:"—" }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

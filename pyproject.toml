@@ -9,15 +9,23 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "deepagents",
+    "django>=5",
     "langchain-anthropic>=0.3",
+    "langgraph-checkpoint-postgres",
     "podman",
+    "psycopg[binary]>=3",
     "pydantic>=2",
     "sarif-om>=1.0",
 ]
 
+[project.optional-dependencies]
+interpreter = ["langchain-quickjs>=0.1.0"]
+
 [project.scripts]
 llmpuffin = "llmpuffin.__main__:main"
 llmpuffin-check = "llmpuffin_dev.check:main"
+llmpuffin-pg = "llmpuffin_dev.postgres:main"
+llmpuffin-web = "llmpuffin_web.manage:main"
 
 [tool.ruff]
 src = ["src"]

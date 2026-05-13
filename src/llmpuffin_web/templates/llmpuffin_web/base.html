@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>llmpuffin — {% block title %}{% endblock %}</title>
+<style>
+body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; }
+a { color: #6ec6ff; }
+h1 { font-size: 1.3em; }
+table { border-collapse: collapse; margin-top: 1em; }
+th, td { border: 1px solid #444; padding: 0.5em 1em; text-align: left; }
+th { background: #2a2a4a; }
+tr:hover { background: #2a2a4a; }
+nav { margin-bottom: 1.5em; }
+nav a { margin-right: 1.5em; }
+
+.msg { margin: 0.5em 0; padding: 0.5em 1em; border-left: 3px solid #444; }
+.msg pre { margin: 0.3em 0 0 0; white-space: pre-wrap; word-wrap: break-word; max-height: 20em; overflow-y: auto; }
+.msg.llm { border-left-color: #6ec6ff; }
+.msg.llm.tool-call { border-left-color: #ffa726; }
+.msg.tool { border-left-color: #888; }
+.msg.human { border-left-color: #81c784; }
+.role { font-weight: bold; font-size: 0.85em; text-transform: uppercase; }
+.tools { color: #ffa726; }
+.tool-args { margin: 0.4em 0 0 1em; }
+.tool-args summary { cursor: pointer; color: #ffa726; font-size: 0.9em; }
+.tool-args dl { margin: 0.3em 0 0.3em 1em; }
+.tool-args dt { color: #aaa; font-size: 0.85em; margin-top: 0.3em; }
+.tool-args dd { margin: 0 0 0 1em; white-space: pre-wrap; word-wrap: break-word; }
+
+form.inline { display: inline; }
+textarea { font-family: monospace; background: #2a2a4a; color: #e0e0e0; border: 1px solid #444; padding: 0.5em; width: 100%; }
+input[type=text] { font-family: monospace; background: #2a2a4a; color: #e0e0e0; border: 1px solid #444; padding: 0.4em; }
+button { font-family: monospace; background: #3a3a5a; color: #e0e0e0; border: 1px solid #666; padding: 0.4em 1em; cursor: pointer; }
+button:hover { background: #4a4a6a; }
+.error { color: #ff6b6b; }
+.success { color: #81c784; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="/">checkpoints</a>
+  <a href="/profiles/">profiles</a>
+  <a href="/admin/">admin</a>
+</nav>
+{% block content %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,33 @@
+{% extends "llmpuffin_web/base.html" %}
+{% block title %}{{ session.thread_id }}{% endblock %}
+{% block content %}
+<h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages)</h1>
+
+{% for msg in session.messages %}
+  {% if msg.role == "ai" and msg.tool_calls %}
+    <div class="msg llm tool-call">
+      <span class="role">llm</span>
+      <span class="tools">→ {% for tc in msg.tool_calls %}{{ tc.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      {% for tc in msg.tool_calls %}
+        <details class="tool-args">
+          <summary>{{ tc.name }}()</summary>
+          <dl>
+          {% for k, v in tc.args.items %}
+            <dt>{{ k }}</dt>
+            <dd>{{ v }}</dd>
+          {% endfor %}
+          </dl>
+        </details>
+      {% endfor %}
+    </div>
+  {% elif msg.role == "ai" %}
+    <div class="msg llm"><span class="role">llm</span><pre>{{ msg.content }}</pre></div>
+  {% elif msg.role == "tool" %}
+    <div class="msg tool"><span class="role">tool</span><pre>{{ msg.content }}</pre></div>
+  {% elif msg.role == "human" %}
+    <div class="msg human"><span class="role">human</span><pre>{{ msg.content }}</pre></div>
+  {% else %}
+    <div class="msg"><span class="role">{{ msg.role }}</span><pre>{{ msg.content }}</pre></div>
+  {% endif %}
+{% endfor %}
+{% endblock %}

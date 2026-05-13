@@ -69,6 +69,12 @@ class HarnessConfig:
     code_dir: str = "/src"
     # Output path for the SARIF results file
     output_path: Path = Path("results.sarif")
+    # Enable QuickJS code interpreter for the agent
+    interpreter: bool = False
+    # Directory for persistent agent memory across sessions (None = no persistence)
+    store_dir: Path | None = None
+    # PostgreSQL connection string for session checkpointing (None = no checkpointing)
+    postgres_connstring: str | None = None
 
 
 @dataclass

@@ -1,0 +1,16 @@
+[audit]
+image = "llmpuffin-example"
+threat_model_dir = "examples/threat_model"
+model = "claude-sonnet-4-20250514"
+max_iterations = 200
+code_dir = "/src"
+output = "examples/results.sarif"
+
+[agent]
+interpreter = false
+
+[store]
+dir = "examples/store"
+
+[checkpoint]
+postgres = "postgresql://localhost:5434/llmpuffin"

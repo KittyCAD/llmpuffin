@@ -23,6 +23,9 @@
             # On macOS podman runs a Linux VM via `podman machine`.
             # On Linux it's truly rootless with no daemon.
             podman
+
+            # Database (user-local, no daemon)
+            postgresql
           ] ++ pkgs.lib.optionals isDarwin [
             # macOS needs qemu for the podman machine VM
             qemu

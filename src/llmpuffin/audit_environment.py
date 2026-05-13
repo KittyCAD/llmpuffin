@@ -17,6 +17,7 @@ is required.
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from types import TracebackType
 
@@ -94,15 +95,30 @@ class AuditExecution:
     def exec(self, command: list[str], timeout: int = 30) -> ExecResult:
         """Execute a command inside the container.
 
-        This is the primary interface the agent uses to interact with
-        the codebase.  All commands run with the container's reduced
-        privileges (no caps, read-only rootfs).
+        Args:
+            command: Command and arguments to run.
+            timeout: Maximum seconds before the command is killed.
+                     Raises TimeoutError if exceeded.
         """
-        exit_code, output = self.container.exec_run(
-            command,
-            workdir=self.code_dir,
-            demux=True,
-        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                self.container.exec_run,
+                command,
+                workdir=self.code_dir,
+                demux=True,
+            )
+            try:
+                exit_code, output = future.result(timeout=timeout)
+            except FuturesTimeoutError:
+                raise TimeoutError(
+                    f"Command timed out after {timeout}s: {command}"
+                ) from None
+
+        if exit_code is None:
+            raise RuntimeError(
+                f"exec_run returned None exit code for: {command}"
+            )
+
         stdout = output[0].decode() if output[0] else ""
         stderr = output[1].decode() if output[1] else ""
 
