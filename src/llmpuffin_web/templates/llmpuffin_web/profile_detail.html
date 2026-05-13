@@ -12,13 +12,12 @@
   <p><label>Name: <input type="text" name="name" value="{{ profile.name }}" required></label></p>
   <p><label>Config (TOML):</label></p>
   <textarea name="config_toml" rows="20" required>{{ profile.config_toml }}</textarea>
-  <p>
-    <button type="submit">save</button>
-    <form method="post" action="/profiles/{{ profile.id }}/run/" class="inline">
-      {% csrf_token %}
-      <button type="submit">run audit</button>
-    </form>
-  </p>
+  <p><button type="submit">save</button></p>
+</form>
+
+<form method="post" action="/profiles/{{ profile.id }}/run/">
+  {% csrf_token %}
+  <p><button type="submit">run audit</button></p>
 </form>
 
 {% if runs %}

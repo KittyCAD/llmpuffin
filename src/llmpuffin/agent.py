@@ -37,7 +37,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.errors import GraphRecursionError
 
 from llmpuffin.backend import ContainerBackend
-from llmpuffin.store import load_store, save_store
+from llmpuffin.db import get_postgres_url, setup as setup_django
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.sarif import SarifReport
 from llmpuffin.threat_model import ThreatModel
@@ -46,6 +46,7 @@ from llmpuffin.tools import make_tools
 
 
 class AuditStatus(StrEnum):
+    RUNNING = "running"
     COMPLETED = "completed"
     RECURSION_LIMIT = "recursion_limit"
     ERROR = "error"
@@ -61,6 +62,8 @@ class AuditResult:
 SYSTEM_PROMPT = """\
 You are a security auditor performing a code review guided by a threat model.
 The source code is in the current working directory of a container.
+
+Start by invoking the skill audit-context-building.
 
 Your workflow:
 1. Call get_threat_model to understand the system architecture and threat scenarios
@@ -82,6 +85,7 @@ async def run_audit(
     config: HarnessConfig,
     model_name: str = "claude-sonnet-4-20250514",
     thread_id: str | None = None,
+    user_message: str | None = None,
 ) -> AuditResult:
     """Run a full security audit driven by the threat model.
 
@@ -95,6 +99,8 @@ async def run_audit(
         thread_id: Session ID for resumable checkpointing. If None and
                    postgres is configured, a new ID is generated.
     """
+    setup_django()
+
     harness = Harness(config)
     threat_model = harness.load_threat_model()
     report = SarifReport()
@@ -102,16 +108,18 @@ async def run_audit(
     log.info("Loaded threat model: %d components, %d scenarios",
              len(threat_model.components), len(threat_model.threat_scenarios))
 
-    if config.postgres_connstring:
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        async with AsyncPostgresSaver.from_conn_string(config.postgres_connstring) as checkpointer:
-            await checkpointer.setup()
-            return await _run_audit_inner(
-                harness, config, threat_model, report, model_name, thread_id, checkpointer,
-            )
-    else:
+    postgres_url = get_postgres_url()
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from langgraph.store.postgres.aio import AsyncPostgresStore
+    async with (
+        AsyncPostgresSaver.from_conn_string(postgres_url) as checkpointer,
+        AsyncPostgresStore.from_conn_string(postgres_url) as store,
+    ):
+        await checkpointer.setup()
+        await store.setup()
         return await _run_audit_inner(
-            harness, config, threat_model, report, model_name, thread_id, None,
+            harness, config, threat_model, report, model_name,
+            thread_id, checkpointer, store, user_message,
         )
 
 
@@ -123,10 +131,15 @@ async def _run_audit_inner(
     model_name: str,
     thread_id: str | None,
     checkpointer: object | None,
+    store: object | None,
+    user_message: str | None = None,
 ) -> AuditResult:
-    tid = thread_id or (uuid.uuid4().hex[:12] if checkpointer else None)
-    if tid:
-        log.info("Session thread_id: %s", tid)
+    tid = thread_id or uuid.uuid4().hex[:12]
+    log.info("Session thread_id: %s", tid)
+
+    # Create the AuditRun record immediately so it's visible as "running"
+    from asgiref.sync import sync_to_async
+    audit_run_id = await sync_to_async(_create_audit_run)(config, model_name, tid, thread_id)
 
     log.info("Starting container: %s", config.container_image)
     status = AuditStatus.COMPLETED
@@ -134,24 +147,60 @@ async def _run_audit_inner(
 
     with harness.start_environment() as execution:
         container_backend = ContainerBackend(execution)
+        routes: dict = {}
 
-        store = None
-        if config.store_dir:
-            store = load_store(config.store_dir)
-            memory_backend = StoreBackend(store=store)
-            backend = CompositeBackend(
-                default=container_backend,
-                routes={"/memories/": memory_backend},
-            )
-        else:
-            backend = container_backend
+        # Memory backend via postgres store, scoped to this harness config name
+        # TODO: should checkpoints also be scoped per harness name? Currently
+        # thread_ids are globally unique so there's no collision, but scoping
+        # would make it easier to list/clean up checkpoints per harness.
+        harness_name = config.name
+        memory_backend = StoreBackend(
+            store=store,
+            namespace=lambda rt, _n=harness_name: ("llmpuffin", _n, "memories"),
+        )
+        routes["/memories/"] = memory_backend
 
-        tools = make_tools(report, threat_model)
+        # Load skills from disk into an in-memory store, mirroring the dir structure
+        skills_list: list[str] = []
+        if config.skills_dir and config.skills_dir.is_dir():
+            from deepagents.backends.utils import create_file_data
+            from langgraph.store.memory import InMemoryStore as _InMemoryStore
+            skills_store = _InMemoryStore()
+            skills_backend = StoreBackend(store=skills_store, namespace=lambda rt: ("skills",))
+            for file_path in sorted(config.skills_dir.rglob("*")):
+                if not file_path.is_file():
+                    continue
+                rel = file_path.relative_to(config.skills_dir)
+                store_key = f"/skills/{rel}"
+                try:
+                    content = file_path.read_text()
+                except (UnicodeDecodeError, OSError):
+                    continue  # skip binary files
+                skills_store.put(
+                    namespace=("skills",),
+                    key=store_key,
+                    value=create_file_data(content),
+                )
+            routes["/skills/"] = skills_backend
+            skills_list = ["/skills/"]
+            log.info("Loaded skills from %s", config.skills_dir)
+
+        backend = CompositeBackend(
+            default=container_backend,
+            routes=routes,
+        )
+
+        tools = make_tools(report, threat_model, audit_run_id=audit_run_id)
 
         middleware = []
         if config.interpreter:
             from langchain_quickjs import CodeInterpreterMiddleware
             middleware.append(CodeInterpreterMiddleware())
+
+        # Build interrupt_on config from tool names
+        interrupt_on_config = None
+        if config.interrupt_on:
+            interrupt_on_config = {name: True for name in config.interrupt_on}
 
         agent = create_deep_agent(
             model=f"anthropic:{model_name}",
@@ -160,6 +209,9 @@ async def _run_audit_inner(
             store=store,
             checkpointer=checkpointer,
             middleware=middleware,
+            interrupt_on=interrupt_on_config,
+            skills=skills_list or None,
+            subagents=[_FUNCTION_ANALYZER_SUBAGENT],
             system_prompt=SYSTEM_PROMPT,
         )
 
@@ -168,15 +220,17 @@ async def _run_audit_inner(
         if tid:
             run_config["configurable"] = {"thread_id": tid}
 
-        # If resuming, send "Continue" instead of starting fresh
-        if thread_id:
-            user_message = "Continue the security audit."
+        # Determine the message to send
+        if user_message:
+            msg = user_message
+        elif thread_id:
+            msg = "Continue the security audit."
         else:
-            user_message = "Begin the security audit."
+            msg = "Begin the security audit."
 
         try:
             async for chunk in agent.astream(
-                {"messages": [{"role": "user", "content": user_message}]},
+                {"messages": [{"role": "user", "content": msg}]},
                 config=run_config,
                 stream_mode="updates",
             ):
@@ -202,74 +256,103 @@ async def _run_audit_inner(
             error = str(exc)
             log.error("  Agent error: %s", error)
 
-    if store and config.store_dir:
-        save_store(store, config.store_dir)
-        log.info("Store saved to %s", config.store_dir)
+    # Store is persisted automatically via AsyncPostgresStore
 
     log.info("Container stopped. %d finding(s) recorded. Status: %s",
              len(report.findings), status)
     report.write(config.output_path)
 
     # Persist to Django DB
-    _save_to_db(config, model_name, tid, status, error, report)
+    from asgiref.sync import sync_to_async
+    await sync_to_async(_finalize_audit_run)(tid, status, error)
 
     return AuditResult(report=report, status=status, error=error, thread_id=tid)
 
 
-def _save_to_db(
-    config: HarnessConfig,
-    model_name: str,
-    tid: str | None,
-    status: AuditStatus,
-    error: str | None,
-    report: SarifReport,
-) -> None:
-    """Persist the audit run and findings to Django DB."""
+def _create_audit_run(
+    config: HarnessConfig, model_name: str, tid: str, resume_thread_id: str | None,
+) -> int | None:
+    """Create or resume an AuditRun, register the thread. Returns audit_run.pk."""
+    try:
+        from llmpuffin.models import AuditRun, AuditThread
+
+        if resume_thread_id:
+            old_thread = AuditThread.objects.filter(thread_id=resume_thread_id).first()
+            if old_thread:
+                audit_run = old_thread.audit_run
+                audit_run.status = AuditStatus.RUNNING.value
+                audit_run.error = ""
+                audit_run.save()
+            else:
+                audit_run = AuditRun.objects.create(
+                    config_toml=config.config_toml,
+                    container_image=config.container_image,
+                    model_name=model_name,
+                    status=AuditStatus.RUNNING.value,
+                )
+        else:
+            audit_run = AuditRun.objects.create(
+                config_toml=config.config_toml,
+                container_image=config.container_image,
+                model_name=model_name,
+                status=AuditStatus.RUNNING.value,
+            )
+
+        AuditThread.objects.get_or_create(
+            thread_id=tid,
+            defaults={"audit_run": audit_run},
+        )
+        return audit_run.pk
+    except Exception as exc:
+        log.warning("Failed to create audit run in DB: %s", exc)
+        return None
+
+
+def _finalize_audit_run(tid: str | None, status: AuditStatus, error: str | None) -> None:
+    """Update the AuditRun status at the end of a run. Findings are already persisted."""
     if not tid:
         return
     try:
-        from llmpuffin.db import setup
-        setup()
-
         from django.utils import timezone
-        from llmpuffin.models import AuditRun, Finding, FindingLocation
+        from llmpuffin.models import AuditThread
 
-        audit_run, _ = AuditRun.objects.update_or_create(
-            thread_id=tid,
-            defaults={
-                "container_image": config.container_image,
-                "model_name": model_name,
-                "status": status.value,
-                "error": error or "",
-                "finished_at": timezone.now(),
-            },
-        )
+        thread = AuditThread.objects.filter(thread_id=tid).select_related("audit_run").first()
+        if not thread:
+            log.warning("AuditThread %s not found in DB", tid)
+            return
 
-        for f in report.findings:
-            finding = Finding.objects.create(
-                audit_run=audit_run,
-                rule_id=f.rule_id,
-                scenario_id=f.threat_scenario_ids[0] if f.threat_scenario_ids else "",
-                severity=f.severity,
-                difficulty=f.difficulty,
-                level=f.level,
-                description=f.description,
-                impact=f.impact,
-                recommendations=f.recommendations,
-            )
-            for loc in f.locations:
-                FindingLocation.objects.create(
-                    finding=finding,
-                    file_path=loc.file_path,
-                    start_line=loc.start_line,
-                    end_line=loc.end_line,
-                )
-
-        log.info("Saved audit run %s with %d findings to DB", tid, len(report.findings))
+        audit_run = thread.audit_run
+        audit_run.status = status.value
+        audit_run.error = error or ""
+        audit_run.finished_at = timezone.now()
+        audit_run.save()
     except Exception as exc:
-        log.warning("Failed to save to DB: %s", exc)
+        log.warning("Failed to finalize audit run in DB: %s", exc)
 
 
 def _truncate(s: str, n: int) -> str:
     s = s.replace("\n", " ")
     return s[:n] + "..." if len(s) > n else s
+
+
+def _load_agent_md(path: str) -> str:
+    """Load an agent .md file and strip YAML frontmatter."""
+    from pathlib import Path
+    text = Path(path).read_text()
+    if text.startswith("---"):
+        end = text.index("---", 3)
+        return text[end + 3:].strip()
+    return text
+
+
+_FUNCTION_ANALYZER_SUBAGENT = {
+    "name": "function-analyzer",
+    "description": (
+        "Performs ultra-granular per-function deep analysis for security audit "
+        "context building. Use when analyzing dense functions, data-flow chains, "
+        "cryptographic implementations, or state machines."
+    ),
+    "system_prompt": _load_agent_md(
+        "vendor/trailofbits-skills/plugins/audit-context-building/agents/function-analyzer.md"
+    ),
+}

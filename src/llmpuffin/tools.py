@@ -7,15 +7,54 @@ ls, execute) are provided by the ContainerBackend via deepagents.
 
 from __future__ import annotations
 
+import logging
 from typing import Callable
 
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel
 
+log = logging.getLogger("llmpuffin")
+
+_SEVERITY_TO_LEVEL = {"high": "error", "medium": "warning", "low": "note", "informational": "note"}
+
+
+def _persist_finding_to_db(audit_run_id: int | None, rule_id: str, scenario_id: str,
+                           severity: str, difficulty: str, level: str,
+                           description: str, impact: str, recommendations: str,
+                           locations: list[dict] | None) -> int | None:
+    """Write a finding to Django DB immediately. Returns the Finding pk."""
+    if not audit_run_id:
+        return None
+    try:
+        from llmpuffin.models import AuditRun, Finding, FindingLocation
+        audit_run = AuditRun.objects.get(pk=audit_run_id)
+        finding = Finding.objects.create(
+            audit_run=audit_run,
+            rule_id=rule_id,
+            scenario_id=scenario_id,
+            severity=severity,
+            difficulty=difficulty,
+            level=level,
+            description=description,
+            impact=impact,
+            recommendations=recommendations,
+        )
+        for loc in (locations or []):
+            FindingLocation.objects.create(
+                finding=finding,
+                file_path=loc["file"],
+                start_line=loc.get("line", 0),
+            )
+        return finding.pk
+    except Exception as exc:
+        log.warning("Failed to persist finding to DB: %s", exc)
+        return None
+
 
 def make_tools(
     report: SarifReport,
     threat_model: ThreatModel,
+    audit_run_id: int | None = None,
 ) -> list[Callable]:
     """Create threat model and finding tools."""
 
@@ -92,6 +131,9 @@ Relevant connections:
 Existing mitigations to verify:
 {mitigations}"""
 
+    # Track rule_id → DB pk for update/delete
+    _finding_pks: dict[str, int] = {}
+
     def report_finding(
         scenario_id: str,
         severity: str,
@@ -113,9 +155,7 @@ Existing mitigations to verify:
             locations: Optional list of locations, each a dict with "file" (str) and "line" (int).
                        Example: [{"file": "src/main.py", "line": 42}]
         """
-        level = {"high": "error", "medium": "warning", "low": "note", "informational": "note"}.get(
-            severity, "warning"
-        )
+        level = _SEVERITY_TO_LEVEL.get(severity, "warning")
         sarif_locations = []
         if locations:
             for loc in locations:
@@ -123,8 +163,9 @@ Existing mitigations to verify:
                     file_path=loc["file"],
                     start_line=loc.get("line", 0),
                 ))
+        rule_id = f"{scenario_id}-{len(report.findings) + 1:03d}"
         finding = SarifFinding(
-            rule_id=f"{scenario_id}-{len(report.findings) + 1:03d}",
+            rule_id=rule_id,
             description=description,
             impact=impact,
             recommendations=recommendations,
@@ -135,10 +176,95 @@ Existing mitigations to verify:
             threat_scenario_ids=[scenario_id],
         )
         report.add_finding(finding)
-        return f"Finding recorded: {finding.rule_id}"
+
+        pk = _persist_finding_to_db(
+            audit_run_id, rule_id, scenario_id, severity, difficulty, level,
+            description, impact, recommendations, locations,
+        )
+        if pk:
+            _finding_pks[rule_id] = pk
+
+        return f"Finding recorded: {rule_id}"
+
+    def update_finding(
+        rule_id: str,
+        severity: str | None = None,
+        difficulty: str | None = None,
+        description: str | None = None,
+        impact: str | None = None,
+        recommendations: str | None = None,
+    ) -> str:
+        """Update an existing finding by rule_id.
+
+        Args:
+            rule_id: The finding to update (e.g. "sqli-001")
+            severity: New severity (optional)
+            difficulty: New difficulty (optional)
+            description: New description (optional)
+            impact: New impact (optional)
+            recommendations: New recommendations (optional)
+        """
+        # Update SARIF report
+        sarif_finding = next((f for f in report.findings if f.rule_id == rule_id), None)
+        if not sarif_finding:
+            return f"Finding '{rule_id}' not found"
+
+        if severity is not None:
+            sarif_finding.severity = severity
+            sarif_finding.level = _SEVERITY_TO_LEVEL.get(severity, "warning")
+        if difficulty is not None:
+            sarif_finding.difficulty = difficulty
+        if description is not None:
+            sarif_finding.description = description
+        if impact is not None:
+            sarif_finding.impact = impact
+        if recommendations is not None:
+            sarif_finding.recommendations = recommendations
+
+        # Update DB
+        pk = _finding_pks.get(rule_id)
+        if pk:
+            try:
+                from llmpuffin.models import Finding
+                Finding.objects.filter(pk=pk).update(**{
+                    k: v for k, v in {
+                        "severity": severity,
+                        "difficulty": difficulty,
+                        "level": _SEVERITY_TO_LEVEL.get(severity, None) if severity else None,
+                        "description": description,
+                        "impact": impact,
+                        "recommendations": recommendations,
+                    }.items() if v is not None
+                })
+            except Exception as exc:
+                log.warning("Failed to update finding in DB: %s", exc)
+
+        return f"Finding updated: {rule_id}"
+
+    def delete_finding(rule_id: str) -> str:
+        """Delete a finding by rule_id. Use if a finding was reported in error.
+
+        Args:
+            rule_id: The finding to delete (e.g. "sqli-001")
+        """
+        # Remove from SARIF report
+        report.findings = [f for f in report.findings if f.rule_id != rule_id]
+
+        # Remove from DB
+        pk = _finding_pks.pop(rule_id, None)
+        if pk:
+            try:
+                from llmpuffin.models import Finding
+                Finding.objects.filter(pk=pk).delete()
+            except Exception as exc:
+                log.warning("Failed to delete finding from DB: %s", exc)
+
+        return f"Finding deleted: {rule_id}"
 
     return [
         get_threat_model,
         get_threat_scenario,
         report_finding,
+        update_finding,
+        delete_finding,
     ]

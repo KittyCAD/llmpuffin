@@ -11,8 +11,8 @@ wheels/
 
 .idea
 
-examples/*.sarif
-examples/store
+examples/*/results.sarif
+examples/*/store
 
 .postgres
 

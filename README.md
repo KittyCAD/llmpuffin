@@ -37,19 +37,17 @@ uv run llmpuffin-web migrate
 
 ## Usage
 
-Define a threat model in TOML (see `examples/threat_model/`), provide a container image with your codebase, and run the audit:
+Define a threat model in TOML, provide a container image with your codebase, and run the audit. See `examples/` for ready-to-run setups:
 
 ```
-# Build example container
-podman build -t llmpuffin-example -f examples/Dockerfile examples/
+# Vulnerable app example
+bash examples/vulnerable-app/run.sh
 
-# Run via CLI args
-uv run llmpuffin llmpuffin-example examples/threat_model -v \
-    --store-dir examples/.store \
-    --postgres postgresql://localhost:5434/llmpuffin
+# Zoo Design Studio (modeling-app) example
+bash examples/modeling-app/run.sh
 
-# Or via config file
-uv run llmpuffin llmpuffin-example -v -c examples/llmpuffin.toml
+# Or run directly with a config file
+uv run llmpuffin llmpuffin-example -v -c examples/vulnerable-app/llmpuffin.toml
 ```
 
 To resume a previous session that was interrupted:

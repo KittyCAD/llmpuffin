@@ -37,13 +37,18 @@ class AuditProfile(models.Model):
 
 
 class AuditRun(models.Model):
-    """A single execution of the audit harness."""
+    """A single execution of the audit harness.
+
+    Currently one thread per run. Resuming reuses the same thread_id
+    (langgraph appends to the checkpoint chain). Forking (multiple
+    divergent threads from the same checkpoint) is not yet supported.
+    """
 
     profile = models.ForeignKey(AuditProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name="runs")
-    thread_id = models.CharField(max_length=64, unique=True, db_index=True)
+    config_toml = models.TextField(blank=True, default="")
     container_image = models.CharField(max_length=512)
     model_name = models.CharField(max_length=128)
-    status = models.CharField(max_length=32)  # completed, recursion_limit, error
+    status = models.CharField(max_length=32)  # running, completed, recursion_limit, error
     error = models.TextField(blank=True, default="")
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -53,7 +58,26 @@ class AuditRun(models.Model):
         ordering = ["-started_at"]
 
     def __str__(self) -> str:
-        return f"{self.thread_id} ({self.status})"
+        threads = ", ".join(t.thread_id for t in self.threads.all()[:3])
+        return f"Run {self.pk} [{threads}] ({self.status})"
+
+
+class AuditThread(models.Model):
+    """A checkpoint thread belonging to an audit run.
+
+    Each agent invocation (start or resume) creates a new thread.
+    """
+
+    audit_run = models.ForeignKey(AuditRun, on_delete=models.CASCADE, related_name="threads")
+    thread_id = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "llmpuffin"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return self.thread_id
 
 
 class Finding(models.Model):

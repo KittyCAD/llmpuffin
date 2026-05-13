@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import tempfile
+import asyncio
+import threading
 
 import tomllib
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from llmpuffin.models import AuditProfile
+from llmpuffin.agent import run_audit
+from llmpuffin.config import ProfileAudit
+from llmpuffin.harness import HarnessConfig
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 from llmpuffin_web.checkpoint import get_session, list_sessions
 
 
@@ -63,6 +65,11 @@ def profile_detail(request: HttpRequest, profile_id: int) -> HttpResponse:
     profile = get_object_or_404(AuditProfile, id=profile_id)
     ctx: dict = {"profile": profile, "runs": profile.runs.all()}
 
+    if request.GET.get("error"):
+        ctx["error"] = request.GET["error"]
+    if request.GET.get("success"):
+        ctx["success"] = request.GET["success"]
+
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         config_toml = request.POST.get("config_toml", "").strip()
@@ -82,24 +89,97 @@ def profile_detail(request: HttpRequest, profile_id: int) -> HttpResponse:
     return render(request, "llmpuffin_web/profile_detail.html", ctx)
 
 
+def runs_list(request: HttpRequest) -> HttpResponse:
+    from django.db.models import Count
+    runs = AuditRun.objects.annotate(
+        thread_count=Count("threads", distinct=True),
+        finding_count=Count("findings", distinct=True),
+    ).order_by("-started_at")
+    return render(request, "llmpuffin_web/runs_list.html", {"runs": runs})
+
+
+def run_detail(request: HttpRequest, run_id: int) -> HttpResponse:
+    run = get_object_or_404(AuditRun, id=run_id)
+    ctx: dict = {
+        "run": run,
+        "threads": run.threads.all(),
+        "findings": run.findings.all(),
+    }
+    if request.GET.get("success"):
+        ctx["success"] = request.GET["success"]
+    return render(request, "llmpuffin_web/run_detail.html", ctx)
+
+
+def run_resume(request: HttpRequest, run_id: int, thread_id: str) -> HttpResponse:
+    run = get_object_or_404(AuditRun, id=run_id)
+    get_object_or_404(AuditThread, audit_run=run, thread_id=thread_id)
+
+    # Get config TOML from the run itself, or fall back to profile
+    toml_str = run.config_toml
+    if not toml_str and run.profile:
+        toml_str = run.profile.config_toml
+    if not toml_str:
+        return redirect(f"/runs/{run_id}/?error=No+config+available+for+resume")
+
+    user_message = request.POST.get("message", "").strip() or None
+
+    thread = threading.Thread(
+        target=_run_audit_in_thread,
+        args=(toml_str,),
+        kwargs={"resume_thread_id": thread_id, "user_message": user_message},
+        daemon=True,
+    )
+    thread.start()
+    return redirect(f"/runs/{run_id}/?success=Resumed+from+thread+{thread_id}")
+
+
+def finding_detail(request: HttpRequest, finding_id: int) -> HttpResponse:
+    finding = get_object_or_404(Finding, id=finding_id)
+    return render(request, "llmpuffin_web/finding_detail.html", {
+        "finding": finding,
+        "locations": finding.locations.all(),
+    })
+
+
+def _run_audit_in_thread(
+    toml_str: str,
+    resume_thread_id: str | None = None,
+    user_message: str | None = None,
+) -> None:
+    """Run an audit in a background thread."""
+    profile_config = ProfileAudit.from_toml_string(toml_str)
+    harness_config = HarnessConfig(
+        name=profile_config.name,
+        threat_model_dir=profile_config.threat_model_dir,
+        container_image=profile_config.image,
+        max_iterations=profile_config.max_iterations,
+        code_dir=profile_config.code_dir,
+        output_path=profile_config.output,
+        interpreter=profile_config.agent.interpreter,
+        interrupt_on=profile_config.agent.interrupt_on,
+        skills_dir=profile_config.agent.skills_dir,
+        config_toml=toml_str,
+    )
+    asyncio.run(run_audit(
+        harness_config,
+        model_name=profile_config.model,
+        thread_id=resume_thread_id,
+        user_message=user_message,
+    ))
+
+
 def profile_run(request: HttpRequest, profile_id: int) -> HttpResponse:
     profile = get_object_or_404(AuditProfile, id=profile_id)
 
     try:
-        config = profile.parsed_config()
+        ProfileAudit.from_toml_string(profile.config_toml)
     except Exception as exc:
-        return redirect(f"/profiles/{profile_id}/?error=Invalid+TOML:+{exc}")
+        return redirect(f"/profiles/{profile_id}/?error=Invalid+config:+{exc}")
 
-    image = config.get("audit", {}).get("image", "")
-    if not image:
-        return redirect(f"/profiles/{profile_id}/?error=Missing+[audit]+image")
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write(profile.config_toml)
-        config_path = f.name
-
-    subprocess.Popen(
-        [sys.executable, "-m", "llmpuffin", image, "-c", config_path, "-v"],
-        start_new_session=True,
+    thread = threading.Thread(
+        target=_run_audit_in_thread,
+        args=(profile.config_toml,),
+        daemon=True,
     )
+    thread.start()
     return redirect(f"/profiles/{profile_id}/?success=Audit+started")

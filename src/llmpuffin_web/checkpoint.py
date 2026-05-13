@@ -33,6 +33,7 @@ class Message:
 class Session:
     thread_id: str
     steps: int
+    status: str | None = None
     messages: list[Message] = field(default_factory=list)
 
 
@@ -40,13 +41,18 @@ async def _list_sessions(connstring: str) -> list[Session]:
     async with await psycopg.AsyncConnection.connect(connstring, autocommit=True) as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
-                SELECT thread_id, COUNT(*) as steps
-                FROM checkpoints
-                GROUP BY thread_id
-                ORDER BY thread_id
+                SELECT
+                    c.thread_id,
+                    COUNT(*) as steps,
+                    r.status
+                FROM checkpoints c
+                LEFT JOIN llmpuffin_auditthread t ON t.thread_id = c.thread_id
+                LEFT JOIN llmpuffin_auditrun r ON r.id = t.audit_run_id
+                GROUP BY c.thread_id, r.status
+                ORDER BY c.thread_id DESC
             """)
             rows = await cur.fetchall()
-            return [Session(thread_id=r[0], steps=r[1]) for r in rows]
+            return [Session(thread_id=r[0], steps=r[1], status=r[2]) for r in rows]
 
 
 async def _get_session(connstring: str, thread_id: str) -> Session | None:
@@ -78,6 +84,18 @@ async def _get_session(connstring: str, thread_id: str) -> Session | None:
                 items = data if isinstance(data, list) else [data]
                 for msg in items:
                     cls_name = type(msg).__name__
+
+                    # Handle raw dict messages (human input via astream)
+                    if isinstance(msg, dict):
+                        role = msg.get("role", "human")
+                        if role == "user":
+                            role = "human"
+                        messages.append(Message(
+                            role=role,
+                            content=msg.get("content", ""),
+                        ))
+                        continue
+
                     content = str(getattr(msg, "content", ""))
                     tc = getattr(msg, "tool_calls", None)
                     tool_call_objs = [

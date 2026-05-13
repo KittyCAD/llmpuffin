@@ -1,9 +1,10 @@
-import subprocess
-import sys
+import threading
 
 from django.contrib import admin, messages
 
-from llmpuffin.models import AuditProfile, AuditRun, Finding, FindingLocation
+from llmpuffin.config import ProfileAudit
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding, FindingLocation
+from llmpuffin_web.views import _run_audit_in_thread
 
 
 # -- AuditProfile --
@@ -12,7 +13,7 @@ class AuditRunInline(admin.TabularInline):
     model = AuditRun
     extra = 0
     show_change_link = True
-    fields = ("thread_id", "status", "model_name", "started_at", "finished_at")
+    fields = ("status", "model_name", "started_at", "finished_at")
     readonly_fields = fields
 
     def has_add_permission(self, request, obj=None):
@@ -31,31 +32,30 @@ class AuditProfileAdmin(admin.ModelAdmin):
     def start_run(self, request, queryset):
         for profile in queryset:
             try:
-                config = profile.parsed_config()
+                ProfileAudit.from_toml_string(profile.config_toml)
             except Exception as exc:
-                self.message_user(request, f"Invalid TOML in '{profile.name}': {exc}", messages.ERROR)
+                self.message_user(request, f"Invalid config in '{profile.name}': {exc}", messages.ERROR)
                 continue
 
-            audit = config.get("audit", {})
-            image = audit.get("image")
-            if not image:
-                self.message_user(request, f"Profile '{profile.name}' missing [audit] image", messages.ERROR)
-                continue
-
-            # Write config to a temp file and launch llmpuffin in background
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-                f.write(profile.config_toml)
-                config_path = f.name
-
-            subprocess.Popen(
-                [sys.executable, "-m", "llmpuffin", image, "-c", config_path, "-v"],
-                start_new_session=True,
+            thread = threading.Thread(
+                target=_run_audit_in_thread,
+                args=(profile.config_toml,),
+                daemon=True,
             )
+            thread.start()
             self.message_user(request, f"Started audit run for '{profile.name}'", messages.SUCCESS)
 
 
 # -- AuditRun --
+
+class AuditThreadInline(admin.TabularInline):
+    model = AuditThread
+    extra = 0
+    readonly_fields = ("thread_id", "created_at")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
 
 class FindingLocationInline(admin.TabularInline):
     model = FindingLocation
@@ -72,11 +72,11 @@ class FindingInline(admin.TabularInline):
 
 @admin.register(AuditRun)
 class AuditRunAdmin(admin.ModelAdmin):
-    list_display = ("thread_id", "profile", "container_image", "model_name", "status", "started_at", "finished_at")
+    list_display = ("__str__", "profile", "container_image", "model_name", "status", "started_at", "finished_at")
     list_filter = ("status", "model_name", "profile")
-    search_fields = ("thread_id", "container_image")
-    readonly_fields = ("thread_id", "started_at")
-    inlines = [FindingInline]
+    search_fields = ("container_image", "threads__thread_id")
+    readonly_fields = ("started_at",)
+    inlines = [AuditThreadInline, FindingInline]
 
 
 # -- Finding --

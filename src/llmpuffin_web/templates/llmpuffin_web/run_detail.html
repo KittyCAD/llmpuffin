@@ -1,0 +1,53 @@
+{% extends "llmpuffin_web/base.html" %}
+{% block title %}run {{ run.id }}{% endblock %}
+{% block content %}
+<p><a href="/runs/">← all runs</a></p>
+<h1>Run {{ run.id }}</h1>
+
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+
+<table>
+<tr><th>Image</th><td>{{ run.container_image }}</td></tr>
+<tr><th>Model</th><td>{{ run.model_name }}</td></tr>
+<tr><th>Status</th><td>{{ run.status }}</td></tr>
+{% if run.error %}<tr><th>Error</th><td>{{ run.error }}</td></tr>{% endif %}
+<tr><th>Started</th><td>{{ run.started_at|date:"Y-m-d H:i:s" }}</td></tr>
+<tr><th>Finished</th><td>{{ run.finished_at|date:"Y-m-d H:i:s"|default:"—" }}</td></tr>
+</table>
+
+<h2>threads</h2>
+<table>
+<tr><th>Thread ID</th><th>Created</th><th></th></tr>
+{% for t in threads %}
+<tr>
+  <td><a href="/checkpoints/{{ t.thread_id }}/">{{ t.thread_id }}</a></td>
+  <td>{{ t.created_at|date:"Y-m-d H:i:s" }}</td>
+  <td>
+    <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/">
+      {% csrf_token %}
+      <input type="text" name="message" placeholder="optional message for the agent" style="width:20em">
+      <button type="submit">resume</button>
+    </form>
+  </td>
+</tr>
+{% empty %}
+<tr><td colspan="3">No threads yet.</td></tr>
+{% endfor %}
+</table>
+
+{% if findings %}
+<h2>findings ({{ findings|length }})</h2>
+<table>
+<tr><th>Rule</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Description</th></tr>
+{% for f in findings %}
+<tr>
+  <td><a href="/findings/{{ f.id }}/">{{ f.rule_id }}</a></td>
+  <td>{{ f.scenario_id }}</td>
+  <td>{{ f.severity }}</td>
+  <td>{{ f.difficulty }}</td>
+  <td>{{ f.description|truncatechars:120 }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

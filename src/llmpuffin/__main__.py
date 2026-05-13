@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from llmpuffin.agent import AuditStatus, run_audit
-from llmpuffin.config import AuditConfig
+from llmpuffin.config import ProfileAudit
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
 
@@ -63,17 +63,6 @@ def main() -> None:
         help="Enable QuickJS code interpreter",
     )
     parser.add_argument(
-        "--store-dir",
-        type=Path,
-        default=None,
-        help="Directory for persistent agent memory across sessions",
-    )
-    parser.add_argument(
-        "--postgres",
-        default=None,
-        help="PostgreSQL connection string for session checkpointing",
-    )
-    parser.add_argument(
         "--thread-id",
         default=None,
         help="Resume a previous session by thread ID",
@@ -89,30 +78,30 @@ def main() -> None:
 
     # Load from TOML config if provided
     if args.config:
-        audit_config = AuditConfig.from_toml(args.config)
+        profile_config = ProfileAudit.from_toml(args.config)
         config = HarnessConfig(
-            threat_model_dir=args.threat_model_dir or audit_config.threat_model_dir,
-            container_image=args.image or audit_config.image,
-            max_iterations=args.max_iterations if args.max_iterations is not None else audit_config.max_iterations,
-            code_dir=args.code_dir or audit_config.code_dir,
-            output_path=args.output or audit_config.output,
-            interpreter=args.interpreter if args.interpreter is not None else audit_config.agent.interpreter,
-            store_dir=args.store_dir or audit_config.store_dir,
-            postgres_connstring=args.postgres or audit_config.postgres_connstring,
+            name=profile_config.name,
+            threat_model_dir=args.threat_model_dir or profile_config.threat_model_dir,
+            container_image=args.image or profile_config.image,
+            max_iterations=args.max_iterations if args.max_iterations is not None else profile_config.max_iterations,
+            code_dir=args.code_dir or profile_config.code_dir,
+            output_path=args.output or profile_config.output,
+            interpreter=args.interpreter if args.interpreter is not None else profile_config.agent.interpreter,
+            interrupt_on=profile_config.agent.interrupt_on,
+            skills_dir=profile_config.agent.skills_dir,
         )
-        model_name = args.model or audit_config.model
+        model_name = args.model or profile_config.model
     else:
         if not args.image or not args.threat_model_dir:
             parser.error("image and threat_model_dir are required (or use -c config.toml)")
         config = HarnessConfig(
+            name=args.image,  # use image name as default harness name
             threat_model_dir=args.threat_model_dir,
             container_image=args.image,
             max_iterations=args.max_iterations or 200,
             code_dir=args.code_dir or "/src",
             output_path=args.output or Path("results.sarif"),
             interpreter=bool(args.interpreter),
-            store_dir=args.store_dir,
-            postgres_connstring=args.postgres,
         )
         model_name = args.model or "claude-sonnet-4-20250514"
 

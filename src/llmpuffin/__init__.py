@@ -15,7 +15,7 @@ See the module docstrings for detailed design rationale.
 
 from llmpuffin.agent import AuditResult, AuditStatus
 from llmpuffin.audit_environment import AuditEnvironment, AuditExecution, ExecResult
-from llmpuffin.config import AgentConfig, AuditConfig
+from llmpuffin.config import ProfileAgent, ProfileAudit
 from llmpuffin.harness import Harness, HarnessConfig, HarnessState
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import (
@@ -29,8 +29,8 @@ from llmpuffin.threat_model import (
 )
 
 __all__ = [
-    "AgentConfig",
-    "AuditConfig",
+    "ProfileAgent",
+    "ProfileAudit",
     "AuditEnvironment",
     "AuditExecution",
     "AuditResult",

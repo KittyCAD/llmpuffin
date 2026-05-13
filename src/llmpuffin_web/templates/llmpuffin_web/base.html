@@ -3,11 +3,12 @@
 <head>
 <title>llmpuffin — {% block title %}{% endblock %}</title>
 <style>
-body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; }
+body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; max-width: 80em; }
+pre { white-space: pre-wrap; word-wrap: break-word; max-width: 72em; }
 a { color: #6ec6ff; }
 h1 { font-size: 1.3em; }
-table { border-collapse: collapse; margin-top: 1em; }
-th, td { border: 1px solid #444; padding: 0.5em 1em; text-align: left; }
+table { border-collapse: collapse; margin-top: 1em; width: 100%; }
+th, td { border: 1px solid #444; padding: 0.5em 1em; text-align: left; max-width: 50em; word-wrap: break-word; }
 th { background: #2a2a4a; }
 tr:hover { background: #2a2a4a; }
 nav { margin-bottom: 1.5em; }
@@ -39,6 +40,7 @@ button:hover { background: #4a4a6a; }
 <body>
 <nav>
   <a href="/">checkpoints</a>
+  <a href="/runs/">runs</a>
   <a href="/profiles/">profiles</a>
   <a href="/admin/">admin</a>
 </nav>

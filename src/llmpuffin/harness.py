@@ -59,6 +59,8 @@ class HarnessConfig:
     to an audit environment and configures how the agent should behave.
     """
 
+    # Unique name for this harness config (scopes memories, identifies runs)
+    name: str
     # Directory containing .toml files that make up the threat model
     threat_model_dir: Path
     # Container image containing the codebase to audit
@@ -71,10 +73,12 @@ class HarnessConfig:
     output_path: Path = Path("results.sarif")
     # Enable QuickJS code interpreter for the agent
     interpreter: bool = False
-    # Directory for persistent agent memory across sessions (None = no persistence)
-    store_dir: Path | None = None
-    # PostgreSQL connection string for session checkpointing (None = no checkpointing)
-    postgres_connstring: str | None = None
+    # Tool names that require human approval (empty = no HITL)
+    interrupt_on: list[str] = field(default_factory=list)
+    # Directory containing plugin subdirs to load as skills
+    skills_dir: Path | None = None
+    # Original TOML config string (stored on AuditRun for resume)
+    config_toml: str = ""
 
 
 @dataclass
