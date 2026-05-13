@@ -1,0 +1,22 @@
+# Connections crossing trust boundaries — the attack surface.
+
+[[connections]]
+id = "frontend_to_gateway"
+source_component_id = "frontend"
+destination_component_id = "api_gateway"
+description = "User HTTP requests from browser to gateway"
+protocol = "HTTPS"
+
+[[connections]]
+id = "gateway_to_backend"
+source_component_id = "api_gateway"
+destination_component_id = "backend"
+description = "Proxied API requests"
+protocol = "gRPC"
+
+[[connections]]
+id = "backend_to_db"
+source_component_id = "backend"
+destination_component_id = "database"
+description = "SQL queries from backend to database"
+protocol = "PostgreSQL wire protocol"

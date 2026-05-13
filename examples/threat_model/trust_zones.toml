@@ -1,0 +1,26 @@
+# Trust zones — groups of components sharing a security posture.
+# Boundaries exist at zone edges.
+
+[[trust_zones]]
+id = "external"
+name = "External / Untrusted"
+description = "Anything outside our network boundary"
+component_ids = ["frontend"]
+
+[[trust_zones]]
+id = "dmz"
+name = "DMZ / Perimeter"
+description = "Internet-facing but controlled services"
+component_ids = ["api_gateway"]
+
+[[trust_zones]]
+id = "internal"
+name = "Internal Network"
+description = "Backend services behind the perimeter"
+component_ids = ["backend", "auth_module", "business_logic"]
+
+  [[trust_zones.trust_zones]]
+  id = "data_zone"
+  name = "Data Zone"
+  description = "Highly privileged data storage layer"
+  component_ids = ["database"]

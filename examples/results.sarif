@@ -1,0 +1,222 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "llmpuffin",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "sqli-001",
+              "shortDescription": {
+                "text": "sqli-001"
+              },
+              "properties": {}
+            },
+            {
+              "id": "sqli-002",
+              "shortDescription": {
+                "text": "sqli-002"
+              },
+              "properties": {}
+            },
+            {
+              "id": "auth_bypass-003",
+              "shortDescription": {
+                "text": "auth_bypass-003"
+              },
+              "properties": {}
+            },
+            {
+              "id": "data_exfil-004",
+              "shortDescription": {
+                "text": "data_exfil-004"
+              },
+              "properties": {}
+            },
+            {
+              "id": "data_exfil-005",
+              "shortDescription": {
+                "text": "data_exfil-005"
+              },
+              "properties": {}
+            },
+            {
+              "id": "data_exfil-006",
+              "shortDescription": {
+                "text": "data_exfil-006"
+              },
+              "properties": {}
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "sqli-001",
+          "level": "error",
+          "message": {
+            "text": "## Description\nSQL injection vulnerability in /user endpoint. The application directly concatenates user input into a SQL query using an f-string without any parameterization or validation. The vulnerable code is: `cursor = db.execute(f\"SELECT * FROM users WHERE id = {user_id}\")` where user_id comes directly from the URL query parameter.\n\n## Impact\nAn attacker can execute arbitrary SQL commands, potentially leading to data extraction, data modification, or database structure manipulation. For example, using ?id=1 OR 1=1 would return all users, or ?id=1; DROP TABLE users; -- could delete the entire users table.\n\n## Recommendations\n1. Use parameterized queries with placeholders: `cursor = db.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))` 2. Implement input validation to ensure user_id is a valid integer 3. Add proper error handling to avoid information disclosure 4. Consider implementing prepared statements for better security",
+            "markdown": "## Description\nSQL injection vulnerability in /user endpoint. The application directly concatenates user input into a SQL query using an f-string without any parameterization or validation. The vulnerable code is: `cursor = db.execute(f\"SELECT * FROM users WHERE id = {user_id}\")` where user_id comes directly from the URL query parameter.\n\n## Impact\nAn attacker can execute arbitrary SQL commands, potentially leading to data extraction, data modification, or database structure manipulation. For example, using ?id=1 OR 1=1 would return all users, or ?id=1; DROP TABLE users; -- could delete the entire users table.\n\n## Recommendations\n1. Use parameterized queries with placeholders: `cursor = db.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))` 2. Implement input validation to ensure user_id is a valid integer 3. Add proper error handling to avoid information disclosure 4. Consider implementing prepared statements for better security"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 24
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "sqli"
+            ]
+          }
+        },
+        {
+          "ruleId": "sqli-002",
+          "level": "warning",
+          "message": {
+            "text": "## Description\nInformation disclosure vulnerability that exposes raw database row data. The code returns `str(row).encode()` directly to the client, revealing the internal database structure and potentially sensitive data format.\n\n## Impact\nThis information disclosure aids attackers in SQL injection attacks by revealing the database structure, column names, and data types. It also potentially exposes sensitive user information in an uncontrolled format.\n\n## Recommendations\n1. Implement proper response formatting with only necessary data fields 2. Use JSON responses with controlled data structure 3. Avoid exposing raw database objects to external clients 4. Implement proper error handling that doesn't reveal internal structures",
+            "markdown": "## Description\nInformation disclosure vulnerability that exposes raw database row data. The code returns `str(row).encode()` directly to the client, revealing the internal database structure and potentially sensitive data format.\n\n## Impact\nThis information disclosure aids attackers in SQL injection attacks by revealing the database structure, column names, and data types. It also potentially exposes sensitive user information in an uncontrolled format.\n\n## Recommendations\n1. Implement proper response formatting with only necessary data fields 2. Use JSON responses with controlled data structure 3. Avoid exposing raw database objects to external clients 4. Implement proper error handling that doesn't reveal internal structures"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 27
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "sqli"
+            ]
+          }
+        },
+        {
+          "ruleId": "auth_bypass-003",
+          "level": "error",
+          "message": {
+            "text": "## Description\nComplete absence of authentication mechanism. The application's Handler.do_GET() method processes all requests without any authentication checks. There are no JWT tokens, session validation, or any form of access control implemented. All endpoints (/user, /debug, and default) are accessible without providing any credentials or authentication tokens.\n\n## Impact\nAny attacker can access all application endpoints and functionality without authentication. This includes accessing sensitive user data via the /user endpoint and potentially sensitive environment variables via the /debug endpoint. There is no protection against unauthorized access to any part of the application.\n\n## Recommendations\n1. Implement a proper authentication system with JWT tokens or session-based authentication. 2. Add middleware or decorators to verify authentication tokens before processing requests. 3. Implement proper authorization checks for different endpoints. 4. Add rate limiting on authentication-sensitive endpoints. 5. Ensure all protected endpoints require valid authentication tokens before access.",
+            "markdown": "## Description\nComplete absence of authentication mechanism. The application's Handler.do_GET() method processes all requests without any authentication checks. There are no JWT tokens, session validation, or any form of access control implemented. All endpoints (/user, /debug, and default) are accessible without providing any credentials or authentication tokens.\n\n## Impact\nAny attacker can access all application endpoints and functionality without authentication. This includes accessing sensitive user data via the /user endpoint and potentially sensitive environment variables via the /debug endpoint. There is no protection against unauthorized access to any part of the application.\n\n## Recommendations\n1. Implement a proper authentication system with JWT tokens or session-based authentication. 2. Add middleware or decorators to verify authentication tokens before processing requests. 3. Implement proper authorization checks for different endpoints. 4. Add rate limiting on authentication-sensitive endpoints. 5. Ensure all protected endpoints require valid authentication tokens before access."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 16
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "auth_bypass"
+            ]
+          }
+        },
+        {
+          "ruleId": "data_exfil-004",
+          "level": "error",
+          "message": {
+            "text": "## Description\nDebug endpoint exposed in production that leaks sensitive environment variables. The /debug endpoint at line 36-41 exposes the entire environment dictionary including potentially sensitive configuration like database credentials, API keys, and other secrets.\n\n## Impact\nAn attacker can access the /debug endpoint to extract sensitive environment variables including database credentials, API keys, internal service URLs, and other configuration secrets that could enable further attacks on the system.\n\n## Recommendations\n1. Remove the /debug endpoint entirely from production code. 2. If debug functionality is needed, implement proper authentication and authorization. 3. Use feature flags or environment-based conditionals to disable debug endpoints in production. 4. Implement a whitelist of safe environment variables if any need to be exposed.",
+            "markdown": "## Description\nDebug endpoint exposed in production that leaks sensitive environment variables. The /debug endpoint at line 36-41 exposes the entire environment dictionary including potentially sensitive configuration like database credentials, API keys, and other secrets.\n\n## Impact\nAn attacker can access the /debug endpoint to extract sensitive environment variables including database credentials, API keys, internal service URLs, and other configuration secrets that could enable further attacks on the system.\n\n## Recommendations\n1. Remove the /debug endpoint entirely from production code. 2. If debug functionality is needed, implement proper authentication and authorization. 3. Use feature flags or environment-based conditionals to disable debug endpoints in production. 4. Implement a whitelist of safe environment variables if any need to be exposed."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 36
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "data_exfil"
+            ]
+          }
+        },
+        {
+          "ruleId": "data_exfil-005",
+          "level": "warning",
+          "message": {
+            "text": "## Description\nInformation disclosure through raw database row exposure. The /user endpoint returns raw database rows using str(row) at line 24-30, which exposes the internal database structure and potentially sensitive data fields beyond what should be publicly accessible.\n\n## Impact\nAn attacker can learn the database schema structure and access all fields in the users table, including potentially sensitive information that should not be exposed through the API. This information can be used to craft more targeted attacks.\n\n## Recommendations\n1. Implement proper data serialization that only exposes intended fields. 2. Create DTOs (Data Transfer Objects) that explicitly define what data should be returned. 3. Avoid returning raw database objects directly to clients. 4. Implement field-level access controls to ensure sensitive data is filtered out.",
+            "markdown": "## Description\nInformation disclosure through raw database row exposure. The /user endpoint returns raw database rows using str(row) at line 24-30, which exposes the internal database structure and potentially sensitive data fields beyond what should be publicly accessible.\n\n## Impact\nAn attacker can learn the database schema structure and access all fields in the users table, including potentially sensitive information that should not be exposed through the API. This information can be used to craft more targeted attacks.\n\n## Recommendations\n1. Implement proper data serialization that only exposes intended fields. 2. Create DTOs (Data Transfer Objects) that explicitly define what data should be returned. 3. Avoid returning raw database objects directly to clients. 4. Implement field-level access controls to ensure sensitive data is filtered out."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 24
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "data_exfil"
+            ]
+          }
+        },
+        {
+          "ruleId": "data_exfil-006",
+          "level": "warning",
+          "message": {
+            "text": "## Description\nLack of detailed error handling that could lead to information disclosure. The application provides minimal error responses (just 404 status) without proper error sanitization. While this specific case is not verbose, the lack of comprehensive error handling framework means errors elsewhere in the application could potentially leak sensitive information.\n\n## Impact\nIf database errors or other exceptions occur, they might be exposed to clients with sensitive information about the internal system structure, file paths, or database schema.\n\n## Recommendations\n1. Implement a centralized error handling mechanism that sanitizes all error responses. 2. Log detailed errors server-side but return generic error messages to clients. 3. Implement proper exception handling throughout the application. 4. Use structured logging that separates internal debugging information from client responses.",
+            "markdown": "## Description\nLack of detailed error handling that could lead to information disclosure. The application provides minimal error responses (just 404 status) without proper error sanitization. While this specific case is not verbose, the lack of comprehensive error handling framework means errors elsewhere in the application could potentially leak sensitive information.\n\n## Impact\nIf database errors or other exceptions occur, they might be exposed to clients with sensitive information about the internal system structure, file paths, or database schema.\n\n## Recommendations\n1. Implement a centralized error handling mechanism that sanitizes all error responses. 2. Log detailed errors server-side but return generic error messages to clients. 3. Implement proper exception handling throughout the application. 4. Use structured logging that separates internal debugging information from client responses."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 31
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "difficulty": "medium",
+            "threatScenarioIds": [
+              "data_exfil"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

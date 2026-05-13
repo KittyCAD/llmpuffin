@@ -1,0 +1,54 @@
+# Threat scenarios — specific ways an adversary could exploit
+# a connection crossing a trust boundary.
+
+[[threat_scenarios]]
+id = "sqli"
+name = "SQL Injection via API"
+description = """
+An external attacker crafts malicious input through the frontend that
+passes through the API gateway and backend to reach the database,
+achieving arbitrary SQL execution.
+"""
+connection_ids = ["frontend_to_gateway", "gateway_to_backend", "backend_to_db"]
+affected_component_ids = ["database", "backend"]
+category = "tampering"
+severity = "high"
+mitigations = [
+    "Parameterized queries in all database access code",
+    "Input validation at API gateway layer",
+    "WAF rules for common SQLi patterns",
+]
+
+[[threat_scenarios]]
+id = "auth_bypass"
+name = "Authentication Bypass"
+description = """
+An attacker forges or replays authentication tokens to access the
+backend without valid credentials, bypassing the auth module.
+"""
+connection_ids = ["frontend_to_gateway", "gateway_to_backend"]
+affected_component_ids = ["auth_module", "backend"]
+category = "spoofing"
+severity = "high"
+mitigations = [
+    "Short-lived JWT tokens with proper signature verification",
+    "Token refresh rotation",
+    "Rate limiting on auth endpoints",
+]
+
+[[threat_scenarios]]
+id = "data_exfil"
+name = "Data Exfiltration via Information Disclosure"
+description = """
+An attacker exploits verbose error messages or debug endpoints to
+extract sensitive data from the backend or database.
+"""
+connection_ids = ["gateway_to_backend", "backend_to_db"]
+affected_component_ids = ["backend", "database"]
+category = "information_disclosure"
+severity = "high"
+mitigations = [
+    "Disable debug endpoints in production",
+    "Sanitize error responses at gateway level",
+    "Database query result size limits",
+]

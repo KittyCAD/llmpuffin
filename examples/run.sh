@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+IMAGE_NAME="llmpuffin-example"
+
+echo "Building example container image..."
+podman build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
+
+echo "Running audit..."
+uv run llmpuffin "$IMAGE_NAME" "$SCRIPT_DIR/threat_model" -o "$SCRIPT_DIR/results.sarif" -v
+
+echo "Results: $SCRIPT_DIR/results.sarif"

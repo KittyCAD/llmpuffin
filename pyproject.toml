@@ -1,0 +1,30 @@
+[project]
+name = "llmpuffin"
+version = "0.1.0"
+description = "Agentic codebase security review harness powered by structured threat models"
+readme = "README.md"
+authors = [
+    { name = "Max Ammann", email = "max.ammann@zoo.dev" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "langchain>=0.3",
+    "langchain-anthropic>=0.3",
+    "langgraph>=0.4",
+    "podman",
+    "pydantic>=2",
+    "sarif-om>=1.0",
+]
+
+[project.scripts]
+llmpuffin = "llmpuffin.__main__:main"
+
+[tool.uv.sources]
+podman = { path = "../podman-py", editable = true }
+
+[dependency-groups]
+dev = ["ruff"]
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"

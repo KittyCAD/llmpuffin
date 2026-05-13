@@ -1,0 +1,178 @@
+"""
+AuditEnvironment — containerized execution for security audits.
+
+An AuditEnvironment wraps a container image that has the target codebase
+baked in.  When started, it produces an AuditExecution — a running
+container where the agent can execute tool calls (grep, read files,
+run static analysis, etc.).
+
+This is the **tool integration layer** of the harness (parallel.ai):
+the model never touches the host; all side effects happen inside the
+container.  This provides both security isolation and reproducibility.
+
+We use Podman (rootless containers) via its Python SDK, so no daemon
+is required.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from types import TracebackType
+
+from podman import PodmanClient
+from podman.domain.containers import Container
+
+
+@dataclass
+class AuditEnvironment:
+    """A container image ready to be instantiated for auditing.
+
+    Each AuditEnvironment represents a specific codebase snapshot.
+    You can start multiple AuditExecutions from the same environment
+    (e.g. to parallelize threat scenario investigation).
+    """
+
+    # OCI image reference (e.g. "ghcr.io/org/repo:sha-abc123")
+    image: str
+    # Where the source code lives inside the container
+    code_dir: str = "/src"
+    # Podman connection URI (None = default rootless socket)
+    podman_uri: str | None = None
+
+    def start(self) -> AuditExecution:
+        """Start a container from this environment's image.
+
+        Returns an AuditExecution that can run commands inside the container.
+        """
+        kwargs = {}
+        if self.podman_uri:
+            kwargs["base_url"] = self.podman_uri
+        client = PodmanClient(**kwargs, use_ssh_client=False)
+        container = client.containers.run(
+            self.image,
+            detach=True,
+            command=["sleep", "infinity"],
+            working_dir=self.code_dir,
+        )
+        return AuditExecution(
+            container=container,
+            client=client,
+            code_dir=self.code_dir,
+        )
+
+
+@dataclass
+class AuditExecution:
+    """A running container where the agent executes tool calls.
+
+    This is the runtime side of the tool integration layer.  The agent
+    requests commands (grep, cat, semgrep, etc.) and the harness
+    executes them inside this container, returning stdout/stderr.
+
+    The execution is stateful: files written by one command are visible
+    to subsequent commands (within the /tmp tmpfs).
+    """
+
+    container: Container
+    client: PodmanClient
+    code_dir: str
+    # Track commands for audit trail / debugging
+    command_log: list[dict] = field(default_factory=list)
+
+    def __enter__(self) -> AuditExecution:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.stop()
+
+    def exec(self, command: list[str], timeout: int = 30) -> ExecResult:
+        """Execute a command inside the container.
+
+        This is the primary interface the agent uses to interact with
+        the codebase.  All commands run with the container's reduced
+        privileges (no caps, read-only rootfs).
+        """
+        exit_code, output = self.container.exec_run(
+            command,
+            workdir=self.code_dir,
+            demux=True,
+        )
+        stdout = output[0].decode() if output[0] else ""
+        stderr = output[1].decode() if output[1] else ""
+
+        result = ExecResult(
+            command=command,
+            exit_code=exit_code,
+            stdout=stdout,
+            stderr=stderr,
+        )
+        self.command_log.append({
+            "command": command,
+            "exit_code": exit_code,
+            "stdout_len": len(stdout),
+            "stderr_len": len(stderr),
+        })
+        return result
+
+    def read_file(self, path: str) -> str:
+        """Read a file from the container."""
+        result = self.exec(["cat", path])
+        if result.exit_code != 0:
+            return f"Error: {result.stderr.strip() or 'file not found: ' + path}"
+        return result.stdout
+
+    def grep(self, pattern: str, path: str = ".", recursive: bool = True) -> str:
+        """Search for a pattern in the codebase."""
+        cmd = ["grep", "-rn" if recursive else "-n", pattern, path]
+        result = self.exec(cmd)
+        return result.stdout
+
+    def list_files(self, path: str = ".", pattern: str = "*") -> list[str]:
+        """List files matching a pattern."""
+        result = self.exec(["find", path, "-name", pattern, "-type", "f"])
+        return result.stdout.strip().split("\n") if result.stdout.strip() else []
+
+    def stop(self, timeout: int = 30) -> None:
+        """Kill the container and wait until it has stopped.
+
+        Args:
+            timeout: Maximum seconds to wait for the container to stop
+                     before raising TimeoutError.
+        """
+        try:
+            self.container.kill()
+        except Exception:
+            pass  # Container may already be dead
+
+        try:
+            self.container.wait(condition="stopped", timeout=timeout)
+        except Exception as exc:
+            raise TimeoutError(
+                f"Container {self.container.id} did not stop within {timeout}s"
+            ) from exc
+
+        self.container.remove(force=True)
+
+    def get_command_log_json(self) -> str:
+        """Return the command log as JSON for debugging."""
+        return json.dumps(self.command_log, indent=2)
+
+
+@dataclass
+class ExecResult:
+    """Result of a command execution inside the container."""
+
+    command: list[str]
+    exit_code: int
+    stdout: str
+    stderr: str
+
+    @property
+    def ok(self) -> bool:
+        return self.exit_code == 0

@@ -1,0 +1,35 @@
+# Components — the building blocks of the system.
+# Components can nest: a parent can contain sub-components.
+
+[[components]]
+id = "frontend"
+name = "Frontend SPA"
+description = "Browser-based single-page application"
+tags = ["external", "untrusted"]
+
+[[components]]
+id = "api_gateway"
+name = "API Gateway"
+description = "Reverse proxy handling auth and rate limiting"
+tags = ["perimeter"]
+
+[[components]]
+id = "backend"
+name = "Backend Service"
+description = "Core application logic"
+
+  [[components.components]]
+  id = "auth_module"
+  name = "Authentication Module"
+  description = "Handles login, session management, token issuance"
+
+  [[components.components]]
+  id = "business_logic"
+  name = "Business Logic"
+  description = "Domain-specific processing"
+
+[[components]]
+id = "database"
+name = "PostgreSQL Database"
+description = "Primary data store"
+tags = ["privileged"]
