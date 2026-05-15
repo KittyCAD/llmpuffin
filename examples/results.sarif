@@ -1,0 +1,242 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "llmpuffin",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "sqli-001",
+              "shortDescription": {
+                "text": "sqli-001"
+              },
+              "properties": {}
+            },
+            {
+              "id": "info_disclosure-002",
+              "shortDescription": {
+                "text": "info_disclosure-002"
+              },
+              "properties": {}
+            },
+            {
+              "id": "debug_exposure-003",
+              "shortDescription": {
+                "text": "debug_exposure-003"
+              },
+              "properties": {}
+            },
+            {
+              "id": "input_validation-004",
+              "shortDescription": {
+                "text": "input_validation-004"
+              },
+              "properties": {}
+            },
+            {
+              "id": "missing_security_headers-005",
+              "shortDescription": {
+                "text": "missing_security_headers-005"
+              },
+              "properties": {}
+            },
+            {
+              "id": "insecure_configuration-006",
+              "shortDescription": {
+                "text": "insecure_configuration-006"
+              },
+              "properties": {}
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "sqli-001",
+          "level": "error",
+          "message": {
+            "text": "## Description\nSQL injection vulnerability in /user endpoint. The user_id parameter from the query string is directly concatenated into a SQL query without sanitization or parameterized queries. An attacker can inject arbitrary SQL commands by manipulating the 'id' parameter.\n\n## Impact\nAn attacker can read, modify, or delete arbitrary data from the database, bypass authentication, and potentially execute system commands depending on database configuration.\n\n## Recommendations\nUse parameterized queries instead of string formatting. Replace line 24 with: cursor = db.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))",
+            "markdown": "## Description\nSQL injection vulnerability in /user endpoint. The user_id parameter from the query string is directly concatenated into a SQL query without sanitization or parameterized queries. An attacker can inject arbitrary SQL commands by manipulating the 'id' parameter.\n\n## Impact\nAn attacker can read, modify, or delete arbitrary data from the database, bypass authentication, and potentially execute system commands depending on database configuration.\n\n## Recommendations\nUse parameterized queries instead of string formatting. Replace line 24 with: cursor = db.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 24
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "sqli"
+            ]
+          }
+        },
+        {
+          "ruleId": "info_disclosure-002",
+          "level": "warning",
+          "message": {
+            "text": "## Description\nInformation disclosure in /user endpoint. The application returns raw database rows directly to users without filtering sensitive fields. This exposes the internal database structure and potentially sensitive data.\n\n## Impact\nAttackers can learn about database schema, internal data structures, and potentially access sensitive user information that should not be exposed.\n\n## Recommendations\nReturn only necessary user fields in a structured format. Create a proper response object that includes only public user information like name, but excludes internal IDs and sensitive fields.",
+            "markdown": "## Description\nInformation disclosure in /user endpoint. The application returns raw database rows directly to users without filtering sensitive fields. This exposes the internal database structure and potentially sensitive data.\n\n## Impact\nAttackers can learn about database schema, internal data structures, and potentially access sensitive user information that should not be exposed.\n\n## Recommendations\nReturn only necessary user fields in a structured format. Create a proper response object that includes only public user information like name, but excludes internal IDs and sensitive fields."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 31
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "info_disclosure"
+            ]
+          }
+        },
+        {
+          "ruleId": "debug_exposure-003",
+          "level": "error",
+          "message": {
+            "text": "## Description\nDebug endpoint left enabled in production. The /debug endpoint exposes all environment variables, which typically contain sensitive configuration data such as API keys, database credentials, and other secrets.\n\n## Impact\nAttackers can access sensitive configuration data including API keys, database passwords, encryption keys, and other secrets that could lead to complete system compromise.\n\n## Recommendations\nRemove the debug endpoint entirely from production code. If debugging is needed, implement proper authentication and authorization, and limit exposed information to non-sensitive data only.",
+            "markdown": "## Description\nDebug endpoint left enabled in production. The /debug endpoint exposes all environment variables, which typically contain sensitive configuration data such as API keys, database credentials, and other secrets.\n\n## Impact\nAttackers can access sensitive configuration data including API keys, database passwords, encryption keys, and other secrets that could lead to complete system compromise.\n\n## Recommendations\nRemove the debug endpoint entirely from production code. If debugging is needed, implement proper authentication and authorization, and limit exposed information to non-sensitive data only."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 36
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 42
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "debug_exposure"
+            ]
+          }
+        },
+        {
+          "ruleId": "input_validation-004",
+          "level": "warning",
+          "message": {
+            "text": "## Description\nMissing input validation and sanitization throughout the application. The user_id parameter is not validated for type, format, or range. No input length limits, no CSRF protection, and no rate limiting are implemented.\n\n## Impact\nAttackers can send malformed or malicious input that could cause application errors, resource exhaustion, or be used in conjunction with other attacks like SQL injection.\n\n## Recommendations\nImplement comprehensive input validation: 1) Validate user_id is a positive integer, 2) Add input length limits, 3) Implement CSRF tokens for state-changing operations, 4) Add rate limiting to prevent abuse, 5) Sanitize all user inputs before processing.",
+            "markdown": "## Description\nMissing input validation and sanitization throughout the application. The user_id parameter is not validated for type, format, or range. No input length limits, no CSRF protection, and no rate limiting are implemented.\n\n## Impact\nAttackers can send malformed or malicious input that could cause application errors, resource exhaustion, or be used in conjunction with other attacks like SQL injection.\n\n## Recommendations\nImplement comprehensive input validation: 1) Validate user_id is a positive integer, 2) Add input length limits, 3) Implement CSRF tokens for state-changing operations, 4) Add rate limiting to prevent abuse, 5) Sanitize all user inputs before processing."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 22
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "input_validation"
+            ]
+          }
+        },
+        {
+          "ruleId": "missing_security_headers-005",
+          "level": "warning",
+          "message": {
+            "text": "## Description\nMissing HTTP security headers throughout the application. No security headers like HSTS, Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, or Referrer-Policy are implemented.\n\n## Impact\nIncreases risk of various client-side attacks including clickjacking, MIME sniffing attacks, and man-in-the-middle attacks. Missing HSTS allows protocol downgrade attacks.\n\n## Recommendations\nImplement comprehensive security headers: 1) Add HSTS for HTTPS enforcement, 2) Implement Content-Security-Policy to prevent XSS, 3) Add X-Frame-Options to prevent clickjacking, 4) Set X-Content-Type-Options: nosniff, 5) Configure appropriate Referrer-Policy.",
+            "markdown": "## Description\nMissing HTTP security headers throughout the application. No security headers like HSTS, Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, or Referrer-Policy are implemented.\n\n## Impact\nIncreases risk of various client-side attacks including clickjacking, MIME sniffing attacks, and man-in-the-middle attacks. Missing HSTS allows protocol downgrade attacks.\n\n## Recommendations\nImplement comprehensive security headers: 1) Add HSTS for HTTPS enforcement, 2) Implement Content-Security-Policy to prevent XSS, 3) Add X-Frame-Options to prevent clickjacking, 4) Set X-Content-Type-Options: nosniff, 5) Configure appropriate Referrer-Policy."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 28
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 39
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "missing_security_headers"
+            ]
+          }
+        },
+        {
+          "ruleId": "insecure_configuration-006",
+          "level": "note",
+          "message": {
+            "text": "## Description\nInsecure server configuration. The HTTP server binds to all interfaces (0.0.0.0) on port 8080, which may expose the service unnecessarily. No authentication or authorization mechanisms are implemented for any endpoints.\n\n## Impact\nIncreases attack surface by making the service accessible from any network interface. Lack of authentication allows unauthorized access to all functionality.\n\n## Recommendations\n1) Bind to localhost (127.0.0.1) if external access is not required, 2) Implement authentication and authorization for sensitive endpoints, 3) Use HTTPS instead of HTTP, 4) Consider implementing proper access controls based on user roles.",
+            "markdown": "## Description\nInsecure server configuration. The HTTP server binds to all interfaces (0.0.0.0) on port 8080, which may expose the service unnecessarily. No authentication or authorization mechanisms are implemented for any endpoints.\n\n## Impact\nIncreases attack surface by making the service accessible from any network interface. Lack of authentication allows unauthorized access to all functionality.\n\n## Recommendations\n1) Bind to localhost (127.0.0.1) if external access is not required, 2) Implement authentication and authorization for sensitive endpoints, 3) Use HTTPS instead of HTTP, 4) Consider implementing proper access controls based on user roles."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/src/main.py"
+                },
+                "region": {
+                  "startLine": 52
+                }
+              }
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "difficulty": "low",
+            "threatScenarioIds": [
+              "insecure_configuration"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
