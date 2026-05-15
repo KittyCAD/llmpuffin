@@ -26,7 +26,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "llmpuffin_web.urls"
 
-_PG_CONNSTRING = os.environ.get("LLMPUFFIN_POSTGRES", "postgresql://localhost:5434/llmpuffin")
+_PG_CONNSTRING = os.environ.get(
+    "LLMPUFFIN_POSTGRES", "postgresql://localhost:5434/llmpuffin"
+)
 
 # Parse postgresql://host:port/dbname
 _parts = _PG_CONNSTRING.replace("postgresql://", "").split("/")

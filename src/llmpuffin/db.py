@@ -21,5 +21,6 @@ def setup() -> None:
         return
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "llmpuffin_web.settings")
     import django
+
     django.setup()
     _initialized = True

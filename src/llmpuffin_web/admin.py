@@ -3,11 +3,18 @@ import threading
 from django.contrib import admin, messages
 
 from llmpuffin.config import ProfileAudit
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding, FindingLocation
+from llmpuffin.models import (
+    AuditProfile,
+    AuditRun,
+    AuditThread,
+    Finding,
+    FindingLocation,
+)
 from llmpuffin_web.views import _run_audit_in_thread
 
 
 # -- AuditProfile --
+
 
 class AuditRunInline(admin.TabularInline):
     model = AuditRun
@@ -34,7 +41,11 @@ class AuditProfileAdmin(admin.ModelAdmin):
             try:
                 ProfileAudit.from_toml_string(profile.config_toml)
             except Exception as exc:
-                self.message_user(request, f"Invalid config in '{profile.name}': {exc}", messages.ERROR)
+                self.message_user(
+                    request,
+                    f"Invalid config in '{profile.name}': {exc}",
+                    messages.ERROR,
+                )
                 continue
 
             thread = threading.Thread(
@@ -43,10 +54,13 @@ class AuditProfileAdmin(admin.ModelAdmin):
                 daemon=True,
             )
             thread.start()
-            self.message_user(request, f"Started audit run for '{profile.name}'", messages.SUCCESS)
+            self.message_user(
+                request, f"Started audit run for '{profile.name}'", messages.SUCCESS
+            )
 
 
 # -- AuditRun --
+
 
 class AuditThreadInline(admin.TabularInline):
     model = AuditThread
@@ -72,7 +86,15 @@ class FindingInline(admin.TabularInline):
 
 @admin.register(AuditRun)
 class AuditRunAdmin(admin.ModelAdmin):
-    list_display = ("__str__", "profile", "container_image", "model_name", "status", "started_at", "finished_at")
+    list_display = (
+        "__str__",
+        "profile",
+        "container_image",
+        "model_name",
+        "status",
+        "started_at",
+        "finished_at",
+    )
     list_filter = ("status", "model_name", "profile")
     search_fields = ("container_image", "threads__thread_id")
     readonly_fields = ("started_at",)
@@ -81,9 +103,17 @@ class AuditRunAdmin(admin.ModelAdmin):
 
 # -- Finding --
 
+
 @admin.register(Finding)
 class FindingAdmin(admin.ModelAdmin):
-    list_display = ("rule_id", "scenario_id", "severity", "difficulty", "audit_run", "created_at")
+    list_display = (
+        "rule_id",
+        "scenario_id",
+        "severity",
+        "difficulty",
+        "audit_run",
+        "created_at",
+    )
     list_filter = ("severity", "difficulty", "scenario_id")
     search_fields = ("rule_id", "description", "scenario_id")
     readonly_fields = ("created_at",)

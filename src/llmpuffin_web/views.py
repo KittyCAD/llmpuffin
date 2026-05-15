@@ -18,7 +18,9 @@ from llmpuffin_web.checkpoint import get_session, list_sessions
 
 def checkpoints_list(request: HttpRequest) -> HttpResponse:
     sessions = list_sessions()
-    return render(request, "llmpuffin_web/checkpoints_list.html", {"sessions": sessions})
+    return render(
+        request, "llmpuffin_web/checkpoints_list.html", {"sessions": sessions}
+    )
 
 
 def checkpoint_detail(request: HttpRequest, thread_id: str) -> HttpResponse:
@@ -37,7 +39,9 @@ def profiles_list(request: HttpRequest) -> HttpResponse:
             image = config.get("audit", {}).get("image", "")
         except Exception:
             image = "(invalid TOML)"
-        profiles.append({"id": p.id, "name": p.name, "image": image, "updated_at": p.updated_at})
+        profiles.append(
+            {"id": p.id, "name": p.name, "image": image, "updated_at": p.updated_at}
+        )
     return render(request, "llmpuffin_web/profiles_list.html", {"profiles": profiles})
 
 
@@ -52,10 +56,14 @@ def profile_create(request: HttpRequest) -> HttpResponse:
         tomllib.loads(config_toml)
     except Exception as exc:
         profiles = AuditProfile.objects.all()
-        return render(request, "llmpuffin_web/profiles_list.html", {
-            "profiles": profiles,
-            "error": f"Invalid TOML: {exc}",
-        })
+        return render(
+            request,
+            "llmpuffin_web/profiles_list.html",
+            {
+                "profiles": profiles,
+                "error": f"Invalid TOML: {exc}",
+            },
+        )
 
     AuditProfile.objects.create(name=name, config_toml=config_toml)
     return redirect("/profiles/")
@@ -91,6 +99,7 @@ def profile_detail(request: HttpRequest, profile_id: int) -> HttpResponse:
 
 def runs_list(request: HttpRequest) -> HttpResponse:
     from django.db.models import Count
+
     runs = AuditRun.objects.annotate(
         thread_count=Count("threads", distinct=True),
         finding_count=Count("findings", distinct=True),
@@ -158,10 +167,14 @@ def run_fork(request: HttpRequest, run_id: int, thread_id: str) -> HttpResponse:
 
 def finding_detail(request: HttpRequest, finding_id: int) -> HttpResponse:
     finding = get_object_or_404(Finding, id=finding_id)
-    return render(request, "llmpuffin_web/finding_detail.html", {
-        "finding": finding,
-        "locations": finding.locations.all(),
-    })
+    return render(
+        request,
+        "llmpuffin_web/finding_detail.html",
+        {
+            "finding": finding,
+            "locations": finding.locations.all(),
+        },
+    )
 
 
 def _run_audit_in_thread(
@@ -183,15 +196,19 @@ def _run_audit_in_thread(
         skills_dir=profile_config.agent.skills_dir,
         config_toml=toml_str,
     )
-    asyncio.run(run_audit(
-        harness_config,
-        model_name=profile_config.model,
-        thread_id=resume_thread_id,
-        user_message=user_message,
-    ))
+    asyncio.run(
+        run_audit(
+            harness_config,
+            model_name=profile_config.model,
+            thread_id=resume_thread_id,
+            user_message=user_message,
+        )
+    )
 
 
-def _fork_audit_in_thread(toml_str: str, source_thread_id: str, user_message: str) -> None:
+def _fork_audit_in_thread(
+    toml_str: str, source_thread_id: str, user_message: str
+) -> None:
     """Fork an audit in a background thread."""
     profile_config = ProfileAudit.from_toml_string(toml_str)
     harness_config = HarnessConfig(
@@ -206,12 +223,14 @@ def _fork_audit_in_thread(toml_str: str, source_thread_id: str, user_message: st
         skills_dir=profile_config.agent.skills_dir,
         config_toml=toml_str,
     )
-    asyncio.run(fork_audit(
-        harness_config,
-        source_thread_id=source_thread_id,
-        user_message=user_message,
-        model_name=profile_config.model,
-    ))
+    asyncio.run(
+        fork_audit(
+            harness_config,
+            source_thread_id=source_thread_id,
+            user_message=user_message,
+            model_name=profile_config.model,
+        )
+    )
 
 
 def profile_run(request: HttpRequest, profile_id: int) -> HttpResponse:

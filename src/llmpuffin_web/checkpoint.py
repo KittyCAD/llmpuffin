@@ -38,7 +38,9 @@ class Session:
 
 
 async def _list_sessions(connstring: str) -> list[Session]:
-    async with await psycopg.AsyncConnection.connect(connstring, autocommit=True) as conn:
+    async with await psycopg.AsyncConnection.connect(
+        connstring, autocommit=True
+    ) as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
                 SELECT
@@ -56,7 +58,9 @@ async def _list_sessions(connstring: str) -> list[Session]:
 
 
 async def _get_session(connstring: str, thread_id: str) -> Session | None:
-    async with await psycopg.AsyncConnection.connect(connstring, autocommit=True) as conn:
+    async with await psycopg.AsyncConnection.connect(
+        connstring, autocommit=True
+    ) as conn:
         async with conn.cursor() as cur:
             # Get step count
             await cur.execute(
@@ -70,12 +74,15 @@ async def _get_session(connstring: str, thread_id: str) -> Session | None:
             steps = row[0]
 
             # Get messages from checkpoint_writes
-            await cur.execute("""
+            await cur.execute(
+                """
                 SELECT type, blob
                 FROM checkpoint_writes
                 WHERE thread_id = %s AND channel = 'messages'
                 ORDER BY checkpoint_id, idx
-            """, (thread_id,))
+            """,
+                (thread_id,),
+            )
             rows = await cur.fetchall()
 
             messages: list[Message] = []
@@ -90,18 +97,21 @@ async def _get_session(connstring: str, thread_id: str) -> Session | None:
                         role = msg.get("role", "human")
                         if role == "user":
                             role = "human"
-                        messages.append(Message(
-                            role=role,
-                            content=msg.get("content", ""),
-                        ))
+                        messages.append(
+                            Message(
+                                role=role,
+                                content=msg.get("content", ""),
+                            )
+                        )
                         continue
 
                     content = str(getattr(msg, "content", ""))
                     tc = getattr(msg, "tool_calls", None)
-                    tool_call_objs = [
-                        ToolCall(name=c["name"], args=c.get("args", {}))
-                        for c in tc
-                    ] if tc else []
+                    tool_call_objs = (
+                        [ToolCall(name=c["name"], args=c.get("args", {})) for c in tc]
+                        if tc
+                        else []
+                    )
 
                     if cls_name == "HumanMessage":
                         role = "human"
@@ -112,11 +122,13 @@ async def _get_session(connstring: str, thread_id: str) -> Session | None:
                     else:
                         role = cls_name.lower()
 
-                    messages.append(Message(
-                        role=role,
-                        content=content,
-                        tool_calls=tool_call_objs,
-                    ))
+                    messages.append(
+                        Message(
+                            role=role,
+                            content=content,
+                            tool_calls=tool_call_objs,
+                        )
+                    )
 
             return Session(thread_id=thread_id, steps=steps, messages=messages)
 

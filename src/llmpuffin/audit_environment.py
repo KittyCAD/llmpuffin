@@ -115,9 +115,7 @@ class AuditExecution:
                 ) from None
 
         if exit_code is None:
-            raise RuntimeError(
-                f"exec_run returned None exit code for: {command}"
-            )
+            raise RuntimeError(f"exec_run returned None exit code for: {command}")
 
         stdout = output[0].decode() if output[0] else ""
         stderr = output[1].decode() if output[1] else ""
@@ -128,12 +126,14 @@ class AuditExecution:
             stdout=stdout,
             stderr=stderr,
         )
-        self.command_log.append({
-            "command": command,
-            "exit_code": exit_code,
-            "stdout_len": len(stdout),
-            "stderr_len": len(stderr),
-        })
+        self.command_log.append(
+            {
+                "command": command,
+                "exit_code": exit_code,
+                "stdout_len": len(stdout),
+                "stderr_len": len(stderr),
+            }
+        )
         return result
 
     def read_file(self, path: str) -> str:

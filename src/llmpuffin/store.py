@@ -33,10 +33,12 @@ def save_store(store: InMemoryStore, store_dir: Path) -> None:
     # Search with empty namespace tuple and empty filter to get everything
     for ns_path, ns_items in store._data.items():
         for key, item in ns_items.items():
-            items.append({
-                "namespace": list(ns_path),
-                "key": key,
-                "value": item.value,
-            })
+            items.append(
+                {
+                    "namespace": list(ns_path),
+                    "key": key,
+                    "value": item.value,
+                }
+            )
     path = store_dir / STORE_FILE
     path.write_text(json.dumps(items, indent=2))

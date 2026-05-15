@@ -19,7 +19,8 @@ def main() -> None:
         description="Agentic codebase security review driven by structured threat models.",
     )
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         type=Path,
         help="TOML config file (overrides positional args)",
     )
@@ -35,7 +36,8 @@ def main() -> None:
         help="Directory containing threat model .toml files",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=Path,
         default=None,
         help="Output SARIF file path (default: results.sarif)",
@@ -68,7 +70,8 @@ def main() -> None:
         help="Resume a previous session by thread ID",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Show debug output (tool results, etc.)",
     )
@@ -83,17 +86,23 @@ def main() -> None:
             name=profile_config.name,
             threat_model_dir=args.threat_model_dir or profile_config.threat_model_dir,
             container_image=args.image or profile_config.image,
-            max_iterations=args.max_iterations if args.max_iterations is not None else profile_config.max_iterations,
+            max_iterations=args.max_iterations
+            if args.max_iterations is not None
+            else profile_config.max_iterations,
             code_dir=args.code_dir or profile_config.code_dir,
             output_path=args.output or profile_config.output,
-            interpreter=args.interpreter if args.interpreter is not None else profile_config.agent.interpreter,
+            interpreter=args.interpreter
+            if args.interpreter is not None
+            else profile_config.agent.interpreter,
             interrupt_on=profile_config.agent.interrupt_on,
             skills_dir=profile_config.agent.skills_dir,
         )
         model_name = args.model or profile_config.model
     else:
         if not args.image or not args.threat_model_dir:
-            parser.error("image and threat_model_dir are required (or use -c config.toml)")
+            parser.error(
+                "image and threat_model_dir are required (or use -c config.toml)"
+            )
         config = HarnessConfig(
             name=args.image,  # use image name as default harness name
             threat_model_dir=args.threat_model_dir,
@@ -105,9 +114,13 @@ def main() -> None:
         )
         model_name = args.model or "claude-sonnet-4-20250514"
 
-    result = asyncio.run(run_audit(config, model_name=model_name, thread_id=args.thread_id))
+    result = asyncio.run(
+        run_audit(config, model_name=model_name, thread_id=args.thread_id)
+    )
     n = len(result.report.findings)
-    print(f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} written to {config.output_path}")
+    print(
+        f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} written to {config.output_path}"
+    )
     if result.thread_id:
         print(f"  Thread ID: {result.thread_id} (use --thread-id to resume)")
     if result.error:

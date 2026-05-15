@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('llmpuffin', '0003_remove_auditrun_thread_id_auditthread'),
+        ("llmpuffin", "0003_remove_auditrun_thread_id_auditthread"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='auditrun',
-            name='config_toml',
-            field=models.TextField(blank=True, default=''),
+            model_name="auditrun",
+            name="config_toml",
+            field=models.TextField(blank=True, default=""),
         ),
     ]

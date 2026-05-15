@@ -58,20 +58,29 @@ def start() -> None:
     print(f"Starting PostgreSQL on port {PGPORT} ...")
     r = _pgctl(
         "start",
-        "-l", str(PGLOG),
-        "-o", f"-p {PGPORT} -k /tmp",
+        "-l",
+        str(PGLOG),
+        "-o",
+        f"-p {PGPORT} -k /tmp",
     )
     if r.returncode != 0:
         print(r.stderr, file=sys.stderr)
         sys.exit(1)
 
     # Create database if it doesn't exist
-    check = _psql("-d", "postgres", "-tc", f"SELECT 1 FROM pg_database WHERE datname = '{PGDATABASE}'")
+    check = _psql(
+        "-d",
+        "postgres",
+        "-tc",
+        f"SELECT 1 FROM pg_database WHERE datname = '{PGDATABASE}'",
+    )
     if PGDATABASE not in (check.stdout or ""):
         print(f"Creating database '{PGDATABASE}' ...")
         _psql("-d", "postgres", "-c", f"CREATE DATABASE {PGDATABASE}")
 
-    print(f"PostgreSQL running. Connection: postgresql://localhost:{PGPORT}/{PGDATABASE}")
+    print(
+        f"PostgreSQL running. Connection: postgresql://localhost:{PGPORT}/{PGDATABASE}"
+    )
 
 
 def stop() -> None:
@@ -103,8 +112,12 @@ def connstring() -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="llmpuffin-pg", description="Manage local dev PostgreSQL")
-    parser.add_argument("action", choices=["start", "stop", "status"], help="Action to perform")
+    parser = argparse.ArgumentParser(
+        prog="llmpuffin-pg", description="Manage local dev PostgreSQL"
+    )
+    parser.add_argument(
+        "action", choices=["start", "stop", "status"], help="Action to perform"
+    )
     args = parser.parse_args()
 
     {"start": start, "stop": stop, "status": status}[args.action]()

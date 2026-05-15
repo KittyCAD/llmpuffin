@@ -15,18 +15,32 @@ from llmpuffin.threat_model import ThreatModel
 
 log = logging.getLogger("llmpuffin")
 
-_SEVERITY_TO_LEVEL = {"high": "error", "medium": "warning", "low": "note", "informational": "note"}
+_SEVERITY_TO_LEVEL = {
+    "high": "error",
+    "medium": "warning",
+    "low": "note",
+    "informational": "note",
+}
 
 
-def _persist_finding_to_db(audit_run_id: int | None, rule_id: str, scenario_id: str,
-                           severity: str, difficulty: str, level: str,
-                           description: str, impact: str, recommendations: str,
-                           locations: list[dict] | None) -> int | None:
+def _persist_finding_to_db(
+    audit_run_id: int | None,
+    rule_id: str,
+    scenario_id: str,
+    severity: str,
+    difficulty: str,
+    level: str,
+    description: str,
+    impact: str,
+    recommendations: str,
+    locations: list[dict] | None,
+) -> int | None:
     """Write a finding to Django DB immediately. Returns the Finding pk."""
     if not audit_run_id:
         return None
     try:
         from llmpuffin.models import AuditRun, Finding, FindingLocation
+
         audit_run = AuditRun.objects.get(pk=audit_run_id)
         finding = Finding.objects.create(
             audit_run=audit_run,
@@ -39,7 +53,7 @@ def _persist_finding_to_db(audit_run_id: int | None, rule_id: str, scenario_id: 
             impact=impact,
             recommendations=recommendations,
         )
-        for loc in (locations or []):
+        for loc in locations or []:
             FindingLocation.objects.create(
                 finding=finding,
                 file_path=loc["file"],
@@ -72,13 +86,19 @@ def make_tools(
 
         lines.append("\n# Trust Zones")
         for z in threat_model.trust_zones:
-            lines.append(f"  - {z.id}: {z.name} — {z.description} (components: {', '.join(z.component_ids)})")
+            lines.append(
+                f"  - {z.id}: {z.name} — {z.description} (components: {', '.join(z.component_ids)})"
+            )
             for sub in z.trust_zones:
-                lines.append(f"    - {sub.id}: {sub.name} — {sub.description} (components: {', '.join(sub.component_ids)})")
+                lines.append(
+                    f"    - {sub.id}: {sub.name} — {sub.description} (components: {', '.join(sub.component_ids)})"
+                )
 
         lines.append("\n# Connections")
         for conn in threat_model.connections:
-            lines.append(f"  - {conn.id}: {conn.source_component_id} → {conn.destination_component_id} ({conn.protocol}) — {conn.description}")
+            lines.append(
+                f"  - {conn.id}: {conn.source_component_id} → {conn.destination_component_id} ({conn.protocol}) — {conn.description}"
+            )
 
         lines.append("\n# Threat Scenarios")
         for s in threat_model.threat_scenarios:
@@ -92,7 +112,9 @@ def make_tools(
         Args:
             scenario_id: The scenario ID (e.g. "sqli", "auth_bypass")
         """
-        scenario = next((s for s in threat_model.threat_scenarios if s.id == scenario_id), None)
+        scenario = next(
+            (s for s in threat_model.threat_scenarios if s.id == scenario_id), None
+        )
         if scenario is None:
             return f"Scenario '{scenario_id}' not found"
 
@@ -159,10 +181,12 @@ Existing mitigations to verify:
         sarif_locations = []
         if locations:
             for loc in locations:
-                sarif_locations.append(SarifLocation(
-                    file_path=loc["file"],
-                    start_line=loc.get("line", 0),
-                ))
+                sarif_locations.append(
+                    SarifLocation(
+                        file_path=loc["file"],
+                        start_line=loc.get("line", 0),
+                    )
+                )
         rule_id = f"{scenario_id}-{len(report.findings) + 1:03d}"
         finding = SarifFinding(
             rule_id=rule_id,
@@ -178,8 +202,16 @@ Existing mitigations to verify:
         report.add_finding(finding)
 
         pk = _persist_finding_to_db(
-            audit_run_id, rule_id, scenario_id, severity, difficulty, level,
-            description, impact, recommendations, locations,
+            audit_run_id,
+            rule_id,
+            scenario_id,
+            severity,
+            difficulty,
+            level,
+            description,
+            impact,
+            recommendations,
+            locations,
         )
         if pk:
             _finding_pks[rule_id] = pk
@@ -226,16 +258,23 @@ Existing mitigations to verify:
         if pk:
             try:
                 from llmpuffin.models import Finding
-                Finding.objects.filter(pk=pk).update(**{
-                    k: v for k, v in {
-                        "severity": severity,
-                        "difficulty": difficulty,
-                        "level": _SEVERITY_TO_LEVEL.get(severity, None) if severity else None,
-                        "description": description,
-                        "impact": impact,
-                        "recommendations": recommendations,
-                    }.items() if v is not None
-                })
+
+                Finding.objects.filter(pk=pk).update(
+                    **{
+                        k: v
+                        for k, v in {
+                            "severity": severity,
+                            "difficulty": difficulty,
+                            "level": _SEVERITY_TO_LEVEL.get(severity, None)
+                            if severity
+                            else None,
+                            "description": description,
+                            "impact": impact,
+                            "recommendations": recommendations,
+                        }.items()
+                        if v is not None
+                    }
+                )
             except Exception as exc:
                 log.warning("Failed to update finding in DB: %s", exc)
 
@@ -255,6 +294,7 @@ Existing mitigations to verify:
         if pk:
             try:
                 from llmpuffin.models import Finding
+
                 Finding.objects.filter(pk=pk).delete()
             except Exception as exc:
                 log.warning("Failed to delete finding from DB: %s", exc)

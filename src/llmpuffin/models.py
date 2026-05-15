@@ -44,11 +44,19 @@ class AuditRun(models.Model):
     divergent threads from the same checkpoint) is not yet supported.
     """
 
-    profile = models.ForeignKey(AuditProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name="runs")
+    profile = models.ForeignKey(
+        AuditProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="runs",
+    )
     config_toml = models.TextField(blank=True, default="")
     container_image = models.CharField(max_length=512)
     model_name = models.CharField(max_length=128)
-    status = models.CharField(max_length=32)  # running, completed, recursion_limit, error
+    status = models.CharField(
+        max_length=32
+    )  # running, completed, recursion_limit, error
     error = models.TextField(blank=True, default="")
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -68,7 +76,9 @@ class AuditThread(models.Model):
     Each agent invocation (start or resume) creates a new thread.
     """
 
-    audit_run = models.ForeignKey(AuditRun, on_delete=models.CASCADE, related_name="threads")
+    audit_run = models.ForeignKey(
+        AuditRun, on_delete=models.CASCADE, related_name="threads"
+    )
     thread_id = models.CharField(max_length=64, unique=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -83,7 +93,9 @@ class AuditThread(models.Model):
 class Finding(models.Model):
     """A security finding discovered during an audit."""
 
-    audit_run = models.ForeignKey(AuditRun, on_delete=models.CASCADE, related_name="findings")
+    audit_run = models.ForeignKey(
+        AuditRun, on_delete=models.CASCADE, related_name="findings"
+    )
     rule_id = models.CharField(max_length=128, db_index=True)
     scenario_id = models.CharField(max_length=128, db_index=True)
     severity = models.CharField(max_length=32)  # high, medium, low, informational
@@ -105,7 +117,9 @@ class Finding(models.Model):
 class FindingLocation(models.Model):
     """A source location associated with a finding."""
 
-    finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name="locations")
+    finding = models.ForeignKey(
+        Finding, on_delete=models.CASCADE, related_name="locations"
+    )
     file_path = models.CharField(max_length=1024)
     start_line = models.IntegerField(default=0)
     end_line = models.IntegerField(null=True, blank=True)

@@ -5,26 +5,43 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('llmpuffin', '0002_auditprofile_auditrun_profile'),
+        ("llmpuffin", "0002_auditprofile_auditrun_profile"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='auditrun',
-            name='thread_id',
+            model_name="auditrun",
+            name="thread_id",
         ),
         migrations.CreateModel(
-            name='AuditThread',
+            name="AuditThread",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('thread_id', models.CharField(db_index=True, max_length=64, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('audit_run', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='threads', to='llmpuffin.auditrun')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "thread_id",
+                    models.CharField(db_index=True, max_length=64, unique=True),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "audit_run",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="threads",
+                        to="llmpuffin.auditrun",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['created_at'],
+                "ordering": ["created_at"],
             },
         ),
     ]

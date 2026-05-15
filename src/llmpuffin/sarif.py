@@ -86,12 +86,14 @@ class SarifReport:
                 if loc.end_column is not None:
                     region["endColumn"] = loc.end_column
 
-                locations.append({
-                    "physicalLocation": {
-                        "artifactLocation": {"uri": loc.file_path},
-                        "region": region,
+                locations.append(
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": loc.file_path},
+                            "region": region,
+                        }
                     }
-                })
+                )
 
             message = f"## Description\n{f.description}\n\n## Impact\n{f.impact}\n\n## Recommendations\n{f.recommendations}"
 

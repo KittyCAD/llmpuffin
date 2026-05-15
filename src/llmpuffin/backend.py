@@ -68,7 +68,8 @@ class ContainerBackend(SandboxBackendProtocol):
         timeout: int | None = None,
     ) -> ExecuteResponse:
         exit_code, stdout, stderr = self._run(
-            ["sh", "-c", command], timeout=timeout,
+            ["sh", "-c", command],
+            timeout=timeout,
         )
 
         parts = []
@@ -82,7 +83,7 @@ class ContainerBackend(SandboxBackendProtocol):
 
         truncated = False
         if len(output) > self._max_output_bytes:
-            output = output[:self._max_output_bytes]
+            output = output[: self._max_output_bytes]
             output += f"\n\n... Output truncated at {self._max_output_bytes} bytes."
             truncated = True
 
@@ -106,10 +107,16 @@ class ContainerBackend(SandboxBackendProtocol):
 
         # Use stat for richer info
         exit_code2, stdout2, _ = self._run(
-            ["stat", "--printf", "%n\\t%F\\t%s\\t%Y\\n", *[
-                f"{path.rstrip('/')}/{e.rstrip('/')}"
-                for e in stdout.strip().split("\n") if e and e != "." and e != ".."
-            ]],
+            [
+                "stat",
+                "--printf",
+                "%n\\t%F\\t%s\\t%Y\\n",
+                *[
+                    f"{path.rstrip('/')}/{e.rstrip('/')}"
+                    for e in stdout.strip().split("\n")
+                    if e and e != "." and e != ".."
+                ],
+            ],
         )
 
         entries: list[FileInfo] = []
@@ -117,20 +124,24 @@ class ContainerBackend(SandboxBackendProtocol):
             for line in stdout2.strip().split("\n"):
                 parts = line.split("\t")
                 if len(parts) >= 4:
-                    entries.append(FileInfo(
-                        path=parts[0],
-                        is_dir=parts[1] == "directory",
-                        size=int(parts[2]) if parts[2].isdigit() else None,
-                        modified_at=parts[3],
-                    ))
+                    entries.append(
+                        FileInfo(
+                            path=parts[0],
+                            is_dir=parts[1] == "directory",
+                            size=int(parts[2]) if parts[2].isdigit() else None,
+                            modified_at=parts[3],
+                        )
+                    )
         else:
             # Fallback: just names
             for entry in sorted(stdout.strip().split("\n")):
                 if entry and entry != "." and entry != "..":
-                    entries.append(FileInfo(
-                        path=f"{path.rstrip('/')}/{entry.rstrip('/')}",
-                        is_dir=entry.endswith("/"),
-                    ))
+                    entries.append(
+                        FileInfo(
+                            path=f"{path.rstrip('/')}/{entry.rstrip('/')}",
+                            is_dir=entry.endswith("/"),
+                        )
+                    )
 
         return LsResult(entries=sorted(entries, key=lambda e: e["path"]))
 
@@ -149,10 +160,12 @@ class ContainerBackend(SandboxBackendProtocol):
         if exit_code != 0:
             return ReadResult(error=f"Error: File '{file_path}' not found")
 
-        return ReadResult(file_data=FileData(
-            content=stdout,
-            encoding="utf-8",
-        ))
+        return ReadResult(
+            file_data=FileData(
+                content=stdout,
+                encoding="utf-8",
+            )
+        )
 
     def grep(
         self,
@@ -176,11 +189,13 @@ class ContainerBackend(SandboxBackendProtocol):
             # grep -rn output: file:line:text
             m = re.match(r"^(.+?):(\d+):(.*)$", line)
             if m:
-                matches.append(GrepMatch(
-                    path=m.group(1),
-                    line=int(m.group(2)),
-                    text=m.group(3),
-                ))
+                matches.append(
+                    GrepMatch(
+                        path=m.group(1),
+                        line=int(m.group(2)),
+                        text=m.group(3),
+                    )
+                )
 
         return GrepResult(matches=matches)
 
@@ -237,7 +252,7 @@ class ContainerBackend(SandboxBackendProtocol):
         if count > 1 and not replace_all:
             return EditResult(
                 error=f"Error: String occurs {count} times in '{file_path}'. "
-                      "Use replace_all=True to replace all occurrences."
+                "Use replace_all=True to replace all occurrences."
             )
 
         if replace_all:
