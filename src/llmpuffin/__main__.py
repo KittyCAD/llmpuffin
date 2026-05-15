@@ -81,7 +81,8 @@ def main() -> None:
 
     # Load from TOML config if provided
     if args.config:
-        profile_config = ProfileAudit.from_toml(args.config)
+        toml_text = args.config.read_text()
+        profile_config = ProfileAudit.from_toml_string(toml_text)
         config = HarnessConfig(
             name=profile_config.name,
             threat_model_dir=args.threat_model_dir or profile_config.threat_model_dir,
@@ -96,6 +97,7 @@ def main() -> None:
             else profile_config.agent.interpreter,
             interrupt_on=profile_config.agent.interrupt_on,
             skills_dir=profile_config.agent.skills_dir,
+            config_toml=toml_text,
         )
         model_name = args.model or profile_config.model
     else:

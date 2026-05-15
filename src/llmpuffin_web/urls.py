@@ -5,9 +5,9 @@ from llmpuffin_web import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", views.checkpoints_list),
+    path("", views.runs_list),
+    path("checkpoints/", views.checkpoints_list),
     path("checkpoints/<str:thread_id>/", views.checkpoint_detail),
-    path("runs/", views.runs_list),
     path("runs/<int:run_id>/", views.run_detail),
     path("runs/<int:run_id>/resume/<str:thread_id>/", views.run_resume),
     path("runs/<int:run_id>/fork/<str:thread_id>/", views.run_fork),

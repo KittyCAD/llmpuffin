@@ -30,19 +30,19 @@
   {% csrf_token %}
   <p><label>Name: <input type="text" name="name" required></label></p>
   <p><label>Config (TOML):</label></p>
-  <textarea name="config_toml" rows="16" required>[audit]
-image = ""
-threat_model_dir = ""
+  <textarea name="config_toml" rows="16" required>
+[audit]
+name = "vulnerable-app"
+image = "llmpuffin-vulnerable-app"
+threat_model_dir = "examples/vulnerable-app/threat_model"
 model = "claude-sonnet-4-20250514"
 max_iterations = 200
 code_dir = "/src"
-output = "results.sarif"
+output = "examples/vulnerable-app/results.sarif"
 
 [agent]
 interpreter = false
-
-[store]
-# dir = ".llmpuffin/store"
+skills_dir = "vendor/trailofbits-skills/plugins"
 </textarea>
   <p><button type="submit">create</button></p>
 </form>

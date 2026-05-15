@@ -21,6 +21,10 @@ class AuditProfile(models.Model):
 
     name = models.CharField(max_length=256, unique=True)
     config_toml = models.TextField(help_text="llmpuffin TOML configuration content")
+    jit = models.BooleanField(
+        default=False,
+        help_text="Auto-created from CLI run, hidden from web profile list",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -46,9 +50,7 @@ class AuditRun(models.Model):
 
     profile = models.ForeignKey(
         AuditProfile,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
         related_name="runs",
     )
     config_toml = models.TextField(blank=True, default="")

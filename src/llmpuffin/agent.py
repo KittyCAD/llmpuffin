@@ -266,31 +266,36 @@ async def _fork_audit_inner(
         source_thread_id,
     )
 
-    with harness.start_environment() as execution:
-        agent = _build_agent(
-            config,
-            execution,
-            report,
-            threat_model,
-            audit_run_id,
-            model_name,
-            checkpointer,
-            store,
-        )
+    try:
+        with harness.start_environment() as execution:
+            agent = _build_agent(
+                config,
+                execution,
+                report,
+                threat_model,
+                audit_run_id,
+                model_name,
+                checkpointer,
+                store,
+            )
 
-        # Read state from source thread and fork to new thread
-        source_config = {"configurable": {"thread_id": source_thread_id}}
-        state = await agent.aget_state(source_config)
+            # Read state from source thread and fork to new thread
+            source_config = {"configurable": {"thread_id": source_thread_id}}
+            state = await agent.aget_state(source_config)
 
-        messages = state.values.get("messages", [])
-        messages.append({"role": "user", "content": user_message})
+            messages = state.values.get("messages", [])
+            messages.append({"role": "user", "content": user_message})
 
-        run_config: dict = {
-            "recursion_limit": config.max_iterations,
-            "configurable": {"thread_id": new_tid},
-        }
+            run_config: dict = {
+                "recursion_limit": config.max_iterations,
+                "configurable": {"thread_id": new_tid},
+            }
 
-        status, error = await _stream_agent(agent, messages, run_config, config)
+            status, error = await _stream_agent(agent, messages, run_config, config)
+    except Exception as exc:
+        status = AuditStatus.ERROR
+        error = str(exc)
+        log.error("Container startup failed: %s", error)
 
     log.info(
         "Fork complete. %d finding(s) recorded. Status: %s",
@@ -381,38 +386,43 @@ async def _run_audit_inner(
 
     log.info("Starting container: %s", config.container_image)
 
-    with harness.start_environment() as execution:
-        agent = _build_agent(
-            config,
-            execution,
-            report,
-            threat_model,
-            audit_run_id,
-            model_name,
-            checkpointer,
-            store,
-        )
+    try:
+        with harness.start_environment() as execution:
+            agent = _build_agent(
+                config,
+                execution,
+                report,
+                threat_model,
+                audit_run_id,
+                model_name,
+                checkpointer,
+                store,
+            )
 
-        run_config: dict = {"recursion_limit": config.max_iterations}
-        if tid:
-            run_config["configurable"] = {"thread_id": tid}
+            run_config: dict = {"recursion_limit": config.max_iterations}
+            if tid:
+                run_config["configurable"] = {"thread_id": tid}
 
-        if user_message:
-            msg = user_message
-        elif thread_id:
-            msg = "Continue the security audit."
-        else:
-            msg = "Begin the security audit."
+            if user_message:
+                msg = user_message
+            elif thread_id:
+                msg = "Continue the security audit."
+            else:
+                msg = "Begin the security audit."
 
-        status, error = await _stream_agent(
-            agent,
-            [{"role": "user", "content": msg}],
-            run_config,
-            config,
-        )
+            status, error = await _stream_agent(
+                agent,
+                [{"role": "user", "content": msg}],
+                run_config,
+                config,
+            )
+    except Exception as exc:
+        status = AuditStatus.ERROR
+        error = str(exc)
+        log.error("Container startup failed: %s", error)
 
     log.info(
-        "Container stopped. %d finding(s) recorded. Status: %s",
+        "Audit finished. %d finding(s) recorded. Status: %s",
         len(report.findings),
         status,
     )
@@ -423,6 +433,21 @@ async def _run_audit_inner(
     await sync_to_async(_finalize_audit_run)(tid, status, error)
 
     return AuditResult(report=report, status=status, error=error, thread_id=tid)
+
+
+def _get_or_create_profile(config: HarnessConfig) -> object:
+    """Get or create an AuditProfile for this config. CLI runs get jit=True."""
+    from llmpuffin.models import AuditProfile
+
+    profile, _ = AuditProfile.objects.get_or_create(
+        name=config.name,
+        defaults={"config_toml": config.config_toml, "jit": True},
+    )
+    # Update config_toml if it changed
+    if profile.config_toml != config.config_toml:
+        profile.config_toml = config.config_toml
+        profile.save(update_fields=["config_toml"])
+    return profile
 
 
 def _create_audit_run(
@@ -443,14 +468,18 @@ def _create_audit_run(
                 audit_run.error = ""
                 audit_run.save()
             else:
+                profile = _get_or_create_profile(config)
                 audit_run = AuditRun.objects.create(
+                    profile=profile,
                     config_toml=config.config_toml,
                     container_image=config.container_image,
                     model_name=model_name,
                     status=AuditStatus.RUNNING.value,
                 )
         else:
+            profile = _get_or_create_profile(config)
             audit_run = AuditRun.objects.create(
+                profile=profile,
                 config_toml=config.config_toml,
                 container_image=config.container_image,
                 model_name=model_name,

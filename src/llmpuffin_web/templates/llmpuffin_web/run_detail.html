@@ -1,7 +1,7 @@
 {% extends "llmpuffin_web/base.html" %}
 {% block title %}run {{ run.id }}{% endblock %}
 {% block content %}
-<p><a href="/runs/">← all runs</a></p>
+<p><a href="/">← all runs</a></p>
 <h1>Run {{ run.id }}</h1>
 
 {% if success %}<p class="success">{{ success }}</p>{% endif %}

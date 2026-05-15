@@ -49,7 +49,7 @@ class AuditEnvironment:
         kwargs = {}
         if self.podman_uri:
             kwargs["base_url"] = self.podman_uri
-        client = PodmanClient(**kwargs, use_ssh_client=False)
+        client = PodmanClient(**kwargs)
         container = client.containers.run(
             self.image,
             detach=True,

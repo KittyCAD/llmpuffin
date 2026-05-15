@@ -31,7 +31,7 @@ def checkpoint_detail(request: HttpRequest, thread_id: str) -> HttpResponse:
 
 
 def profiles_list(request: HttpRequest) -> HttpResponse:
-    profiles_qs = AuditProfile.objects.all()
+    profiles_qs = AuditProfile.objects.filter(jit=False)
     profiles = []
     for p in profiles_qs:
         try:
