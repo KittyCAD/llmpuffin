@@ -27,6 +27,7 @@ def _persist_finding_to_db(
     audit_run_id: int | None,
     thread_id: str,
     rule_id: str,
+    title: str,
     scenario_id: str,
     severity: str,
     difficulty: str,
@@ -47,6 +48,7 @@ def _persist_finding_to_db(
             audit_run=audit_run,
             thread_id=thread_id,
             rule_id=rule_id,
+            title=title,
             scenario_id=scenario_id,
             severity=severity,
             difficulty=difficulty,
@@ -161,6 +163,7 @@ Existing mitigations to verify:
 
     def report_finding(
         scenario_id: str,
+        title: str,
         severity: str,
         difficulty: str,
         description: str,
@@ -172,6 +175,7 @@ Existing mitigations to verify:
 
         Args:
             scenario_id: The threat scenario ID this finding relates to (e.g. "sqli")
+            title: Short one-line summary of the finding (e.g. "SQL injection in login endpoint")
             severity: How severe the issue is: "high", "medium", "low", or "informational"
             difficulty: How hard it is to exploit: "high", "medium", or "low"
             description: What the vulnerability is and where it occurs. Include code evidence.
@@ -193,6 +197,7 @@ Existing mitigations to verify:
         rule_id = f"{scenario_id}-{len(report.findings) + 1:03d}"
         finding = SarifFinding(
             rule_id=rule_id,
+            title=title,
             description=description,
             impact=impact,
             recommendations=recommendations,
@@ -208,6 +213,7 @@ Existing mitigations to verify:
             audit_run_id,
             thread_id,
             rule_id,
+            title,
             scenario_id,
             severity,
             difficulty,

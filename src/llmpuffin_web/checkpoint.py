@@ -21,6 +21,12 @@ class ToolCall:
     name: str
     args: dict
 
+    @property
+    def args_json(self) -> str:
+        import json
+
+        return json.dumps(self.args, indent=2)
+
 
 @dataclass
 class Message:

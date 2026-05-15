@@ -100,6 +100,7 @@ class Finding(models.Model):
     )
     thread_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
     rule_id = models.CharField(max_length=128, db_index=True)
+    title = models.CharField(max_length=512, blank=True, default="")
     scenario_id = models.CharField(max_length=128, db_index=True)
     severity = models.CharField(max_length=32)  # high, medium, low, informational
     difficulty = models.CharField(max_length=32)  # high, medium, low
@@ -114,7 +115,7 @@ class Finding(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.rule_id}: {self.description[:80]}"
+        return f"{self.rule_id}: {self.title or self.description[:80]}"
 
 
 class FindingLocation(models.Model):

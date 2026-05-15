@@ -152,6 +152,7 @@ class AuditExecution:
         try:
             self.container.kill()
         except Exception:
+
             pass  # Container may already be dead
 
         try:

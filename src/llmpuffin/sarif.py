@@ -39,6 +39,7 @@ class SarifFinding:
     """
 
     rule_id: str
+    title: str
     description: str
     impact: str
     recommendations: str
@@ -71,7 +72,8 @@ class SarifReport:
             if f.rule_id not in rules:
                 rules[f.rule_id] = {
                     "id": f.rule_id,
-                    "shortDescription": {"text": f.rule_id},
+                    "shortDescription": {"text": f.title},
+                    "fullDescription": {"text": f.description},
                     "properties": {},
                 }
 

@@ -2,7 +2,7 @@
 {% block title %}{{ finding.rule_id }}{% endblock %}
 {% block content %}
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run {{ finding.audit_run_id }}</a></p>
-<h1>{{ finding.rule_id }}</h1>
+<h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
 
 <table>
 <tr><th>Scenario</th><td>{{ finding.scenario_id }}</td></tr>
