@@ -25,6 +25,7 @@ _SEVERITY_TO_LEVEL = {
 
 def _persist_finding_to_db(
     audit_run_id: int | None,
+    thread_id: str,
     rule_id: str,
     scenario_id: str,
     severity: str,
@@ -44,6 +45,7 @@ def _persist_finding_to_db(
         audit_run = AuditRun.objects.get(pk=audit_run_id)
         finding = Finding.objects.create(
             audit_run=audit_run,
+            thread_id=thread_id,
             rule_id=rule_id,
             scenario_id=scenario_id,
             severity=severity,
@@ -69,6 +71,7 @@ def make_tools(
     report: SarifReport,
     threat_model: ThreatModel,
     audit_run_id: int | None = None,
+    thread_id: str = "",
 ) -> list[Callable]:
     """Create threat model and finding tools."""
 
@@ -203,6 +206,7 @@ Existing mitigations to verify:
 
         pk = _persist_finding_to_db(
             audit_run_id,
+            thread_id,
             rule_id,
             scenario_id,
             severity,

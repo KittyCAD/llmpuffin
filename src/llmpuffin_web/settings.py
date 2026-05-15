@@ -1,10 +1,14 @@
-"""Django settings for llmpuffin."""
+"""Django settings for llmpuffin — loaded from llmpuffin.toml."""
 
 import os
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-insecure-key-change-in-prod")
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+from llmpuffin.config import Config
+
+_config = Config.load()
+
+SECRET_KEY = _config.web.secret_key
+DEBUG = _config.web.debug
+ALLOWED_HOSTS = _config.web.allowed_hosts
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -26,12 +30,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "llmpuffin_web.urls"
 
-_PG_CONNSTRING = os.environ.get(
-    "LLMPUFFIN_POSTGRES", "postgresql://localhost:5434/llmpuffin"
-)
-
-# Parse postgresql://host:port/dbname
-_parts = _PG_CONNSTRING.replace("postgresql://", "").split("/")
+# Parse postgresql://host:port/dbname from config
+_pg_url = os.environ.get("LLMPUFFIN_POSTGRES", _config.postgres.url)
+_parts = _pg_url.replace("postgresql://", "").split("/")
 _host_port = _parts[0] if _parts else "localhost:5434"
 _dbname = _parts[1] if len(_parts) > 1 else "llmpuffin"
 _host, _, _port = _host_port.partition(":")
@@ -76,11 +77,10 @@ LOGGING = {
     "loggers": {
         "llmpuffin": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": _config.logging.level,
         },
-        #"podman": {
-        #    "handlers": ["console"],
-        #    "level": "DEBUG",
-        #},
     },
 }
+
+# Expose for web management command (runserver port)
+LLMPUFFIN_CONFIG = _config

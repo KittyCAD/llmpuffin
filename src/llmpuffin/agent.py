@@ -34,14 +34,17 @@ from enum import StrEnum
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
 from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.stores import BaseStore
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import GraphRecursionError
 
 from llmpuffin.backend import ContainerBackend
-from llmpuffin.db import get_postgres_url, setup as setup_django
+from llmpuffin.db import get_postgres_url
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.sarif import SarifReport
 from llmpuffin.threat_model import ThreatModel
 from llmpuffin.log import log
+from llmpuffin.subagents import ALL as SUBAGENTS
 from llmpuffin.tools import make_tools
 
 
@@ -88,28 +91,25 @@ def _build_agent(
     report: SarifReport,
     threat_model: ThreatModel,
     audit_run_id: int | None,
-    model_name: str,
-    checkpointer: object,
-    store: object,
+    thread_id: str,
+    checkpointer: BaseCheckpointSaver,
+    store: BaseStore,
 ):
     """Build the deep agent with all backends, tools, and middleware."""
+    p = config.profile
+    agent_cfg = p.agent
     container_backend = ContainerBackend(execution)
     routes: dict = {}
 
-    # Memory backend via postgres store, scoped to this harness config name
-    # TODO: should checkpoints also be scoped per harness name? Currently
-    # thread_ids are globally unique so there's no collision, but scoping
-    # would make it easier to list/clean up checkpoints per harness.
-    harness_name = config.name
     memory_backend = StoreBackend(
         store=store,
-        namespace=lambda rt, _n=harness_name: ("llmpuffin", _n, "memories"),
+        namespace=lambda rt, _n=p.name: ("llmpuffin", _n, "memories"),
     )
     routes["/memories/"] = memory_backend
 
-    # Load skills from disk into an in-memory store, mirroring the dir structure
+    # Load skills from disk into an in-memory store
     skills_list: list[str] = []
-    if config.skills_dir and config.skills_dir.is_dir():
+    if agent_cfg.skills_dir and agent_cfg.skills_dir.is_dir():
         from deepagents.backends.utils import create_file_data
         from langgraph.store.memory import InMemoryStore as _InMemoryStore
 
@@ -117,15 +117,15 @@ def _build_agent(
         skills_backend = StoreBackend(
             store=skills_store, namespace=lambda rt: ("skills",)
         )
-        for file_path in sorted(config.skills_dir.rglob("*")):
+        for file_path in sorted(agent_cfg.skills_dir.rglob("*")):
             if not file_path.is_file():
                 continue
-            rel = file_path.relative_to(config.skills_dir)
+            rel = file_path.relative_to(agent_cfg.skills_dir)
             store_key = f"/skills/{rel}"
             try:
                 content = file_path.read_text()
             except (UnicodeDecodeError, OSError):
-                continue  # skip binary files
+                continue
             skills_store.put(
                 namespace=("skills",),
                 key=store_key,
@@ -133,27 +133,29 @@ def _build_agent(
             )
         routes["/skills/"] = skills_backend
         skills_list = ["/skills/"]
-        log.info("Loaded skills from %s", config.skills_dir)
+        log.info("Loaded skills from %s", agent_cfg.skills_dir)
 
     backend = CompositeBackend(
         default=container_backend,
         routes=routes,
     )
 
-    tools = make_tools(report, threat_model, audit_run_id=audit_run_id)
+    tools = make_tools(
+        report, threat_model, audit_run_id=audit_run_id, thread_id=thread_id
+    )
 
     middleware = []
-    if config.interpreter:
+    if agent_cfg.interpreter:
         from langchain_quickjs import CodeInterpreterMiddleware
 
         middleware.append(CodeInterpreterMiddleware())
 
     interrupt_on_config = None
-    if config.interrupt_on:
-        interrupt_on_config = {name: True for name in config.interrupt_on}
+    if agent_cfg.interrupt_on:
+        interrupt_on_config = {name: True for name in agent_cfg.interrupt_on}
 
     return create_deep_agent(
-        model=f"anthropic:{model_name}",
+        model=f"anthropic:{agent_cfg.model}",
         tools=tools,
         backend=backend,
         store=store,
@@ -161,12 +163,12 @@ def _build_agent(
         middleware=middleware,
         interrupt_on=interrupt_on_config,
         skills=skills_list or None,
-        subagents=[_FUNCTION_ANALYZER_SUBAGENT],
+        subagents=SUBAGENTS,
         system_prompt=SYSTEM_PROMPT,
     )
 
 
-async def _stream_agent(agent, input_messages, run_config, config: HarnessConfig):
+async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
     """Stream agent execution and log progress. Returns (status, error)."""
     status = AuditStatus.COMPLETED
     error: str | None = None
@@ -194,7 +196,7 @@ async def _stream_agent(agent, input_messages, run_config, config: HarnessConfig
                         log.debug("  result: %s", _truncate(str(msg.content), 200))
     except GraphRecursionError:
         status = AuditStatus.RECURSION_LIMIT
-        error = f"Agent hit recursion limit ({config.max_iterations} iterations)"
+        error = f"Agent hit recursion limit ({max_iterations} iterations)"
         log.warning("  %s", error)
     except Exception as exc:
         status = AuditStatus.ERROR
@@ -207,15 +209,8 @@ async def fork_audit(
     config: HarnessConfig,
     source_thread_id: str,
     user_message: str,
-    model_name: str = "claude-sonnet-4-20250514",
 ) -> AuditResult:
-    """Fork from an existing thread and continue with a new message.
-
-    Creates a new thread, copies the checkpoint state from source_thread_id
-    via update_state, then continues the audit with user_message.
-    """
-    setup_django()
-
+    """Fork from an existing thread and continue with a new message."""
     harness = Harness(config)
     threat_model = harness.load_threat_model()
     report = SarifReport()
@@ -235,7 +230,6 @@ async def fork_audit(
             config,
             threat_model,
             report,
-            model_name,
             source_thread_id,
             user_message,
             checkpointer,
@@ -248,12 +242,12 @@ async def _fork_audit_inner(
     config: HarnessConfig,
     threat_model: ThreatModel,
     report: SarifReport,
-    model_name: str,
     source_thread_id: str,
     user_message: str,
     checkpointer: object,
     store: object,
 ) -> AuditResult:
+    p = config.profile
     new_tid = uuid.uuid4().hex[:12]
     log.info("Forking thread %s → %s", source_thread_id, new_tid)
 
@@ -261,7 +255,6 @@ async def _fork_audit_inner(
 
     audit_run_id = await sync_to_async(_create_audit_run)(
         config,
-        model_name,
         new_tid,
         source_thread_id,
     )
@@ -274,12 +267,11 @@ async def _fork_audit_inner(
                 report,
                 threat_model,
                 audit_run_id,
-                model_name,
+                new_tid,
                 checkpointer,
                 store,
             )
 
-            # Read state from source thread and fork to new thread
             source_config = {"configurable": {"thread_id": source_thread_id}}
             state = await agent.aget_state(source_config)
 
@@ -287,11 +279,13 @@ async def _fork_audit_inner(
             messages.append({"role": "user", "content": user_message})
 
             run_config: dict = {
-                "recursion_limit": config.max_iterations,
+                "recursion_limit": p.agent.max_iterations,
                 "configurable": {"thread_id": new_tid},
             }
 
-            status, error = await _stream_agent(agent, messages, run_config, config)
+            status, error = await _stream_agent(
+                agent, messages, run_config, p.agent.max_iterations
+            )
     except Exception as exc:
         status = AuditStatus.ERROR
         error = str(exc)
@@ -302,7 +296,7 @@ async def _fork_audit_inner(
         len(report.findings),
         status,
     )
-    report.write(config.output_path)
+    report.write(p.output)
 
     from asgiref.sync import sync_to_async
 
@@ -313,24 +307,10 @@ async def _fork_audit_inner(
 
 async def run_audit(
     config: HarnessConfig,
-    model_name: str = "claude-sonnet-4-20250514",
     thread_id: str | None = None,
     user_message: str | None = None,
 ) -> AuditResult:
-    """Run a full security audit driven by the threat model.
-
-    The agent drives its own investigation: it fetches the threat model,
-    chooses which scenarios to investigate, examines code, and records
-    findings — all via tools.
-
-    Args:
-        config: Harness configuration.
-        model_name: LLM model identifier.
-        thread_id: Session ID for resumable checkpointing. If None and
-                   postgres is configured, a new ID is generated.
-    """
-    setup_django()
-
+    """Run a full security audit driven by the threat model."""
     harness = Harness(config)
     threat_model = harness.load_threat_model()
     report = SarifReport()
@@ -356,7 +336,6 @@ async def run_audit(
             config,
             threat_model,
             report,
-            model_name,
             thread_id,
             checkpointer,
             store,
@@ -369,22 +348,20 @@ async def _run_audit_inner(
     config: HarnessConfig,
     threat_model: ThreatModel,
     report: SarifReport,
-    model_name: str,
     thread_id: str | None,
     checkpointer: object | None,
     store: object | None,
     user_message: str | None = None,
 ) -> AuditResult:
+    p = config.profile
     tid = thread_id or uuid.uuid4().hex[:12]
     log.info("Session thread_id: %s", tid)
 
     from asgiref.sync import sync_to_async
 
-    audit_run_id = await sync_to_async(_create_audit_run)(
-        config, model_name, tid, thread_id
-    )
+    audit_run_id = await sync_to_async(_create_audit_run)(config, tid, thread_id)
 
-    log.info("Starting container: %s", config.container_image)
+    log.info("Starting container: %s", p.image)
 
     try:
         with harness.start_environment() as execution:
@@ -394,12 +371,12 @@ async def _run_audit_inner(
                 report,
                 threat_model,
                 audit_run_id,
-                model_name,
+                tid,
                 checkpointer,
                 store,
             )
 
-            run_config: dict = {"recursion_limit": config.max_iterations}
+            run_config: dict = {"recursion_limit": p.agent.max_iterations}
             if tid:
                 run_config["configurable"] = {"thread_id": tid}
 
@@ -414,7 +391,7 @@ async def _run_audit_inner(
                 agent,
                 [{"role": "user", "content": msg}],
                 run_config,
-                config,
+                p.agent.max_iterations,
             )
     except Exception as exc:
         status = AuditStatus.ERROR
@@ -426,7 +403,7 @@ async def _run_audit_inner(
         len(report.findings),
         status,
     )
-    report.write(config.output_path)
+    report.write(p.output)
 
     from asgiref.sync import sync_to_async
 
@@ -440,19 +417,17 @@ def _get_or_create_profile(config: HarnessConfig) -> object:
     from llmpuffin.models import AuditProfile
 
     profile, _ = AuditProfile.objects.get_or_create(
-        name=config.name,
-        defaults={"config_toml": config.config_toml, "jit": True},
+        name=config.profile.name,
+        defaults={"profile_toml": config.profile_toml, "jit": True},
     )
-    # Update config_toml if it changed
-    if profile.config_toml != config.config_toml:
-        profile.config_toml = config.config_toml
-        profile.save(update_fields=["config_toml"])
+    if profile.profile_toml != config.profile_toml:
+        profile.profile_toml = config.profile_toml
+        profile.save(update_fields=["profile_toml"])
     return profile
 
 
 def _create_audit_run(
     config: HarnessConfig,
-    model_name: str,
     tid: str,
     resume_thread_id: str | None,
 ) -> int | None:
@@ -468,21 +443,21 @@ def _create_audit_run(
                 audit_run.error = ""
                 audit_run.save()
             else:
-                profile = _get_or_create_profile(config)
+                db_profile = _get_or_create_profile(config)
                 audit_run = AuditRun.objects.create(
-                    profile=profile,
-                    config_toml=config.config_toml,
-                    container_image=config.container_image,
-                    model_name=model_name,
+                    profile=db_profile,
+                    profile_toml=config.profile_toml,
+                    container_image=config.profile.image,
+                    model_name=config.profile.agent.model,
                     status=AuditStatus.RUNNING.value,
                 )
         else:
-            profile = _get_or_create_profile(config)
+            db_profile = _get_or_create_profile(config)
             audit_run = AuditRun.objects.create(
-                profile=profile,
-                config_toml=config.config_toml,
-                container_image=config.container_image,
-                model_name=model_name,
+                profile=db_profile,
+                profile_toml=config.profile_toml,
+                container_image=config.profile.image,
+                model_name=config.profile.agent.model,
                 status=AuditStatus.RUNNING.value,
             )
 
@@ -527,27 +502,3 @@ def _finalize_audit_run(
 def _truncate(s: str, n: int) -> str:
     s = s.replace("\n", " ")
     return s[:n] + "..." if len(s) > n else s
-
-
-def _load_agent_md(path: str) -> str:
-    """Load an agent .md file and strip YAML frontmatter."""
-    from pathlib import Path
-
-    text = Path(path).read_text()
-    if text.startswith("---"):
-        end = text.index("---", 3)
-        return text[end + 3 :].strip()
-    return text
-
-
-_FUNCTION_ANALYZER_SUBAGENT = {
-    "name": "function-analyzer",
-    "description": (
-        "Performs ultra-granular per-function deep analysis for security audit "
-        "context building. Use when analyzing dense functions, data-flow chains, "
-        "cryptographic implementations, or state machines."
-    ),
-    "system_prompt": _load_agent_md(
-        "vendor/trailofbits-skills/plugins/audit-context-building/agents/function-analyzer.md"
-    ),
-}

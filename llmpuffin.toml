@@ -1,0 +1,11 @@
+[postgres]
+url = "postgresql://localhost:5434/llmpuffin"
+
+[web]
+port = 8000
+debug = true
+secret_key = "dev-insecure-key-change-in-prod"
+allowed_hosts = ["*"]
+
+[logging]
+level = "INFO"

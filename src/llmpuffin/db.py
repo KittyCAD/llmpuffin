@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import os
 
-POSTGRES_URL_DEFAULT = "postgresql://localhost:5434/llmpuffin"
-
 _initialized = False
 
 
 def get_postgres_url() -> str:
-    """Get the PostgreSQL connection string from env, with a default."""
-    return os.environ.get("LLMPUFFIN_POSTGRES", POSTGRES_URL_DEFAULT)
+    """Get the PostgreSQL connection string from config/env."""
+    if url := os.environ.get("LLMPUFFIN_POSTGRES"):
+        return url
+    from llmpuffin.config import Config
+
+    return Config.load().postgres.url
 
 
 def setup() -> None:

@@ -35,9 +35,39 @@ Apply database migrations after starting PostgreSQL:
 uv run llmpuffin-web migrate
 ```
 
+## Configuration
+
+Global settings live in `llmpuffin.toml` (auto-loaded from cwd):
+
+```toml
+[postgres]
+url = "postgresql://localhost:5434/llmpuffin"
+
+[web]
+port = 8000
+debug = true
+
+[logging]
+level = "INFO"
+```
+
+Audit profiles live in separate `profile.toml` files:
+
+```toml
+[audit]
+name = "my-audit"
+image = "my-image:latest"
+threat_model_dir = "threat_model/"
+
+[agent]
+model = "claude-sonnet-4-20250514"
+max_iterations = 200
+skills_dir = "vendor/trailofbits-skills/plugins"
+```
+
 ## Usage
 
-Define a threat model in TOML, provide a container image with your codebase, and run the audit. See `examples/` for ready-to-run setups:
+See `examples/` for ready-to-run setups:
 
 ```
 # Vulnerable app example
@@ -46,27 +76,28 @@ bash examples/vulnerable-app/run.sh
 # Zoo Design Studio (modeling-app) example
 bash examples/modeling-app/run.sh
 
-# Or run directly with a config file
-uv run llmpuffin llmpuffin-example -v -c examples/vulnerable-app/llmpuffin.toml
+# Or run directly with a profile
+uv run llmpuffin -v -p examples/vulnerable-app/profile.toml
 ```
 
-To resume a previous session that was interrupted:
+To resume a previous session:
 
 ```
-uv run llmpuffin llmpuffin-example -v -c examples/llmpuffin.toml \
+uv run llmpuffin -v -p examples/vulnerable-app/profile.toml \
     --thread-id <thread-id-from-previous-run>
 ```
 
 ## Web UI
 
-View checkpoints and audit findings:
+View audit runs and findings:
 
 ```
 uv run llmpuffin-web runserver
 ```
 
-- http://localhost:8000/ — checkpoint viewer (conversation history)
-- http://localhost:8000/admin/ — admin dashboard (manage audit runs, findings)
+- http://localhost:8000/ — audit runs and findings
+- http://localhost:8000/checkpoints/ — checkpoint viewer (conversation history)
+- http://localhost:8000/admin/ — admin dashboard
 
 Create an admin user on first setup:
 
@@ -74,7 +105,7 @@ Create an admin user on first setup:
 uv run llmpuffin-web createsuperuser
 ```
 
-Set `LLMPUFFIN_POSTGRES` to override the connection string (default: `postgresql://localhost:5434/llmpuffin`).
+Override the connection string with `LLMPUFFIN_POSTGRES` env var, or set it in `llmpuffin.toml`.
 
 ## Architecture
 

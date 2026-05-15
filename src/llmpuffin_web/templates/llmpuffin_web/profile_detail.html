@@ -11,7 +11,7 @@
   {% csrf_token %}
   <p><label>Name: <input type="text" name="name" value="{{ profile.name }}" required></label></p>
   <p><label>Config (TOML):</label></p>
-  <textarea name="config_toml" rows="20" required>{{ profile.config_toml }}</textarea>
+  <textarea name="profile_toml" rows="20" required>{{ profile.profile_toml }}</textarea>
   <p><button type="submit">save</button></p>
 </form>
 

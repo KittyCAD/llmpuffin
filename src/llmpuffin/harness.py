@@ -45,40 +45,22 @@ llmpuffin harness — the infrastructure layer surrounding the LLM agent.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from llmpuffin.audit_environment import AuditEnvironment, AuditExecution
+from llmpuffin.config import Profile
 from llmpuffin.threat_model import ThreatModel
 
 
 @dataclass
 class HarnessConfig:
-    """Configuration for a single audit harness run.
+    """Binds a Profile to a specific run, adding the original TOML for persistence."""
 
-    This is the declarative specification layer: it binds a threat model
-    to an audit environment and configures how the agent should behave.
-    """
-
-    # Unique name for this harness config (scopes memories, identifies runs)
-    name: str
-    # Directory containing .toml files that make up the threat model
-    threat_model_dir: Path
-    # Container image containing the codebase to audit
-    container_image: str
-    # Maximum number of agentic loop iterations (matches deepagents default)
-    max_iterations: int = 200
-    # Working directory inside the container where code lives
-    code_dir: str = "/src"
-    # Output path for the SARIF results file
-    output_path: Path = Path("results.sarif")
-    # Enable QuickJS code interpreter for the agent
-    interpreter: bool = False
-    # Tool names that require human approval (empty = no HITL)
-    interrupt_on: list[str] = field(default_factory=list)
-    # Directory containing plugin subdirs to load as skills
-    skills_dir: Path | None = None
-    # Original TOML config string (stored on AuditRun for resume)
-    config_toml: str = ""
+    profile: Profile
+    # Original TOML text, stored verbatim on AuditRun/AuditProfile so that
+    # runs can be resumed/forked from the web UI without the original file.
+    # We keep the raw string rather than regenerating it from Profile so that
+    # user comments and formatting are preserved.
+    profile_toml: str = ""
 
 
 @dataclass
@@ -117,8 +99,9 @@ class Harness:
 
     def load_threat_model(self) -> ThreatModel:
         """Load the threat model from TOML — the declarative spec driving the audit."""
-        self.state.threat_model = ThreatModel.from_dir(self.config.threat_model_dir)
-        return self.state.threat_model
+        tm = ThreatModel.from_dir(self.config.profile.threat_model_dir)
+        self.state.threat_model = tm
+        return tm
 
     def start_environment(self) -> AuditExecution:
         """Start the containerized audit environment.
@@ -131,8 +114,9 @@ class Harness:
         All tool calls (grep, file reads, static analysis) execute inside
         the container — this is the tool integration layer of the harness.
         """
+        p = self.config.profile
         environment = AuditEnvironment(
-            image=self.config.container_image,
-            code_dir=self.config.code_dir,
+            image=p.image,
+            code_dir=p.code_dir,
         )
         return environment.start()

@@ -2,7 +2,7 @@ import threading
 
 from django.contrib import admin, messages
 
-from llmpuffin.config import ProfileAudit
+from llmpuffin.config import Profile
 from llmpuffin.models import (
     AuditProfile,
     AuditRun,
@@ -39,7 +39,7 @@ class AuditProfileAdmin(admin.ModelAdmin):
     def start_run(self, request, queryset):
         for profile in queryset:
             try:
-                ProfileAudit.from_toml_string(profile.config_toml)
+                Profile.from_toml_string(profile.profile_toml)
             except Exception as exc:
                 self.message_user(
                     request,
@@ -50,7 +50,7 @@ class AuditProfileAdmin(admin.ModelAdmin):
 
             thread = threading.Thread(
                 target=_run_audit_in_thread,
-                args=(profile.config_toml,),
+                args=(profile.profile_toml,),
                 daemon=True,
             )
             thread.start()

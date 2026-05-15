@@ -1,12 +1,14 @@
 {% extends "llmpuffin_web/base.html" %}
 {% block title %}{{ session.thread_id }}{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="10">{% endblock %}
 {% block content %}
 <h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages)</h1>
 
-{% for msg in session.messages %}
+{% for msg in session.messages reversed %}
   {% if msg.role == "ai" and msg.tool_calls %}
     <div class="msg llm tool-call">
       <span class="role">llm</span>
+      {% if msg.content %}<pre>{{ msg.content }}</pre>{% endif %}
       <span class="tools">→ {% for tc in msg.tool_calls %}{{ tc.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
       {% for tc in msg.tool_calls %}
         <details class="tool-args">

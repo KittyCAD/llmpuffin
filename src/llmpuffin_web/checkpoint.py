@@ -105,7 +105,15 @@ async def _get_session(connstring: str, thread_id: str) -> Session | None:
                         )
                         continue
 
-                    content = str(getattr(msg, "content", ""))
+                    raw_content = getattr(msg, "content", "")
+                    if isinstance(raw_content, list):
+                        content = "\n".join(
+                            block.get("text", "")
+                            for block in raw_content
+                            if isinstance(block, dict) and block.get("type") == "text"
+                        )
+                    else:
+                        content = str(raw_content)
                     tc = getattr(msg, "tool_calls", None)
                     tool_call_objs = (
                         [ToolCall(name=c["name"], args=c.get("args", {})) for c in tc]

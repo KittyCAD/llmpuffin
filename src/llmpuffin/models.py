@@ -20,7 +20,7 @@ class AuditProfile(models.Model):
     """
 
     name = models.CharField(max_length=256, unique=True)
-    config_toml = models.TextField(help_text="llmpuffin TOML configuration content")
+    profile_toml = models.TextField(help_text="llmpuffin TOML configuration content")
     jit = models.BooleanField(
         default=False,
         help_text="Auto-created from CLI run, hidden from web profile list",
@@ -37,7 +37,7 @@ class AuditProfile(models.Model):
 
     def parsed_config(self) -> dict:
         """Parse the TOML config content and return as dict."""
-        return tomllib.loads(self.config_toml)
+        return tomllib.loads(self.profile_toml)
 
 
 class AuditRun(models.Model):
@@ -53,7 +53,7 @@ class AuditRun(models.Model):
         on_delete=models.CASCADE,
         related_name="runs",
     )
-    config_toml = models.TextField(blank=True, default="")
+    profile_toml = models.TextField(blank=True, default="")
     container_image = models.CharField(max_length=512)
     model_name = models.CharField(max_length=128)
     status = models.CharField(
@@ -98,6 +98,7 @@ class Finding(models.Model):
     audit_run = models.ForeignKey(
         AuditRun, on_delete=models.CASCADE, related_name="findings"
     )
+    thread_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
     rule_id = models.CharField(max_length=128, db_index=True)
     scenario_id = models.CharField(max_length=128, db_index=True)
     severity = models.CharField(max_length=32)  # high, medium, low, informational

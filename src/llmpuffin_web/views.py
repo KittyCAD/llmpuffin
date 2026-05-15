@@ -10,7 +10,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from llmpuffin.agent import fork_audit, run_audit
-from llmpuffin.config import ProfileAudit
+from llmpuffin.config import Profile
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 from llmpuffin_web.checkpoint import get_session, list_sessions
@@ -26,7 +26,15 @@ def checkpoints_list(request: HttpRequest) -> HttpResponse:
 def checkpoint_detail(request: HttpRequest, thread_id: str) -> HttpResponse:
     session = get_session(thread_id)
     if session is None:
-        return HttpResponse("Checkpoint not found", status=404)
+        return render(
+            request,
+            "llmpuffin_web/error.html",
+            {
+                "title": "Checkpoint not found",
+                "message": f"No checkpoint data for thread {thread_id}.",
+            },
+            status=404,
+        )
     return render(request, "llmpuffin_web/checkpoint_detail.html", {"session": session})
 
 
@@ -47,13 +55,13 @@ def profiles_list(request: HttpRequest) -> HttpResponse:
 
 def profile_create(request: HttpRequest) -> HttpResponse:
     name = request.POST.get("name", "").strip()
-    config_toml = request.POST.get("config_toml", "").strip()
+    profile_toml = request.POST.get("profile_toml", "").strip()
 
-    if not name or not config_toml:
+    if not name or not profile_toml:
         return redirect("/profiles/?error=Name+and+config+are+required")
 
     try:
-        tomllib.loads(config_toml)
+        tomllib.loads(profile_toml)
     except Exception as exc:
         profiles = AuditProfile.objects.all()
         return render(
@@ -65,7 +73,7 @@ def profile_create(request: HttpRequest) -> HttpResponse:
             },
         )
 
-    AuditProfile.objects.create(name=name, config_toml=config_toml)
+    AuditProfile.objects.create(name=name, profile_toml=profile_toml)
     return redirect("/profiles/")
 
 
@@ -80,16 +88,16 @@ def profile_detail(request: HttpRequest, profile_id: int) -> HttpResponse:
 
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
-        config_toml = request.POST.get("config_toml", "").strip()
+        profile_toml = request.POST.get("profile_toml", "").strip()
 
         try:
-            tomllib.loads(config_toml)
+            tomllib.loads(profile_toml)
         except Exception as exc:
             ctx["error"] = f"Invalid TOML: {exc}"
             return render(request, "llmpuffin_web/profile_detail.html", ctx)
 
         profile.name = name
-        profile.config_toml = config_toml
+        profile.profile_toml = profile_toml
         profile.save()
         ctx["success"] = "Profile saved."
         ctx["profile"] = profile
@@ -124,9 +132,9 @@ def run_resume(request: HttpRequest, run_id: int, thread_id: str) -> HttpRespons
     get_object_or_404(AuditThread, audit_run=run, thread_id=thread_id)
 
     # Get config TOML from the run itself, or fall back to profile
-    toml_str = run.config_toml
+    toml_str = run.profile_toml
     if not toml_str and run.profile:
-        toml_str = run.profile.config_toml
+        toml_str = run.profile.profile_toml
     if not toml_str:
         return redirect(f"/runs/{run_id}/?error=No+config+available+for+resume")
 
@@ -146,9 +154,9 @@ def run_fork(request: HttpRequest, run_id: int, thread_id: str) -> HttpResponse:
     run = get_object_or_404(AuditRun, id=run_id)
     get_object_or_404(AuditThread, audit_run=run, thread_id=thread_id)
 
-    toml_str = run.config_toml
+    toml_str = run.profile_toml
     if not toml_str and run.profile:
-        toml_str = run.profile.config_toml
+        toml_str = run.profile.profile_toml
     if not toml_str:
         return redirect(f"/runs/{run_id}/?error=No+config+available+for+fork")
 
@@ -183,23 +191,11 @@ def _run_audit_in_thread(
     user_message: str | None = None,
 ) -> None:
     """Run an audit in a background thread."""
-    profile_config = ProfileAudit.from_toml_string(toml_str)
-    harness_config = HarnessConfig(
-        name=profile_config.name,
-        threat_model_dir=profile_config.threat_model_dir,
-        container_image=profile_config.image,
-        max_iterations=profile_config.max_iterations,
-        code_dir=profile_config.code_dir,
-        output_path=profile_config.output,
-        interpreter=profile_config.agent.interpreter,
-        interrupt_on=profile_config.agent.interrupt_on,
-        skills_dir=profile_config.agent.skills_dir,
-        config_toml=toml_str,
-    )
+    profile = Profile.from_toml_string(toml_str)
+    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     asyncio.run(
         run_audit(
             harness_config,
-            model_name=profile_config.model,
             thread_id=resume_thread_id,
             user_message=user_message,
         )
@@ -210,25 +206,13 @@ def _fork_audit_in_thread(
     toml_str: str, source_thread_id: str, user_message: str
 ) -> None:
     """Fork an audit in a background thread."""
-    profile_config = ProfileAudit.from_toml_string(toml_str)
-    harness_config = HarnessConfig(
-        name=profile_config.name,
-        threat_model_dir=profile_config.threat_model_dir,
-        container_image=profile_config.image,
-        max_iterations=profile_config.max_iterations,
-        code_dir=profile_config.code_dir,
-        output_path=profile_config.output,
-        interpreter=profile_config.agent.interpreter,
-        interrupt_on=profile_config.agent.interrupt_on,
-        skills_dir=profile_config.agent.skills_dir,
-        config_toml=toml_str,
-    )
+    profile = Profile.from_toml_string(toml_str)
+    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     asyncio.run(
         fork_audit(
             harness_config,
             source_thread_id=source_thread_id,
             user_message=user_message,
-            model_name=profile_config.model,
         )
     )
 
@@ -237,13 +221,13 @@ def profile_run(request: HttpRequest, profile_id: int) -> HttpResponse:
     profile = get_object_or_404(AuditProfile, id=profile_id)
 
     try:
-        ProfileAudit.from_toml_string(profile.config_toml)
+        Profile.from_toml_string(profile.profile_toml)
     except Exception as exc:
         return redirect(f"/profiles/{profile_id}/?error=Invalid+config:+{exc}")
 
     thread = threading.Thread(
         target=_run_audit_in_thread,
-        args=(profile.config_toml,),
+        args=(profile.profile_toml,),
         daemon=True,
     )
     thread.start()

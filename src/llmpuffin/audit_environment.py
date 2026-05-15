@@ -16,9 +16,8 @@ is required.
 
 from __future__ import annotations
 
-import json
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import TracebackType
 
 from podman import PodmanClient
@@ -78,8 +77,6 @@ class AuditExecution:
     container: Container
     client: PodmanClient
     code_dir: str
-    # Track commands for audit trail / debugging
-    command_log: list[dict] = field(default_factory=list)
 
     def __enter__(self) -> AuditExecution:
         return self
@@ -120,21 +117,12 @@ class AuditExecution:
         stdout = output[0].decode() if output[0] else ""
         stderr = output[1].decode() if output[1] else ""
 
-        result = ExecResult(
+        return ExecResult(
             command=command,
             exit_code=exit_code,
             stdout=stdout,
             stderr=stderr,
         )
-        self.command_log.append(
-            {
-                "command": command,
-                "exit_code": exit_code,
-                "stdout_len": len(stdout),
-                "stderr_len": len(stderr),
-            }
-        )
-        return result
 
     def read_file(self, path: str) -> str:
         """Read a file from the container."""
@@ -174,10 +162,6 @@ class AuditExecution:
             ) from exc
 
         self.container.remove(force=True)
-
-    def get_command_log_json(self) -> str:
-        """Return the command log as JSON for debugging."""
-        return json.dumps(self.command_log, indent=2)
 
 
 @dataclass

@@ -2,11 +2,11 @@
 name = "vulnerable-app"
 image = "llmpuffin-vulnerable-app"
 threat_model_dir = "examples/vulnerable-app/threat_model"
-model = "claude-sonnet-4-20250514"
-max_iterations = 200
 code_dir = "/src"
 output = "examples/vulnerable-app/results.sarif"
 
 [agent]
+model = "claude-sonnet-4-20250514"
+max_iterations = 200
 interpreter = false
 skills_dir = "vendor/trailofbits-skills/plugins"

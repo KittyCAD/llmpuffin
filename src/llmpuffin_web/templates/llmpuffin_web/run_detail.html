@@ -43,13 +43,14 @@
 {% if findings %}
 <h2>findings ({{ findings|length }})</h2>
 <table>
-<tr><th>Rule</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Description</th></tr>
+<tr><th>Rule</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Thread</th><th>Description</th></tr>
 {% for f in findings %}
 <tr>
   <td><a href="/findings/{{ f.id }}/">{{ f.rule_id }}</a></td>
   <td>{{ f.scenario_id }}</td>
   <td>{{ f.severity }}</td>
   <td>{{ f.difficulty }}</td>
+  <td>{% if f.thread_id %}<a href="/checkpoints/{{ f.thread_id }}/">{{ f.thread_id }}</a>{% else %}—{% endif %}</td>
   <td>{{ f.description|truncatechars:120 }}</td>
 </tr>
 {% endfor %}

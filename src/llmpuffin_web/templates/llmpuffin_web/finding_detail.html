@@ -6,6 +6,7 @@
 
 <table>
 <tr><th>Scenario</th><td>{{ finding.scenario_id }}</td></tr>
+<tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
 <tr><th>Severity</th><td>{{ finding.severity }}</td></tr>
 <tr><th>Difficulty</th><td>{{ finding.difficulty }}</td></tr>
 <tr><th>Level</th><td>{{ finding.level }}</td></tr>

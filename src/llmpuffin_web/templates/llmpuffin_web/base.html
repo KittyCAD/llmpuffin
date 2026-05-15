@@ -3,8 +3,8 @@
 <head>
 <title>llmpuffin — {% block title %}{% endblock %}</title>
 <style>
-body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; max-width: 80em; }
-pre { white-space: pre-wrap; word-wrap: break-word; max-width: 72em; }
+body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; max-width: 120em; }
+pre { white-space: pre-wrap; word-wrap: break-word; }
 a { color: #6ec6ff; }
 h1 { font-size: 1.3em; }
 table { border-collapse: collapse; margin-top: 1em; width: 100%; }
@@ -36,6 +36,7 @@ button:hover { background: #4a4a6a; }
 .error { color: #ff6b6b; }
 .success { color: #81c784; }
 </style>
+{% block head %}{% endblock %}
 </head>
 <body>
 <nav>
