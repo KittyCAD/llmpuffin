@@ -23,10 +23,15 @@
   <td><a href="/checkpoints/{{ t.thread_id }}/">{{ t.thread_id }}</a></td>
   <td>{{ t.created_at|date:"Y-m-d H:i:s" }}</td>
   <td>
-    <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/">
+    <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" style="margin-bottom:0.3em">
       {% csrf_token %}
-      <input type="text" name="message" placeholder="optional message for the agent" style="width:20em">
+      <input type="text" name="message" placeholder="optional message" style="width:16em">
       <button type="submit">resume</button>
+    </form>
+    <form method="post" action="/runs/{{ run.id }}/fork/{{ t.thread_id }}/">
+      {% csrf_token %}
+      <input type="text" name="message" placeholder="message for fork" required style="width:16em">
+      <button type="submit">fork</button>
     </form>
   </td>
 </tr>
