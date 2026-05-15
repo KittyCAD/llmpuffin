@@ -1,15 +1,18 @@
-- pausable chats and web ui to continue them
-- Deduplicating with existing findings
-- Launch an unbiased audit in paralle. subagent shuld do the therad modeling stuff
-- building and setting the proejc tup
-- improving thread model post audit
-- searching through security issues on github
 
-
-- subagents dont log to terminal (tool invocations)
-
-
+Validation:
 - finding inline fork chat, ask about that finding
+- building and setting the project up
+
+TM:
+- Zoo will have one thread-model, or maybe ZDS as a whole. We need to make sure that the LLM picks the risks relevant for it.
+- improving thread model post audit
+
+Tools:
+- searching through security issues on github
+  - Deduplicating with existing findings in GH and the database
+
+Misc: 
+- pausable chats and web ui to continue them
 
 Open questions:
 - What about memories? - I think we store them in the db now, validate

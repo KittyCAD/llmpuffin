@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 class Severity(StrEnum):
     INFORMATIONAL = "informational"
     LOW = "low"
+    MEDIUM = "medium"
     HIGH = "high"
 
 

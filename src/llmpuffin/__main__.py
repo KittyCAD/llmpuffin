@@ -35,11 +35,6 @@ def main() -> None:
         help="Audit profile TOML file",
     )
     parser.add_argument(
-        "--thread-id",
-        default=None,
-        help="Resume a previous session by thread ID",
-    )
-    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -61,14 +56,12 @@ def main() -> None:
         profile_toml=profile_text,
     )
 
-    result = asyncio.run(run_audit(harness_config, thread_id=args.thread_id))
+    result = asyncio.run(run_audit(harness_config))
     n = len(result.report.findings)
     print(
         f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} "
         f"written to {profile.output}"
     )
-    if result.thread_id:
-        print(f"  Thread ID: {result.thread_id} (use --thread-id to resume)")
     if result.error:
         print(f"  Note: {result.error}")
     if result.status != AuditStatus.COMPLETED:

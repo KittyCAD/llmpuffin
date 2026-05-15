@@ -67,25 +67,21 @@ skills_dir = "vendor/trailofbits-skills/plugins"
 
 ## Usage
 
-See `examples/` for ready-to-run setups:
+Build the container image and run an audit:
 
 ```
-# Vulnerable app example
-bash examples/vulnerable-app/run.sh
+# Build + run a single profile
+uv run llmpuffin-run -v -p profiles/modeling-app/profile.toml
 
-# Zoo Design Studio (modeling-app) example
-bash examples/modeling-app/run.sh
-
-# Or run directly with a profile
-uv run llmpuffin -v -p examples/vulnerable-app/profile.toml
+# Build + run all profiles
+uv run llmpuffin-run -v
 ```
 
-To resume a previous session:
-
-```
-uv run llmpuffin -v -p examples/vulnerable-app/profile.toml \
-    --thread-id <thread-id-from-previous-run>
-```
+Available profiles in `profiles/`:
+- `modeling-app` — Zoo Design Studio (KittyCAD/modeling-app)
+- `engine` — Geometry Engine (KittyCAD/engine)
+- `text-to-cad` — Text-to-CAD service (KittyCAD/text-to-cad)
+- `api` — KittyCAD API (KittyCAD/api)
 
 ## Web UI
 
