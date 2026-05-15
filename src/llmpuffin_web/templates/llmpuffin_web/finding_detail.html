@@ -1,4 +1,5 @@
 {% extends "llmpuffin_web/base.html" %}
+{% load finding_links %}
 {% block title %}{{ finding.rule_id }}{% endblock %}
 {% block content %}
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run {{ finding.audit_run_id }}</a></p>
@@ -10,15 +11,23 @@
 <tr><th>Severity</th><td>{{ finding.severity }}</td></tr>
 <tr><th>Difficulty</th><td>{{ finding.difficulty }}</td></tr>
 <tr><th>Level</th><td>{{ finding.level }}</td></tr>
+<tr><th>Validated</th><td>{% if finding.validated %}yes{% else %}no{% endif %}</td></tr>
 <tr><th>Created</th><td>{{ finding.created_at|date:"Y-m-d H:i:s" }}</td></tr>
 </table>
+
+{% if finding.validated_evidence %}
+<h2>validation evidence</h2>
+<pre>{{ finding.validated_evidence }}</pre>
+{% endif %}
 
 {% if locations %}
 <h2>locations</h2>
 <table>
-<tr><th>File</th><th>Line</th></tr>
+<tr><th>Location</th></tr>
 {% for loc in locations %}
-<tr><td>{{ loc.file_path }}</td><td>{{ loc.start_line }}</td></tr>
+<tr>
+  <td>{% location_link loc audit_run %}</td>
+</tr>
 {% endfor %}
 </table>
 {% endif %}

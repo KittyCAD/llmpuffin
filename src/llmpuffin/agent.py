@@ -34,6 +34,7 @@ from typing import Any
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.stores import BaseStore
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -65,24 +66,41 @@ class AuditResult:
 
 
 SYSTEM_PROMPT = """\
-You are a security auditor performing a code review guided by a threat model.
+You are a security auditor performing a code review.
 The source code is in the current working directory of a container.
 
 Start by invoking the skill audit-context-building.
 
-Your workflow:
-1. Call get_threat_model to understand the system architecture and threat scenarios
-2. For each threat scenario, call get_threat_scenario to get full details
-3. Use the codebase tools (read_file, grep_code, list_files, run_command) to investigate
-4. Call report_finding for each confirmed vulnerability
+## Subagents
 
-Guidelines:
-- Work through scenarios systematically, prioritizing high severity first
+You have specialized subagents — delegate to them instead of doing everything yourself:
+
+- **threat-model-auditor**: Systematically investigates every threat scenario from the \
+threat model. Delegate to this subagent for threat-model-driven analysis. Do NOT call \
+get_threat_model or get_threat_scenario yourself — that is the threat-model-auditor's job.
+- **finding-validator**: Validates a reported finding by constructing a full exploit chain \
+or by actually running the target app and writing an exploit/test. A finding is only \
+confirmed if the validator proves it. Pass the finding_id and description when delegating.
+- **function-analyzer**: Performs ultra-granular per-function deep analysis. Use for dense \
+functions, data-flow chains, cryptographic code, or state machines.
+
+## Your workflow
+1. Start with the audit-context-building skill to understand the codebase structure
+2. Explore the codebase directly: read code, grep for patterns, understand the architecture
+3. Report potential findings with report_finding as you discover them
+4. Delegate to threat-model-auditor to ensure all threat scenarios are covered
+5. For each reported finding, delegate to finding-validator to confirm or reject it
+6. If /memories/ is available, read it for context from prior audits and write notes for future runs
+
+## Findings
+- report_finding returns a finding_id — use this ID for update_finding, delete_finding, validate_finding
+- The finding ID is assigned automatically, do not invent IDs
+- Report findings early — the finding-validator will confirm or reject them
+
+## Guidelines
 - Provide concrete evidence: file paths, line numbers, code snippets
-- Distinguish between confirmed vulnerabilities and potential concerns
-- Check whether existing mitigations are properly implemented
-- Call report_finding as soon as you confirm a vulnerability — don't wait until the end
-- If /memories/ is available, read it for context from prior audits and write notes for future runs
+- Do NOT call get_threat_model or get_threat_scenario directly — delegate to threat-model-auditor
+- Focus your own analysis on codebase exploration and pattern recognition
 """
 
 
@@ -122,7 +140,7 @@ def _build_agent(
             if not file_path.is_file():
                 continue
             rel = file_path.relative_to(agent_cfg.skills_dir)
-            store_key = f"/skills/{rel}"
+            store_key = f"/{rel}"
             try:
                 content = file_path.read_text()
             except (UnicodeDecodeError, OSError):
@@ -169,8 +187,20 @@ def _build_agent(
     )
 
 
+class _ToolLogHandler(BaseCallbackHandler):
+    """Log tool calls from subagents that don't go through the main stream."""
+
+    def on_tool_start(self, serialized, input_str, *, run_id, **kwargs):
+        name = serialized.get("name", "?")
+        log.info("  tool: %s(%s)", name, _truncate(str(input_str), 120))
+
+    def on_tool_error(self, error, *, run_id, **kwargs):
+        log.warning("  tool error: %s", _truncate(str(error), 200))
+
+
 async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
     """Stream agent execution and log progress. Returns (status, error)."""
+    run_config.setdefault("callbacks", []).append(_ToolLogHandler())
     status = AuditStatus.COMPLETED
     error: str | None = None
     try:
@@ -182,7 +212,13 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
             for node, updates in chunk.items():
                 if updates is None:
                     continue
-                for msg in updates.get("messages", []):
+                messages = updates.get("messages", [])
+                # LangGraph may wrap messages in an Overwrite container
+                if hasattr(messages, "value"):
+                    messages = messages.value
+                if not isinstance(messages, list):
+                    continue
+                for msg in messages:
                     if isinstance(msg, AIMessage):
                         if msg.tool_calls:
                             for tc in msg.tool_calls:
@@ -262,6 +298,8 @@ async def _fork_audit_inner(
 
     try:
         with harness.start_environment() as execution:
+            await sync_to_async(_capture_git_info)(execution, audit_run_id)
+
             agent = _build_agent(
                 config,
                 execution,
@@ -368,6 +406,8 @@ async def _run_audit_inner(
 
     try:
         with harness.start_environment() as execution:
+            await sync_to_async(_capture_git_info)(execution, audit_run_id)
+
             agent = _build_agent(
                 config,
                 execution,
@@ -413,6 +453,44 @@ async def _run_audit_inner(
     await sync_to_async(_finalize_audit_run)(tid, status, error)
 
     return AuditResult(report=report, status=status, error=error, thread_id=tid)
+
+
+def _capture_git_info(execution, audit_run_id: int | None) -> None:
+    """Run git commands in the container and store repo URL + commit on the AuditRun.
+
+    Raises RuntimeError if git info cannot be retrieved or the remote
+    is not a https://github.com URL.
+    """
+    from urllib.parse import urlparse
+
+    remote_result = execution.exec(["git", "remote", "get-url", "origin"], timeout=5)
+    if not remote_result.ok:
+        raise RuntimeError(f"Failed to get git remote: {remote_result.stderr.strip()}")
+    git_remote = remote_result.stdout.strip()
+
+    parsed = urlparse(git_remote)
+    if parsed.scheme != "https" or parsed.hostname != "github.com":
+        raise RuntimeError(
+            f"Git remote must be a https://github.com URL, got: {git_remote}"
+        )
+
+    # Normalize to a clean GitHub repo URL (strip .git suffix)
+    repo_path = parsed.path.removesuffix(".git").strip("/")
+    github_repo_url = f"https://github.com/{repo_path}"
+
+    head_result = execution.exec(["git", "rev-parse", "HEAD"], timeout=5)
+    if not head_result.ok:
+        raise RuntimeError(f"Failed to get git HEAD: {head_result.stderr.strip()}")
+    git_commit = head_result.stdout.strip()
+
+    if audit_run_id:
+        from llmpuffin.models import AuditRun
+
+        AuditRun.objects.filter(pk=audit_run_id).update(  # type: ignore[attr-defined]
+            github_repo_url=github_repo_url,
+            git_commit=git_commit,
+        )
+    log.info("Git info: %s @ %s", github_repo_url, git_commit[:12])
 
 
 def _get_or_create_profile(config: HarnessConfig) -> object:

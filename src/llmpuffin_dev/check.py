@@ -10,6 +10,7 @@ def main() -> None:
     for cmd in [
         ["uv", "run", "ruff", "format", "src/"],
         ["uv", "run", "ruff", "check", "--fix", "src/"],
+        ["uv", "run", "pytest", "tests/", "-q"],
     ]:
         result = subprocess.run(cmd)
         if result.returncode != 0:

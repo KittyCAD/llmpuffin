@@ -158,8 +158,8 @@ Relevant connections:
 Existing mitigations to verify:
 {mitigations}"""
 
-    # Track rule_id → DB pk for update/delete
-    _finding_pks: dict[str, int] = {}
+    # Map finding_id (DB pk) → rule_id for SARIF lookups
+    _id_to_rule: dict[int, str] = {}
 
     def report_finding(
         scenario_id: str,
@@ -172,6 +172,9 @@ Existing mitigations to verify:
         locations: list[dict] | None = None,
     ) -> str:
         """Record a security finding. Call this for each vulnerability you discover.
+
+        Returns the finding_id which you must use to reference this finding
+        in update_finding, delete_finding, and validate_finding.
 
         Args:
             scenario_id: The threat scenario ID this finding relates to (e.g. "sqli")
@@ -224,52 +227,61 @@ Existing mitigations to verify:
             locations,
         )
         if pk:
-            _finding_pks[rule_id] = pk
+            _id_to_rule[pk] = rule_id
 
-        return f"Finding recorded: {rule_id}"
+        finding_id = pk or rule_id
+        return f"Finding recorded. finding_id: {finding_id}"
+
+    def _resolve_finding(finding_id: int) -> tuple[str | None, int | None]:
+        """Resolve a finding_id to (rule_id, pk). Returns error string if not found."""
+        rule_id = _id_to_rule.get(finding_id)
+        if rule_id:
+            return rule_id, finding_id
+        return None, None
 
     def update_finding(
-        rule_id: str,
+        finding_id: int,
         severity: str | None = None,
         difficulty: str | None = None,
         description: str | None = None,
         impact: str | None = None,
         recommendations: str | None = None,
     ) -> str:
-        """Update an existing finding by rule_id.
+        """Update an existing finding.
 
         Args:
-            rule_id: The finding to update (e.g. "sqli-001")
+            finding_id: The finding_id returned by report_finding
             severity: New severity (optional)
             difficulty: New difficulty (optional)
             description: New description (optional)
             impact: New impact (optional)
             recommendations: New recommendations (optional)
         """
+        rule_id, pk = _resolve_finding(finding_id)
+        if not rule_id:
+            return f"Finding {finding_id} not found"
+
         # Update SARIF report
         sarif_finding = next((f for f in report.findings if f.rule_id == rule_id), None)
-        if not sarif_finding:
-            return f"Finding '{rule_id}' not found"
-
-        if severity is not None:
-            sarif_finding.severity = severity
-            sarif_finding.level = _SEVERITY_TO_LEVEL.get(severity, "warning")
-        if difficulty is not None:
-            sarif_finding.difficulty = difficulty
-        if description is not None:
-            sarif_finding.description = description
-        if impact is not None:
-            sarif_finding.impact = impact
-        if recommendations is not None:
-            sarif_finding.recommendations = recommendations
+        if sarif_finding:
+            if severity is not None:
+                sarif_finding.severity = severity
+                sarif_finding.level = _SEVERITY_TO_LEVEL.get(severity, "warning")
+            if difficulty is not None:
+                sarif_finding.difficulty = difficulty
+            if description is not None:
+                sarif_finding.description = description
+            if impact is not None:
+                sarif_finding.impact = impact
+            if recommendations is not None:
+                sarif_finding.recommendations = recommendations
 
         # Update DB
-        pk = _finding_pks.get(rule_id)
         if pk:
             try:
                 from llmpuffin.models import Finding
 
-                Finding.objects.filter(pk=pk).update(
+                Finding.objects.filter(pk=pk, audit_run_id=audit_run_id).update(  # type: ignore[attr-defined]
                     **{
                         k: v
                         for k, v in {
@@ -288,33 +300,99 @@ Existing mitigations to verify:
             except Exception as exc:
                 log.warning("Failed to update finding in DB: %s", exc)
 
-        return f"Finding updated: {rule_id}"
+        return f"Finding {finding_id} updated"
 
-    def delete_finding(rule_id: str) -> str:
-        """Delete a finding by rule_id. Use if a finding was reported in error.
+    def delete_finding(finding_id: int) -> str:
+        """Delete a finding. Use if a finding was reported in error or could not be validated.
 
         Args:
-            rule_id: The finding to delete (e.g. "sqli-001")
+            finding_id: The finding_id returned by report_finding
         """
+        rule_id, pk = _resolve_finding(finding_id)
+        if not rule_id:
+            return f"Finding {finding_id} not found"
+
         # Remove from SARIF report
         report.findings = [f for f in report.findings if f.rule_id != rule_id]
 
-        # Remove from DB
-        pk = _finding_pks.pop(rule_id, None)
+        # Soft-delete in DB
+        if pk:
+            _id_to_rule.pop(pk, None)
+            try:
+                from llmpuffin.models import Finding
+
+                Finding.objects.filter(pk=pk).update(deleted=True)  # type: ignore[attr-defined]
+            except Exception as exc:
+                log.warning("Failed to soft-delete finding in DB: %s", exc)
+
+        return f"Finding {finding_id} deleted"
+
+    def validate_finding(
+        finding_id: int,
+        evidence: str,
+    ) -> str:
+        """Mark a finding as validated with exploit evidence.
+
+        Only call this after you have either (a) traced a complete exploit chain
+        from attacker input to impact, or (b) run a live exploit/test that proves
+        the vulnerability.
+
+        Args:
+            finding_id: The finding_id returned by report_finding
+            evidence: The validation evidence — exploit chain trace or test output
+        """
+        rule_id, pk = _resolve_finding(finding_id)
+        if not rule_id:
+            return f"Finding {finding_id} not found"
+
+        # Update SARIF
+        sarif_finding = next((f for f in report.findings if f.rule_id == rule_id), None)
+        if sarif_finding:
+            sarif_finding.properties["validated"] = True
+            sarif_finding.properties["validated_evidence"] = evidence
+
+        # Update DB
         if pk:
             try:
                 from llmpuffin.models import Finding
 
-                Finding.objects.filter(pk=pk).delete()
+                Finding.objects.filter(pk=pk, audit_run_id=audit_run_id).update(  # type: ignore[attr-defined]
+                    validated=True,
+                    validated_evidence=evidence,
+                )
             except Exception as exc:
-                log.warning("Failed to delete finding from DB: %s", exc)
+                log.warning("Failed to validate finding in DB: %s", exc)
 
-        return f"Finding deleted: {rule_id}"
+        return f"Finding {finding_id} validated"
+
+    def list_findings() -> str:
+        """List all reported findings with their IDs, titles, severity, and status.
+
+        Use this to see what has been reported so far and which findings
+        need validation.
+        """
+        if not report.findings:
+            return "No findings reported yet."
+        lines = []
+        for f in report.findings:
+            # Find the DB pk for this finding
+            pk = next((k for k, v in _id_to_rule.items() if v == f.rule_id), None)
+            finding_id = pk or f.rule_id
+            validated = f.properties.get("validated", False)
+            status = "validated" if validated else "unvalidated"
+            lines.append(
+                f"- finding_id: {finding_id} | {f.title} | "
+                f"{f.severity}/{f.difficulty} | scenario: {f.threat_scenario_ids[0] if f.threat_scenario_ids else '?'} | "
+                f"{status}"
+            )
+        return "\n".join(lines)
 
     return [
         get_threat_model,
         get_threat_scenario,
         report_finding,
+        list_findings,
         update_finding,
         delete_finding,
+        validate_finding,
     ]

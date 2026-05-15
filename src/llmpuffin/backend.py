@@ -232,7 +232,7 @@ class ContainerBackend(SandboxBackendProtocol):
         if exit_code != 0:
             return WriteResult(error=f"Error: {stderr.strip()}")
 
-        return WriteResult(path=file_path, files_update=None)
+        return WriteResult(path=file_path)
 
     def edit(
         self,

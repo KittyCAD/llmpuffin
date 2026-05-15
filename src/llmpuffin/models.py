@@ -60,6 +60,8 @@ class AuditRun(models.Model):
         max_length=32
     )  # running, completed, recursion_limit, error
     error = models.TextField(blank=True, default="")
+    github_repo_url = models.CharField(max_length=512, blank=True, default="")
+    git_commit = models.CharField(max_length=64, blank=True, default="")
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
 
@@ -70,6 +72,24 @@ class AuditRun(models.Model):
     def __str__(self) -> str:
         threads = ", ".join(t.thread_id for t in self.threads.all()[:3])
         return f"Run {self.pk} [{threads}] ({self.status})"
+
+    def github_file_url(
+        self, file_path: str, line: int | None = None, end_line: int | None = None
+    ) -> str | None:
+        """Build a GitHub URL for a file path, or None if no repo configured."""
+        base = self.github_repo_url.rstrip("/")
+        if not base:
+            return None
+        ref = self.git_commit or "main"
+        clean_path = file_path.lstrip("/")
+        if clean_path.startswith("src/"):
+            clean_path = clean_path[4:]
+        url = f"{base}/blob/{ref}/{clean_path}"
+        if line and end_line:
+            url += f"#L{line}-L{end_line}"
+        elif line:
+            url += f"#L{line}"
+        return url
 
 
 class AuditThread(models.Model):
@@ -108,6 +128,9 @@ class Finding(models.Model):
     description = models.TextField()
     impact = models.TextField()
     recommendations = models.TextField()
+    validated = models.BooleanField(default=False)
+    validated_evidence = models.TextField(blank=True, default="")
+    deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

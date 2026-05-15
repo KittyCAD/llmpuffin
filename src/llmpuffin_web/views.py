@@ -108,11 +108,13 @@ def profile_detail(request: HttpRequest, profile_id: int) -> HttpResponse:
 
 
 def runs_list(request: HttpRequest) -> HttpResponse:
-    from django.db.models import Count
+    from django.db.models import Count, Q
 
     runs = AuditRun.objects.annotate(
         thread_count=Count("threads", distinct=True),
-        finding_count=Count("findings", distinct=True),
+        finding_count=Count(
+            "findings", distinct=True, filter=Q(findings__deleted=False)
+        ),
     ).order_by("-started_at")
     return render(request, "llmpuffin_web/runs_list.html", {"runs": runs})
 
@@ -132,6 +134,9 @@ def run_detail(request: HttpRequest, run_id: int) -> HttpResponse:
 def run_resume(request: HttpRequest, run_id: int, thread_id: str) -> HttpResponse:
     run = get_object_or_404(AuditRun, id=run_id)
     get_object_or_404(AuditThread, audit_run=run, thread_id=thread_id)
+
+    if run.status == "running":
+        return redirect(f"/runs/{run_id}/?error=Run+is+already+in+progress")
 
     # Get config TOML from the run itself, or fall back to profile
     toml_str = run.profile_toml
@@ -196,6 +201,7 @@ def finding_detail(request: HttpRequest, finding_id: int) -> HttpResponse:
         "llmpuffin_web/finding_detail.html",
         {
             "finding": finding,
+            "audit_run": finding.audit_run,
             "locations": finding.locations.all(),
         },
     )
