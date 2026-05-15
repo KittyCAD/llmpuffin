@@ -1,0 +1,16 @@
+{% extends "llmpuffin_web/base.html" %}
+{% block title %}store — {{ prefix }}{% endblock %}
+{% block content %}
+<p><a href="/store/">← all namespaces</a></p>
+<h1>{{ prefix }} ({{ items|length }} item{{ items|length|pluralize }})</h1>
+
+{% for item in items %}
+<div class="msg">
+  <span class="role">{{ item.key }}</span>
+  <pre>{{ item.value_json }}</pre>
+  <small style="color:#888">updated {{ item.updated_at }}</small>
+</div>
+{% empty %}
+<p>No items in this namespace.</p>
+{% endfor %}
+{% endblock %}

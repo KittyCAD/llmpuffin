@@ -14,6 +14,8 @@ from llmpuffin.config import Profile
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 from llmpuffin_web.checkpoint import get_session, list_sessions
+from llmpuffin_web.store import list_items as list_store_items
+from llmpuffin_web.store import list_namespaces as list_store_namespaces
 
 
 def checkpoints_list(request: HttpRequest) -> HttpResponse:
@@ -171,6 +173,20 @@ def run_fork(request: HttpRequest, run_id: int, thread_id: str) -> HttpResponse:
     )
     thread.start()
     return redirect(f"/runs/{run_id}/?success=Forked+from+thread+{thread_id}")
+
+
+def store_list(request: HttpRequest) -> HttpResponse:
+    namespaces = list_store_namespaces()
+    return render(request, "llmpuffin_web/store_list.html", {"namespaces": namespaces})
+
+
+def store_namespace(request: HttpRequest, prefix: str) -> HttpResponse:
+    items = list_store_items(prefix)
+    return render(
+        request,
+        "llmpuffin_web/store_namespace.html",
+        {"prefix": prefix, "items": items},
+    )
 
 
 def finding_detail(request: HttpRequest, finding_id: int) -> HttpResponse:

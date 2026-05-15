@@ -16,12 +16,15 @@ is required.
 
 from __future__ import annotations
 
+import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from types import TracebackType
 
 from podman import PodmanClient
 from podman.domain.containers import Container
+
+log = logging.getLogger("llmpuffin")
 
 
 @dataclass
@@ -49,7 +52,8 @@ class AuditEnvironment:
         if self.podman_uri:
             kwargs["base_url"] = self.podman_uri
         client = PodmanClient(**kwargs)
-        container = client.containers.run(
+        # detach=True guarantees a Container return, but the type stub is a union
+        container: Container = client.containers.run(  # type: ignore[assignment]
             self.image,
             detach=True,
             command=["sleep", "infinity"],
@@ -151,9 +155,8 @@ class AuditExecution:
         """
         try:
             self.container.kill()
-        except Exception:
-
-            pass  # Container may already be dead
+        except Exception as exc:
+            log.debug("kill() failed (container may already be dead): %s", exc)
 
         try:
             self.container.wait(condition="stopped", timeout=timeout)

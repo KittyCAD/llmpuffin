@@ -1,0 +1,16 @@
+{% extends "llmpuffin_web/base.html" %}
+{% block title %}store{% endblock %}
+{% block content %}
+<h1>Store namespaces</h1>
+<table>
+<tr><th>Namespace</th><th>Items</th></tr>
+{% for ns in namespaces %}
+<tr>
+  <td><a href="/store/{{ ns.prefix }}/">{{ ns.prefix }}</a></td>
+  <td>{{ ns.count }}</td>
+</tr>
+{% empty %}
+<tr><td colspan="2">Store is empty.</td></tr>
+{% endfor %}
+</table>
+{% endblock %}

@@ -250,6 +250,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2e/38/ddf9ecc0b4f59ce79d9396d8e88c0649e00fd1dd3c2f921e580ca2de25fa/deepagents-0.6.1-py3-none-any.whl", hash = "sha256:d06d9b88a484b4dbc24f5f0b6f4de10df2fb847b2d2d8980c1c35d9021f28db4", size = 197889, upload-time = "2026-05-12T17:44:32.949Z" },
 ]
 
+[package.optional-dependencies]
+quickjs = [
+    { name = "langchain-quickjs" },
+]
+
 [[package]]
 name = "distro"
 version = "1.9.0"
@@ -638,7 +643,7 @@ name = "llmpuffin"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "deepagents" },
+    { name = "deepagents", extra = ["quickjs"] },
     { name = "django" },
     { name = "langchain-anthropic" },
     { name = "langgraph-checkpoint-postgres" },
@@ -660,7 +665,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "deepagents" },
+    { name = "deepagents", extras = ["quickjs"] },
     { name = "django", specifier = ">=5" },
     { name = "langchain-anthropic", specifier = ">=0.3" },
     { name = "langchain-quickjs", marker = "extra == 'interpreter'", specifier = ">=0.1.0" },

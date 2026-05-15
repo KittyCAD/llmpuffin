@@ -30,6 +30,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
@@ -129,7 +130,7 @@ def _build_agent(
             skills_store.put(
                 namespace=("skills",),
                 key=store_key,
-                value=create_file_data(content),
+                value=dict(create_file_data(content)),
             )
         routes["/skills/"] = skills_backend
         skills_list = ["/skills/"]
@@ -244,8 +245,8 @@ async def _fork_audit_inner(
     report: SarifReport,
     source_thread_id: str,
     user_message: str,
-    checkpointer: object,
-    store: object,
+    checkpointer: BaseCheckpointSaver,
+    store: BaseStore,
 ) -> AuditResult:
     p = config.profile
     new_tid = uuid.uuid4().hex[:12]
@@ -272,7 +273,9 @@ async def _fork_audit_inner(
                 store,
             )
 
-            source_config = {"configurable": {"thread_id": source_thread_id}}
+            source_config: dict[str, Any] = {
+                "configurable": {"thread_id": source_thread_id},
+            }
             state = await agent.aget_state(source_config)
 
             messages = state.values.get("messages", [])
@@ -349,8 +352,8 @@ async def _run_audit_inner(
     threat_model: ThreatModel,
     report: SarifReport,
     thread_id: str | None,
-    checkpointer: object | None,
-    store: object | None,
+    checkpointer: BaseCheckpointSaver,
+    store: BaseStore,
     user_message: str | None = None,
 ) -> AuditResult:
     p = config.profile
