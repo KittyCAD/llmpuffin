@@ -1,10 +1,23 @@
-"""Template tags for linking finding locations to GitHub."""
+"""Template tags and filters for finding display."""
 
+import markdown as _markdown
 from django import template
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 register = template.Library()
+
+
+@register.filter(name="md")
+def render_markdown(text: str) -> str:
+    """Render markdown text to HTML."""
+    if not text:
+        return ""
+    html = _markdown.markdown(
+        text,
+        extensions=["fenced_code", "tables", "nl2br"],
+    )
+    return mark_safe(html)
 
 
 @register.simple_tag

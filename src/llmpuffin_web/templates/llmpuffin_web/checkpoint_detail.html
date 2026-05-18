@@ -1,4 +1,5 @@
 {% extends "llmpuffin_web/base.html" %}
+{% load finding_links %}
 {% block title %}{{ session.thread_id }}{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="10">{% endblock %}
 {% block content %}
@@ -8,13 +9,13 @@
   {% if msg.role == "ai" and msg.tool_calls %}
     <div class="msg llm tool-call">
       <span class="role">llm</span>
-      {% if msg.content %}<pre>{{ msg.content }}</pre>{% endif %}
+      {% if msg.content %}<div class="markdown">{{ msg.content|md }}</div>{% endif %}
       {% for tc in msg.tool_calls %}
         <pre class="tools">{{ tc.name }}({{ tc.args_json }})</pre>
       {% endfor %}
     </div>
   {% elif msg.role == "ai" %}
-    <div class="msg llm"><span class="role">llm</span><pre>{{ msg.content }}</pre></div>
+    <div class="msg llm"><span class="role">llm</span><div class="markdown">{{ msg.content|md }}</div></div>
   {% elif msg.role == "tool" %}
     <div class="msg tool"><span class="role">tool</span><pre>{{ msg.content }}</pre></div>
   {% elif msg.role == "human" %}

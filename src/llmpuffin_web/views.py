@@ -196,15 +196,48 @@ def store_namespace(request: HttpRequest, prefix: str) -> HttpResponse:
 
 def finding_detail(request: HttpRequest, finding_id: int) -> HttpResponse:
     finding = get_object_or_404(Finding, id=finding_id)
-    return render(
-        request,
-        "llmpuffin_web/finding_detail.html",
-        {
-            "finding": finding,
-            "audit_run": finding.audit_run,
-            "locations": finding.locations.all(),
-        },
+    ctx: dict = {
+        "finding": finding,
+        "audit_run": finding.audit_run,
+        "locations": finding.locations.all(),
+    }
+    if request.GET.get("success"):
+        ctx["success"] = request.GET["success"]
+    if request.GET.get("error"):
+        ctx["error"] = request.GET["error"]
+    return render(request, "llmpuffin_web/finding_detail.html", ctx)
+
+
+def finding_fork(request: HttpRequest, finding_id: int) -> HttpResponse:
+    """Fork the conversation from the finding's originating thread to investigate further."""
+    finding = get_object_or_404(Finding, id=finding_id)
+    run = finding.audit_run
+
+    if not finding.thread_id:
+        return redirect(
+            f"/findings/{finding_id}/?error=Finding+has+no+originating+thread"
+        )
+
+    toml_str = run.profile_toml
+    if not toml_str and run.profile:
+        toml_str = run.profile.profile_toml
+    if not toml_str:
+        return redirect(f"/findings/{finding_id}/?error=No+config+available+for+fork")
+
+    user_message = request.POST.get("message", "").strip()
+    if not user_message:
+        user_message = (
+            f"Investigate finding {finding.id} further: "
+            f"{finding.title or finding.description[:200]}"
+        )
+
+    thread = threading.Thread(
+        target=_fork_finding_in_thread,
+        args=(toml_str, finding.thread_id, user_message, finding.id),
+        daemon=True,
     )
+    thread.start()
+    return redirect(f"/findings/{finding_id}/?success=Fork+started")
 
 
 def _run_audit_in_thread(
@@ -237,6 +270,25 @@ def _fork_audit_in_thread(
             user_message=user_message,
         )
     )
+
+
+def _fork_finding_in_thread(
+    toml_str: str, source_thread_id: str, user_message: str, finding_id: int
+) -> None:
+    """Fork an audit for a finding, then link the new thread to the finding."""
+    profile = Profile.from_toml_string(toml_str)
+    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
+    result = asyncio.run(
+        fork_audit(
+            harness_config,
+            source_thread_id=source_thread_id,
+            user_message=user_message,
+        )
+    )
+    if result.thread_id:
+        Finding.objects.filter(pk=finding_id).update(  # type: ignore[attr-defined]
+            fork_thread_id=result.thread_id,
+        )
 
 
 def profile_run(request: HttpRequest, profile_id: int) -> HttpResponse:

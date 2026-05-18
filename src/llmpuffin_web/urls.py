@@ -12,6 +12,7 @@ urlpatterns = [
     path("runs/<int:run_id>/resume/<str:thread_id>/", views.run_resume),
     path("runs/<int:run_id>/fork/<str:thread_id>/", views.run_fork),
     path("findings/<int:finding_id>/", views.finding_detail),
+    path("findings/<int:finding_id>/fork/", views.finding_fork),
     path("store/", views.store_list),
     path("store/<path:prefix>/", views.store_namespace),
     path("profiles/", views.profiles_list),

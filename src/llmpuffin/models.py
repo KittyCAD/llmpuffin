@@ -131,6 +131,9 @@ class Finding(models.Model):
     validated = models.BooleanField(default=False)
     validated_evidence = models.TextField(blank=True, default="")
     deleted = models.BooleanField(default=False)
+    fork_thread_id = models.CharField(
+        max_length=64, blank=True, default="", db_index=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
