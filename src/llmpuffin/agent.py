@@ -111,6 +111,7 @@ def _build_agent(
     threat_model: ThreatModel,
     audit_run_id: int | None,
     thread_id: str,
+    repo_path: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
 ):
@@ -160,7 +161,11 @@ def _build_agent(
     )
 
     tools = make_tools(
-        report, threat_model, audit_run_id=audit_run_id, thread_id=thread_id
+        report,
+        threat_model,
+        audit_run_id=audit_run_id,
+        thread_id=thread_id,
+        repo_path=repo_path,
     )
 
     middleware = []
@@ -298,7 +303,8 @@ async def _fork_audit_inner(
 
     try:
         with harness.start_environment() as execution:
-            await sync_to_async(_capture_git_info)(execution, audit_run_id)
+            await sync_to_async(_save_container_id)(new_tid, execution.container.id)
+            repo_path = await sync_to_async(_capture_git_info)(execution, audit_run_id)
 
             agent = _build_agent(
                 config,
@@ -307,6 +313,7 @@ async def _fork_audit_inner(
                 threat_model,
                 audit_run_id,
                 new_tid,
+                repo_path,
                 checkpointer,
                 store,
             )
@@ -402,11 +409,15 @@ async def _run_audit_inner(
 
     audit_run_id = await sync_to_async(_create_audit_run)(config, tid, thread_id)
 
+    # Look up existing container for resume
+    existing_container_id = await sync_to_async(_get_container_id)(tid)
     log.info("Starting container: %s", p.image)
 
     try:
-        with harness.start_environment() as execution:
-            await sync_to_async(_capture_git_info)(execution, audit_run_id)
+        with harness.start_environment(container_id=existing_container_id) as execution:
+            # Store container ID for future resumes
+            await sync_to_async(_save_container_id)(tid, execution.container.id)
+            repo_path = await sync_to_async(_capture_git_info)(execution, audit_run_id)
 
             agent = _build_agent(
                 config,
@@ -415,6 +426,7 @@ async def _run_audit_inner(
                 threat_model,
                 audit_run_id,
                 tid,
+                repo_path,
                 checkpointer,
                 store,
             )
@@ -455,9 +467,33 @@ async def _run_audit_inner(
     return AuditResult(report=report, status=status, error=error, thread_id=tid)
 
 
-def _capture_git_info(execution, audit_run_id: int | None) -> None:
+def _get_container_id(tid: str) -> str | None:
+    """Look up the container ID for a thread from the DB."""
+    try:
+        from llmpuffin.models import AuditThread
+
+        thread = AuditThread.objects.filter(thread_id=tid).first()
+        if thread and thread.container_id:
+            return thread.container_id
+    except Exception:
+        pass
+    return None
+
+
+def _save_container_id(tid: str, container_id: str) -> None:
+    """Store the container ID on the thread."""
+    try:
+        from llmpuffin.models import AuditThread
+
+        AuditThread.objects.filter(thread_id=tid).update(container_id=container_id)
+    except Exception as exc:
+        log.warning("Failed to save container_id: %s", exc)
+
+
+def _capture_git_info(execution, audit_run_id: int | None) -> str:
     """Run git commands in the container and store repo URL + commit on the AuditRun.
 
+    Returns the repo path (e.g. "KittyCAD/engine").
     Raises RuntimeError if git info cannot be retrieved or the remote
     is not a https://github.com URL.
     """
@@ -491,6 +527,7 @@ def _capture_git_info(execution, audit_run_id: int | None) -> None:
             git_commit=git_commit,
         )
     log.info("Git info: %s @ %s", github_repo_url, git_commit[:12])
+    return repo_path
 
 
 def _get_or_create_profile(config: HarnessConfig) -> object:

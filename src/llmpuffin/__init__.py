@@ -24,6 +24,7 @@ from llmpuffin.threat_model import (
     Severity,
     StrideCategory,
     ThreatModel,
+    ThreatModelView,
     ThreatScenario,
     TrustZone,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "Severity",
     "StrideCategory",
     "ThreatModel",
+    "ThreatModelView",
     "ThreatScenario",
     "TrustZone",
 ]

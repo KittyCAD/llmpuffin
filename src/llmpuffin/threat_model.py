@@ -49,6 +49,9 @@ class Component(BaseModel):
     id: str
     name: str
     description: str = ""
+    # GitHub repo path (e.g. "KittyCAD/engine") — used to determine
+    # which components are local to the current audit run
+    repo: str = ""
     # Hierarchical: components can contain sub-components
     components: list[Component] = Field(default_factory=list)
     # Tags for filtering / grouping (e.g. "external", "privileged")
@@ -160,11 +163,7 @@ class ThreatModel(BaseModel):
         return _find_zone_for_component(self.trust_zones, component_id)
 
     def connections_crossing_boundaries(self) -> list[Connection]:
-        """Return only connections that cross trust boundaries.
-
-        These are the primary attack surface: each one represents a place
-        where an adversary might escalate privilege.
-        """
+        """Return only connections that cross trust boundaries."""
         result = []
         for conn in self.connections:
             src_zone = self.get_trust_zone_for_component(conn.source_component_id)
@@ -172,6 +171,67 @@ class ThreatModel(BaseModel):
             if src_zone != dst_zone or conn.crosses_trust_boundary:
                 result.append(conn)
         return result
+
+    def components_for_repo(self, repo: str) -> list[Component]:
+        """Return components that belong to a given repo."""
+        return [c for c in self.components if c.repo == repo]
+
+    def neighbor_component_ids(self, repo: str) -> set[str]:
+        """Return component IDs connected to any component in the given repo."""
+        local_ids = {c.id for c in self.components_for_repo(repo)}
+        neighbors: set[str] = set()
+        for conn in self.connections:
+            if conn.source_component_id in local_ids:
+                neighbors.add(conn.destination_component_id)
+            if conn.destination_component_id in local_ids:
+                neighbors.add(conn.source_component_id)
+        return neighbors - local_ids
+
+    def view_for_repo(self, repo: str) -> ThreatModelView:
+        """Return a perspective view of the threat model from a specific repo.
+
+        Local components: components whose repo matches.
+        Neighbor components: components connected to local ones (in other repos).
+        Relevant connections: any connection touching a local component.
+        Relevant threats: any threat affecting a local or neighbor component.
+        """
+        local = self.components_for_repo(repo)
+        local_ids = {c.id for c in local}
+        neighbor_ids = self.neighbor_component_ids(repo)
+        all_relevant_ids = local_ids | neighbor_ids
+
+        neighbors = [c for c in self.components if c.id in neighbor_ids]
+
+        connections = [
+            c
+            for c in self.connections
+            if c.source_component_id in local_ids
+            or c.destination_component_id in local_ids
+        ]
+
+        threats = [
+            t
+            for t in self.threat_scenarios
+            if any(cid in all_relevant_ids for cid in t.affected_component_ids)
+        ]
+
+        return ThreatModelView(
+            local_components=local,
+            neighbor_components=neighbors,
+            connections=connections,
+            threat_scenarios=threats,
+            trust_zones=self.trust_zones,
+        )
+
+
+class ThreatModelView(BaseModel):
+    """A perspective view of the threat model from a specific repo."""
+
+    local_components: list[Component] = Field(default_factory=list)
+    neighbor_components: list[Component] = Field(default_factory=list)
+    connections: list[Connection] = Field(default_factory=list)
+    threat_scenarios: list[ThreatScenario] = Field(default_factory=list)
+    trust_zones: list[TrustZone] = Field(default_factory=list)
 
 
 def _find_component(components: list[Component], cid: str) -> Component | None:

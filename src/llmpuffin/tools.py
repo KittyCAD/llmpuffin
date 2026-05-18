@@ -11,7 +11,7 @@ import logging
 from typing import Callable
 
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
-from llmpuffin.threat_model import ThreatModel
+from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
 log = logging.getLogger("llmpuffin")
 
@@ -21,6 +21,30 @@ _SEVERITY_TO_LEVEL = {
     "low": "note",
     "informational": "note",
 }
+
+
+def _format_threat_model_view(view: ThreatModelView) -> str:
+    """Format a ThreatModelView for the agent."""
+    lines = ["# Local Components (in this repo — your audit target)"]
+    for c in view.local_components:
+        lines.append(f"  - {c.id}: {c.name} — {c.description}")
+
+    if view.neighbor_components:
+        lines.append("\n# Neighbor Components (connected, in other repos)")
+        for c in view.neighbor_components:
+            lines.append(f"  - {c.id}: {c.name} ({c.repo}) — {c.description}")
+
+    lines.append("\n# Connections")
+    for conn in view.connections:
+        lines.append(
+            f"  - {conn.id}: {conn.source_component_id} → {conn.destination_component_id} ({conn.protocol}) — {conn.description}"
+        )
+
+    lines.append("\n# Threat Scenarios")
+    for s in view.threat_scenarios:
+        lines.append(f"  - {s.id}: {s.name} [{s.severity}/{s.category}]")
+
+    return "\n".join(lines)
 
 
 def _next_local_id(audit_run_id: int | None) -> int:
@@ -108,41 +132,34 @@ def make_tools(
     threat_model: ThreatModel,
     audit_run_id: int | None = None,
     thread_id: str = "",
+    repo_path: str = "",
 ) -> list[Callable]:
     """Create threat model and finding tools."""
 
+    # Create a perspective view if we know the repo, otherwise show everything
+    view = threat_model.view_for_repo(repo_path) if repo_path else None
+
     def get_threat_model() -> str:
-        """Get an overview of the threat model: components, trust zones, connections, and threat scenarios.
+        """Get the threat model from the perspective of the current audit.
 
-        Call this first to understand what you are auditing.
+        Shows local components (in this repo), neighbor components (connected
+        but in other repos), relevant connections, and applicable threat scenarios.
         """
-        lines = []
-        lines.append("# Components")
+        if view:
+            return _format_threat_model_view(view)
+
+        # Fallback: show everything if no repo context
+        lines = ["# Components"]
         for c in threat_model.components:
-            lines.append(f"  - {c.id}: {c.name} — {c.description}")
-            for sub in c.components:
-                lines.append(f"    - {sub.id}: {sub.name} — {sub.description}")
-
-        lines.append("\n# Trust Zones")
-        for z in threat_model.trust_zones:
-            lines.append(
-                f"  - {z.id}: {z.name} — {z.description} (components: {', '.join(z.component_ids)})"
-            )
-            for sub in z.trust_zones:
-                lines.append(
-                    f"    - {sub.id}: {sub.name} — {sub.description} (components: {', '.join(sub.component_ids)})"
-                )
-
+            lines.append(f"  - {c.id}: {c.name} ({c.repo}) — {c.description}")
         lines.append("\n# Connections")
         for conn in threat_model.connections:
             lines.append(
                 f"  - {conn.id}: {conn.source_component_id} → {conn.destination_component_id} ({conn.protocol}) — {conn.description}"
             )
-
         lines.append("\n# Threat Scenarios")
         for s in threat_model.threat_scenarios:
             lines.append(f"  - {s.id}: {s.name} [{s.severity}/{s.category}]")
-
         return "\n".join(lines)
 
     def get_threat_scenario(scenario_id: str) -> str:
@@ -151,9 +168,8 @@ def make_tools(
         Args:
             scenario_id: The scenario ID (e.g. "sqli", "auth_bypass")
         """
-        scenario = next(
-            (s for s in threat_model.threat_scenarios if s.id == scenario_id), None
-        )
+        scenarios = view.threat_scenarios if view else threat_model.threat_scenarios
+        scenario = next((s for s in scenarios if s.id == scenario_id), None)
         if scenario is None:
             return f"Scenario '{scenario_id}' not found"
 

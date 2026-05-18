@@ -118,6 +118,7 @@ class AuditThread(models.Model):
         AuditRun, on_delete=models.CASCADE, related_name="threads"
     )
     thread_id = models.CharField(max_length=64, unique=True, db_index=True)
+    container_id = models.CharField(max_length=128, blank=True, default="")
     status = models.CharField(max_length=32, default="running")
     error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)

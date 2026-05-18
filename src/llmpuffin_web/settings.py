@@ -25,8 +25,11 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
 ]
+
+LOGIN_URL = "/admin/login/"
 
 ROOT_URLCONF = "llmpuffin_web.urls"
 

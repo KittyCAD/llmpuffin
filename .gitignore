@@ -19,3 +19,5 @@ examples/*/store
 .postgres
 
 profiles
+
+threat_model

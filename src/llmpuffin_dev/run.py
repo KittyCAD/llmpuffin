@@ -1,45 +1,42 @@
-"""Build container images and run audits. Run via: uv run llmpuffin-run [-p profile.toml]"""
+"""Build container image and run audits. Run via: uv run llmpuffin-run [-p profile.toml]"""
 
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-from llmpuffin.config import Profile
 
 PROFILES_DIR = Path("profiles")
+SHARED_DOCKERFILE = PROFILES_DIR / "Dockerfile"
+SHARED_IMAGE = "llmpuffin-workspace"
 
 
-def _find_dockerfile(profile_dir: Path) -> Path | None:
-    """Look for a Dockerfile next to the profile."""
-    dockerfile = profile_dir / "Dockerfile"
-    if dockerfile.exists():
-        return dockerfile
-    return None
+def _build_image() -> None:
+    """Build the shared workspace image with all repos."""
+    if not SHARED_DOCKERFILE.exists():
+        print(f"Dockerfile not found at {SHARED_DOCKERFILE}", file=sys.stderr)
+        sys.exit(1)
 
-
-def _build_image(image_name: str, dockerfile: Path) -> None:
-    """Build the container image with podman."""
-    import os
-
-    print(f"Building image {image_name} from {dockerfile}...")
+    print(f"Building image {SHARED_IMAGE}...")
     cmd = [
         "podman",
         "build",
         "-t",
-        image_name,
+        SHARED_IMAGE,
         "-f",
-        str(dockerfile),
+        str(SHARED_DOCKERFILE),
     ]
     gh_token = os.environ.get("GH_TOKEN", "")
     if gh_token:
         cmd.extend(["--build-arg", f"GH_TOKEN={gh_token}"])
-    cmd.append(str(dockerfile.parent))
+    cmd.append(str(PROFILES_DIR))
+
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        print(f"Failed to build image {image_name}", file=sys.stderr)
+        print(f"Failed to build image {SHARED_IMAGE}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -51,27 +48,17 @@ def _discover_profiles() -> list[Path]:
 
 
 def _run_profile(profile_path: Path, verbose: bool) -> int:
-    """Build and run a single profile. Returns the exit code."""
-    profile_path = profile_path.resolve()
-    profile = Profile.from_toml(profile_path)
-
-    dockerfile = _find_dockerfile(profile_path.parent)
-    if dockerfile is None:
-        print(f"No Dockerfile found in {profile_path.parent}.", file=sys.stderr)
-        return 1
-    _build_image(profile.image, dockerfile)
-
-    cmd = ["uv", "run", "llmpuffin", "-p", str(profile_path)]
+    """Run a single profile. Returns the exit code."""
+    cmd = ["uv", "run", "llmpuffin", "-p", str(profile_path.resolve())]
     if verbose:
         cmd.append("-v")
-
     return subprocess.run(cmd).returncode
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="llmpuffin-run",
-        description="Build container image(s) and run security audit(s).",
+        description="Build workspace image and run security audit(s).",
     )
     parser.add_argument(
         "-p",
@@ -86,7 +73,15 @@ def main() -> None:
         action="store_true",
         help="Show debug output",
     )
+    parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="Skip building the Docker image",
+    )
     args = parser.parse_args()
+
+    if not args.no_build:
+        _build_image()
 
     if args.profile:
         sys.exit(_run_profile(args.profile, args.verbose))

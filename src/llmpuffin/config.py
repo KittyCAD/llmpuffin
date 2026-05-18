@@ -60,6 +60,17 @@ class WebConfig:
 
 
 @dataclass
+class GitHubConfig:
+    app_id: str = ""
+    private_key_path: str = ""
+    installation_id: str = ""
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.app_id and self.private_key_path and self.installation_id)
+
+
+@dataclass
 class LoggingConfig:
     level: str = "INFO"
 
@@ -70,6 +81,7 @@ class Config:
 
     postgres: PostgresConfig = field(default_factory=PostgresConfig)
     web: WebConfig = field(default_factory=WebConfig)
+    github: GitHubConfig = field(default_factory=GitHubConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
@@ -86,6 +98,7 @@ class Config:
     def _from_dict(cls, data: dict) -> Config:
         pg = data.get("postgres", {})
         web = data.get("web", {})
+        gh = data.get("github", {})
         log = data.get("logging", {})
         return cls(
             postgres=PostgresConfig(
@@ -96,6 +109,11 @@ class Config:
                 debug=web.get("debug", True),
                 secret_key=web.get("secret_key", "dev-insecure-key-change-in-prod"),
                 allowed_hosts=web.get("allowed_hosts", ["*"]),
+            ),
+            github=GitHubConfig(
+                app_id=str(gh.get("app_id", "")),
+                private_key_path=gh.get("private_key_path", ""),
+                installation_id=str(gh.get("installation_id", "")),
             ),
             logging=LoggingConfig(
                 level=log.get("level", "INFO"),

@@ -1,17 +1,14 @@
-
-audit running state with multiple threads running in parallel. we definitely can have multiple  (cli and web)
-
-persisting podman containers across resumes
-
-- avoid duplicating risks like, yes hoops could be vulnerable
-
 - allow closing findings by referencing it with a github issue
 - allow opening github issues from the finding tab
-
 - Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
 
+
+Prompt:
+- avoid duplicating risks like, yes hoops could be vulnerable
+- explain other repos are available
+- improve memory instructions, it mostly created audit_notes.md
+
 Validation:
-- finding inline fork chat, ask about that finding
 - building and setting the project up
 - allow exporting files from the container
 

@@ -103,20 +103,21 @@ class Harness:
         self.state.threat_model = tm
         return tm
 
-    def start_environment(self) -> AuditExecution:
+    def start_environment(self, container_id: str | None = None) -> AuditExecution:
         """Start the containerized audit environment.
+
+        Args:
+            container_id: If given, tries to restart an existing stopped
+                container before creating a new one.
 
         Returns an AuditExecution context manager. Use with `with`:
 
             with harness.start_environment() as execution:
                 ...
-
-        All tool calls (grep, file reads, static analysis) execute inside
-        the container — this is the tool integration layer of the harness.
         """
         p = self.config.profile
         environment = AuditEnvironment(
             image=p.image,
             code_dir=p.code_dir,
         )
-        return environment.start()
+        return environment.start(container_id=container_id)

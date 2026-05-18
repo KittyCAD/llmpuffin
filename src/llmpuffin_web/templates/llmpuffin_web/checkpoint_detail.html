@@ -2,7 +2,6 @@
 {% load finding_links %}
 {% block title %}{{ session.thread_id }}{% endblock %}
 {% block content %}
-<h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages){% if audit_thread %} — {{ audit_thread.status }}{% endif %}</h1>
 
 {% if success %}<p class="success">{{ success }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
@@ -15,23 +14,11 @@
 </form>
 {% endif %}
 
-{% for msg in session.messages reversed %}
-  {% if msg.role == "ai" and msg.tool_calls %}
-    <div class="msg llm tool-call">
-      <span class="role">llm</span>
-      {% if msg.content %}<div class="markdown">{{ msg.content|md }}</div>{% endif %}
-      {% for tc in msg.tool_calls %}
-        <pre class="tools">{{ tc.name }}({{ tc.args_json }})</pre>
-      {% endfor %}
-    </div>
-  {% elif msg.role == "ai" %}
-    <div class="msg llm"><span class="role">llm</span><div class="markdown">{{ msg.content|md }}</div></div>
-  {% elif msg.role == "tool" %}
-    <div class="msg tool"><span class="role">tool</span><pre>{{ msg.content }}</pre></div>
-  {% elif msg.role == "human" %}
-    <div class="msg human"><span class="role">human</span><pre>{{ msg.content }}</pre></div>
-  {% else %}
-    <div class="msg"><span class="role">{{ msg.role }}</span><pre>{{ msg.content }}</pre></div>
-  {% endif %}
-{% endfor %}
+<div id="messages"
+     hx-get="/checkpoints/{{ session.thread_id }}/messages/"
+     hx-trigger="every 3s"
+     hx-swap="morph:innerHTML scroll:false"
+     hx-ext="morph">
+  {% include "llmpuffin_web/_checkpoint_messages.html" %}
+</div>
 {% endblock %}

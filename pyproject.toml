@@ -16,6 +16,7 @@ dependencies = [
     "podman",
     "psycopg[binary]>=3",
     "pydantic>=2",
+    "PyJWT[crypto]",
     "sarif-om>=1.0",
 ]
 
