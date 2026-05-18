@@ -17,12 +17,14 @@
 
 <h2>threads</h2>
 <table>
-<tr><th>Thread ID</th><th>Created</th><th></th></tr>
+<tr><th>Thread ID</th><th>Status</th><th>Created</th><th></th></tr>
 {% for t in threads %}
 <tr>
   <td><a href="/checkpoints/{{ t.thread_id }}/">{{ t.thread_id }}</a></td>
+  <td>{{ t.status }}{% if t.error %} <span class="error">({{ t.error|truncatechars:60 }})</span>{% endif %}</td>
   <td>{{ t.created_at|date:"Y-m-d H:i:s" }}</td>
   <td>
+    {% if t.status != "running" %}
     <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" style="margin-bottom:0.3em">
       {% csrf_token %}
       <input type="text" name="message" placeholder="optional message" style="width:16em">
@@ -33,10 +35,11 @@
       <input type="text" name="message" placeholder="message for fork" required style="width:16em">
       <button type="submit">fork</button>
     </form>
+    {% endif %}
   </td>
 </tr>
 {% empty %}
-<tr><td colspan="3">No threads yet.</td></tr>
+<tr><td colspan="4">No threads yet.</td></tr>
 {% endfor %}
 </table>
 

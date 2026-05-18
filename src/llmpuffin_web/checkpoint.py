@@ -52,11 +52,10 @@ async def _list_sessions(connstring: str) -> list[Session]:
                 SELECT
                     c.thread_id,
                     COUNT(*) as steps,
-                    r.status
+                    t.status
                 FROM checkpoints c
                 LEFT JOIN llmpuffin_auditthread t ON t.thread_id = c.thread_id
-                LEFT JOIN llmpuffin_auditrun r ON r.id = t.audit_run_id
-                GROUP BY c.thread_id, r.status
+                GROUP BY c.thread_id, t.status
                 ORDER BY c.thread_id DESC
             """)
             rows = await cur.fetchall()

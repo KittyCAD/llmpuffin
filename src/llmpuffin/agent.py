@@ -520,9 +520,6 @@ def _create_audit_run(
             old_thread = AuditThread.objects.filter(thread_id=resume_thread_id).first()
             if old_thread:
                 audit_run = old_thread.audit_run
-                audit_run.status = AuditStatus.RUNNING.value
-                audit_run.error = ""
-                audit_run.save()
             else:
                 db_profile = _get_or_create_profile(config)
                 audit_run = AuditRun.objects.create(
@@ -530,7 +527,6 @@ def _create_audit_run(
                     profile_toml=config.profile_toml,
                     container_image=config.profile.image,
                     model_name=config.profile.agent.model,
-                    status=AuditStatus.RUNNING.value,
                 )
         else:
             db_profile = _get_or_create_profile(config)
@@ -539,13 +535,15 @@ def _create_audit_run(
                 profile_toml=config.profile_toml,
                 container_image=config.profile.image,
                 model_name=config.profile.agent.model,
-                status=AuditStatus.RUNNING.value,
             )
 
-        AuditThread.objects.get_or_create(
+        thread_obj, _ = AuditThread.objects.get_or_create(
             thread_id=tid,
             defaults={"audit_run": audit_run},
         )
+        thread_obj.status = AuditStatus.RUNNING.value
+        thread_obj.error = ""
+        thread_obj.save(update_fields=["status", "error"])
         return audit_run.pk
     except Exception as exc:
         log.warning("Failed to create audit run in DB: %s", exc)
@@ -555,7 +553,7 @@ def _create_audit_run(
 def _finalize_audit_run(
     tid: str | None, status: AuditStatus, error: str | None
 ) -> None:
-    """Update the AuditRun status at the end of a run. Findings are already persisted."""
+    """Update the thread status at the end of a run."""
     if not tid:
         return
     try:
@@ -571,13 +569,15 @@ def _finalize_audit_run(
             log.warning("AuditThread %s not found in DB", tid)
             return
 
+        thread.status = status.value
+        thread.error = error or ""
+        thread.save(update_fields=["status", "error"])
+
         audit_run = thread.audit_run
-        audit_run.status = status.value
-        audit_run.error = error or ""
         audit_run.finished_at = timezone.now()
-        audit_run.save()
+        audit_run.save(update_fields=["finished_at"])
     except Exception as exc:
-        log.warning("Failed to finalize audit run in DB: %s", exc)
+        log.warning("Failed to finalize thread in DB: %s", exc)
 
 
 def _truncate(s: str, n: int) -> str:

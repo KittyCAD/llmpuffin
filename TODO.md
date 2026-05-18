@@ -1,5 +1,5 @@
 
-audit runing state with multiple htreads runnign in parallel. we definitely can have multiple  (cli and web)
+audit running state with multiple threads running in parallel. we definitely can have multiple  (cli and web)
 
 persisting podman containers across resumes
 
@@ -7,6 +7,8 @@ persisting podman containers across resumes
 
 - allow closing findings by referencing it with a github issue
 - allow opening github issues from the finding tab
+
+- Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
 
 Validation:
 - finding inline fork chat, ask about that finding

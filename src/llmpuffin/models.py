@@ -56,10 +56,6 @@ class AuditRun(models.Model):
     profile_toml = models.TextField(blank=True, default="")
     container_image = models.CharField(max_length=512)
     model_name = models.CharField(max_length=128)
-    status = models.CharField(
-        max_length=32
-    )  # running, completed, recursion_limit, error
-    error = models.TextField(blank=True, default="")
     github_repo_url = models.CharField(max_length=512, blank=True, default="")
     git_commit = models.CharField(max_length=64, blank=True, default="")
     started_at = models.DateTimeField(auto_now_add=True)
@@ -68,6 +64,26 @@ class AuditRun(models.Model):
     class Meta:
         app_label = "llmpuffin"
         ordering = ["-started_at"]
+
+    @property
+    def status(self) -> str:
+        """Derived from thread statuses: running if any thread is running, else worst status."""
+        statuses = list(self.threads.values_list("status", flat=True))
+        if not statuses:
+            return "pending"
+        if "running" in statuses:
+            return "running"
+        if "error" in statuses:
+            return "error"
+        if "recursion_limit" in statuses:
+            return "recursion_limit"
+        return "completed"
+
+    @property
+    def error(self) -> str:
+        """Aggregate errors from all threads."""
+        errors = self.threads.exclude(error="").values_list("error", flat=True)
+        return "\n".join(errors)
 
     def __str__(self) -> str:
         threads = ", ".join(t.thread_id for t in self.threads.all()[:3])
@@ -102,6 +118,8 @@ class AuditThread(models.Model):
         AuditRun, on_delete=models.CASCADE, related_name="threads"
     )
     thread_id = models.CharField(max_length=64, unique=True, db_index=True)
+    status = models.CharField(max_length=32, default="running")
+    error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -62,10 +62,27 @@ class AuditProfileAdmin(admin.ModelAdmin):
 # -- AuditRun --
 
 
+@admin.register(AuditThread)
+class AuditThreadAdmin(admin.ModelAdmin):
+    list_display = ("thread_id", "audit_run", "status", "created_at")
+    list_filter = ("status",)
+    readonly_fields = ("thread_id", "audit_run", "created_at")
+    actions = ["mark_completed"]
+
+    @admin.action(
+        description="Mark selected threads as completed (reset stuck running threads)"
+    )
+    def mark_completed(self, request, queryset):
+        updated = queryset.filter(status="running").update(status="completed")
+        self.message_user(
+            request, f"{updated} thread(s) marked as completed.", messages.SUCCESS
+        )
+
+
 class AuditThreadInline(admin.TabularInline):
     model = AuditThread
     extra = 0
-    readonly_fields = ("thread_id", "created_at")
+    readonly_fields = ("thread_id", "status", "created_at")
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -91,11 +108,10 @@ class AuditRunAdmin(admin.ModelAdmin):
         "profile",
         "container_image",
         "model_name",
-        "status",
         "started_at",
         "finished_at",
     )
-    list_filter = ("status", "model_name", "profile")
+    list_filter = ("model_name", "profile")
     search_fields = ("container_image", "threads__thread_id")
     readonly_fields = ("started_at",)
     inlines = [AuditThreadInline, FindingInline]
