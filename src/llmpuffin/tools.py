@@ -23,9 +23,42 @@ _SEVERITY_TO_LEVEL = {
 }
 
 
+def _next_local_id(audit_run_id: int | None) -> int:
+    """Get the next local_id for a finding in this audit run."""
+    if not audit_run_id:
+        return 0
+    try:
+        from llmpuffin.models import Finding
+
+        max_id = (
+            Finding.objects.filter(audit_run_id=audit_run_id)  # type: ignore[attr-defined]
+            .order_by("-local_id")
+            .values_list("local_id", flat=True)
+            .first()
+        )
+        return (max_id + 1) if max_id is not None else 0
+    except Exception:
+        return 0
+
+
+def _resolve_finding(audit_run_id: int | None, local_id: int):
+    """Look up a Finding by local_id within the audit run. Returns the Finding or None."""
+    if not audit_run_id:
+        return None
+    try:
+        from llmpuffin.models import Finding
+
+        return Finding.objects.filter(  # type: ignore[attr-defined]
+            audit_run_id=audit_run_id, local_id=local_id
+        ).first()
+    except Exception:
+        return None
+
+
 def _persist_finding_to_db(
     audit_run_id: int | None,
     thread_id: str,
+    local_id: int,
     rule_id: str,
     title: str,
     scenario_id: str,
@@ -47,6 +80,7 @@ def _persist_finding_to_db(
         finding = Finding.objects.create(
             audit_run=audit_run,
             thread_id=thread_id,
+            local_id=local_id,
             rule_id=rule_id,
             title=title,
             scenario_id=scenario_id,
@@ -158,9 +192,6 @@ Relevant connections:
 Existing mitigations to verify:
 {mitigations}"""
 
-    # Map finding_id (DB pk) → rule_id for SARIF lookups
-    _id_to_rule: dict[int, str] = {}
-
     def report_finding(
         scenario_id: str,
         title: str,
@@ -173,8 +204,9 @@ Existing mitigations to verify:
     ) -> str:
         """Record a security finding. Call this for each vulnerability you discover.
 
-        Returns the finding_id which you must use to reference this finding
-        in update_finding, delete_finding, and validate_finding.
+        Returns the finding_id (integer, starting from 0) which you must use
+        to reference this finding in update_finding, delete_finding, and
+        validate_finding.
 
         Args:
             scenario_id: The threat scenario ID this finding relates to (e.g. "sqli")
@@ -187,7 +219,9 @@ Existing mitigations to verify:
             locations: Optional list of locations, each a dict with "file" (str) and "line" (int).
                        Example: [{"file": "src/main.py", "line": 42}]
         """
+        local_id = _next_local_id(audit_run_id)
         level = _SEVERITY_TO_LEVEL.get(severity, "warning")
+
         sarif_locations = []
         if locations:
             for loc in locations:
@@ -197,7 +231,7 @@ Existing mitigations to verify:
                         start_line=loc.get("line", 0),
                     )
                 )
-        rule_id = f"{scenario_id}-{len(report.findings) + 1:03d}"
+        rule_id = f"{scenario_id}-{local_id:03d}"
         finding = SarifFinding(
             rule_id=rule_id,
             title=title,
@@ -212,9 +246,10 @@ Existing mitigations to verify:
         )
         report.add_finding(finding)
 
-        pk = _persist_finding_to_db(
+        _persist_finding_to_db(
             audit_run_id,
             thread_id,
+            local_id,
             rule_id,
             title,
             scenario_id,
@@ -226,18 +261,8 @@ Existing mitigations to verify:
             recommendations,
             locations,
         )
-        if pk:
-            _id_to_rule[pk] = rule_id
 
-        finding_id = pk or rule_id
-        return f"Finding recorded. finding_id: {finding_id}"
-
-    def _resolve_finding(finding_id: int) -> tuple[str | None, int | None]:
-        """Resolve a finding_id to (rule_id, pk). Returns error string if not found."""
-        rule_id = _id_to_rule.get(finding_id)
-        if rule_id:
-            return rule_id, finding_id
-        return None, None
+        return f"Finding recorded. finding_id: {local_id}"
 
     def update_finding(
         finding_id: int,
@@ -250,19 +275,21 @@ Existing mitigations to verify:
         """Update an existing finding.
 
         Args:
-            finding_id: The finding_id returned by report_finding
+            finding_id: The finding_id returned by report_finding (0-indexed)
             severity: New severity (optional)
             difficulty: New difficulty (optional)
             description: New description (optional)
             impact: New impact (optional)
             recommendations: New recommendations (optional)
         """
-        rule_id, pk = _resolve_finding(finding_id)
-        if not rule_id:
+        db_finding = _resolve_finding(audit_run_id, finding_id)
+        if not db_finding:
             return f"Finding {finding_id} not found"
 
         # Update SARIF report
-        sarif_finding = next((f for f in report.findings if f.rule_id == rule_id), None)
+        sarif_finding = next(
+            (f for f in report.findings if f.rule_id == db_finding.rule_id), None
+        )
         if sarif_finding:
             if severity is not None:
                 sarif_finding.severity = severity
@@ -277,28 +304,29 @@ Existing mitigations to verify:
                 sarif_finding.recommendations = recommendations
 
         # Update DB
-        if pk:
-            try:
-                from llmpuffin.models import Finding
+        try:
+            from llmpuffin.models import Finding
 
-                Finding.objects.filter(pk=pk, audit_run_id=audit_run_id).update(  # type: ignore[attr-defined]
-                    **{
-                        k: v
-                        for k, v in {
-                            "severity": severity,
-                            "difficulty": difficulty,
-                            "level": _SEVERITY_TO_LEVEL.get(severity, None)
-                            if severity
-                            else None,
-                            "description": description,
-                            "impact": impact,
-                            "recommendations": recommendations,
-                        }.items()
-                        if v is not None
-                    }
-                )
-            except Exception as exc:
-                log.warning("Failed to update finding in DB: %s", exc)
+            Finding.objects.filter(  # type: ignore[attr-defined]
+                pk=db_finding.pk, audit_run_id=audit_run_id
+            ).update(
+                **{
+                    k: v
+                    for k, v in {
+                        "severity": severity,
+                        "difficulty": difficulty,
+                        "level": _SEVERITY_TO_LEVEL.get(severity, None)
+                        if severity
+                        else None,
+                        "description": description,
+                        "impact": impact,
+                        "recommendations": recommendations,
+                    }.items()
+                    if v is not None
+                }
+            )
+        except Exception as exc:
+            log.warning("Failed to update finding in DB: %s", exc)
 
         return f"Finding {finding_id} updated"
 
@@ -306,24 +334,26 @@ Existing mitigations to verify:
         """Delete a finding. Use if a finding was reported in error or could not be validated.
 
         Args:
-            finding_id: The finding_id returned by report_finding
+            finding_id: The finding_id returned by report_finding (0-indexed)
         """
-        rule_id, pk = _resolve_finding(finding_id)
-        if not rule_id:
+        db_finding = _resolve_finding(audit_run_id, finding_id)
+        if not db_finding:
             return f"Finding {finding_id} not found"
 
         # Remove from SARIF report
-        report.findings = [f for f in report.findings if f.rule_id != rule_id]
+        report.findings = [
+            f for f in report.findings if f.rule_id != db_finding.rule_id
+        ]
 
         # Soft-delete in DB
-        if pk:
-            _id_to_rule.pop(pk, None)
-            try:
-                from llmpuffin.models import Finding
+        try:
+            from llmpuffin.models import Finding
 
-                Finding.objects.filter(pk=pk).update(deleted=True)  # type: ignore[attr-defined]
-            except Exception as exc:
-                log.warning("Failed to soft-delete finding in DB: %s", exc)
+            Finding.objects.filter(  # type: ignore[attr-defined]
+                pk=db_finding.pk, audit_run_id=audit_run_id
+            ).update(deleted=True)
+        except Exception as exc:
+            log.warning("Failed to soft-delete finding in DB: %s", exc)
 
         return f"Finding {finding_id} deleted"
 
@@ -338,30 +368,33 @@ Existing mitigations to verify:
         the vulnerability.
 
         Args:
-            finding_id: The finding_id returned by report_finding
+            finding_id: The finding_id returned by report_finding (0-indexed)
             evidence: The validation evidence — exploit chain trace or test output
         """
-        rule_id, pk = _resolve_finding(finding_id)
-        if not rule_id:
+        db_finding = _resolve_finding(audit_run_id, finding_id)
+        if not db_finding:
             return f"Finding {finding_id} not found"
 
         # Update SARIF
-        sarif_finding = next((f for f in report.findings if f.rule_id == rule_id), None)
+        sarif_finding = next(
+            (f for f in report.findings if f.rule_id == db_finding.rule_id), None
+        )
         if sarif_finding:
             sarif_finding.properties["validated"] = True
             sarif_finding.properties["validated_evidence"] = evidence
 
         # Update DB
-        if pk:
-            try:
-                from llmpuffin.models import Finding
+        try:
+            from llmpuffin.models import Finding
 
-                Finding.objects.filter(pk=pk, audit_run_id=audit_run_id).update(  # type: ignore[attr-defined]
-                    validated=True,
-                    validated_evidence=evidence,
-                )
-            except Exception as exc:
-                log.warning("Failed to validate finding in DB: %s", exc)
+            Finding.objects.filter(  # type: ignore[attr-defined]
+                pk=db_finding.pk, audit_run_id=audit_run_id
+            ).update(
+                validated=True,
+                validated_evidence=evidence,
+            )
+        except Exception as exc:
+            log.warning("Failed to validate finding in DB: %s", exc)
 
         return f"Finding {finding_id} validated"
 
@@ -371,21 +404,33 @@ Existing mitigations to verify:
         Use this to see what has been reported so far and which findings
         need validation.
         """
-        if not report.findings:
-            return "No findings reported yet."
-        lines = []
-        for f in report.findings:
-            # Find the DB pk for this finding
-            pk = next((k for k, v in _id_to_rule.items() if v == f.rule_id), None)
-            finding_id = pk or f.rule_id
-            validated = f.properties.get("validated", False)
-            status = "validated" if validated else "unvalidated"
-            lines.append(
-                f"- finding_id: {finding_id} | {f.title} | "
-                f"{f.severity}/{f.difficulty} | scenario: {f.threat_scenario_ids[0] if f.threat_scenario_ids else '?'} | "
-                f"{status}"
-            )
-        return "\n".join(lines)
+        if not audit_run_id:
+            return "No findings (no audit run)."
+        try:
+            from llmpuffin.models import Finding
+
+            findings = Finding.objects.filter(  # type: ignore[attr-defined]
+                audit_run_id=audit_run_id
+            ).order_by("local_id")
+            if not findings:
+                return "No findings reported yet."
+            lines = []
+            for f in findings:
+                if f.deleted:
+                    lines.append(
+                        f"- {f.local_id}: (deleted) {f.title or f.description[:60]}"
+                    )
+                    continue
+                status = "validated" if f.validated else "unvalidated"
+                lines.append(
+                    f"- {f.local_id}: {f.title or f.description[:60]} | "
+                    f"{f.severity}/{f.difficulty} | "
+                    f"scenario: {f.scenario_id} | {status}"
+                )
+            return "\n".join(lines)
+        except Exception as exc:
+            log.warning("Failed to list findings: %s", exc)
+            return "Error listing findings."
 
     return [
         get_threat_model,

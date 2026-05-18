@@ -137,6 +137,7 @@ class Finding(models.Model):
         AuditRun, on_delete=models.CASCADE, related_name="findings"
     )
     thread_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    local_id = models.IntegerField(default=0)
     rule_id = models.CharField(max_length=128, db_index=True)
     title = models.CharField(max_length=512, blank=True, default="")
     scenario_id = models.CharField(max_length=128, db_index=True)

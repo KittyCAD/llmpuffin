@@ -5,6 +5,9 @@
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run {{ finding.audit_run_id }}</a></p>
 <h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
 
+{% github_issue_url finding audit_run as issue_url %}
+{% if issue_url %}<a href="{{ issue_url }}" target="_blank"><button>open GitHub issue</button></a>{% endif %}
+
 {% if success %}<p class="success">{{ success }}</p>{% endif %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 

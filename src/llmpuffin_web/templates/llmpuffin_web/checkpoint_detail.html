@@ -1,9 +1,19 @@
 {% extends "llmpuffin_web/base.html" %}
 {% load finding_links %}
 {% block title %}{{ session.thread_id }}{% endblock %}
-{% block head %}<meta http-equiv="refresh" content="10">{% endblock %}
 {% block content %}
-<h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages)</h1>
+<h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages){% if audit_thread %} — {{ audit_thread.status }}{% endif %}</h1>
+
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if audit_thread and audit_thread.status != "running" %}
+<form method="post" action="/checkpoints/{{ session.thread_id }}/resume/" style="margin-bottom:1.5em">
+  {% csrf_token %}
+  <input type="text" name="message" placeholder="Send a message to resume this thread..." style="width:40em" required>
+  <button type="submit">send</button>
+</form>
+{% endif %}
 
 {% for msg in session.messages reversed %}
   {% if msg.role == "ai" and msg.tool_calls %}

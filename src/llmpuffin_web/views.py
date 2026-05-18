@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 
 import tomllib
@@ -16,6 +17,8 @@ from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 from llmpuffin_web.checkpoint import get_session, list_sessions
 from llmpuffin_web.store import list_items as list_store_items
 from llmpuffin_web.store import list_namespaces as list_store_namespaces
+
+log = logging.getLogger("llmpuffin")
 
 
 def checkpoints_list(request: HttpRequest) -> HttpResponse:
@@ -37,7 +40,44 @@ def checkpoint_detail(request: HttpRequest, thread_id: str) -> HttpResponse:
             },
             status=404,
         )
-    return render(request, "llmpuffin_web/checkpoint_detail.html", {"session": session})
+    audit_thread = (
+        AuditThread.objects.filter(thread_id=thread_id)
+        .select_related("audit_run")
+        .first()
+    )
+    ctx: dict = {"session": session, "audit_thread": audit_thread}
+    if request.GET.get("success"):
+        ctx["success"] = request.GET["success"]
+    if request.GET.get("error"):
+        ctx["error"] = request.GET["error"]
+    return render(request, "llmpuffin_web/checkpoint_detail.html", ctx)
+
+
+def checkpoint_resume(request: HttpRequest, thread_id: str) -> HttpResponse:
+    """Resume a thread from the checkpoint detail page."""
+    audit_thread = get_object_or_404(AuditThread, thread_id=thread_id)
+    if audit_thread.status == "running":
+        return redirect(f"/checkpoints/{thread_id}/?error=Thread+is+already+running")
+
+    run = audit_thread.audit_run
+    toml_str = run.profile_toml
+    if not toml_str and run.profile:
+        toml_str = run.profile.profile_toml
+    if not toml_str:
+        return redirect(f"/checkpoints/{thread_id}/?error=No+config+available")
+
+    user_message = request.POST.get("message", "").strip()
+    if not user_message:
+        return redirect(f"/checkpoints/{thread_id}/?error=Message+is+required")
+
+    thread = threading.Thread(
+        target=_run_audit_in_thread,
+        args=(toml_str,),
+        kwargs={"resume_thread_id": thread_id, "user_message": user_message},
+        daemon=True,
+    )
+    thread.start()
+    return redirect(f"/checkpoints/{thread_id}/?success=Resumed")
 
 
 def profiles_list(request: HttpRequest) -> HttpResponse:
@@ -121,6 +161,14 @@ def runs_list(request: HttpRequest) -> HttpResponse:
         .order_by("-started_at")
     )
     return render(request, "llmpuffin_web/runs_list.html", {"runs": runs})
+
+
+def run_delete(request: HttpRequest, run_id: int) -> HttpResponse:
+    run = get_object_or_404(AuditRun, id=run_id)
+    if run.status == "running":
+        return redirect(f"/runs/{run_id}/?error=Cannot+delete+a+running+audit")
+    run.delete()
+    return redirect("/")
 
 
 def run_detail(request: HttpRequest, run_id: int) -> HttpResponse:
@@ -235,12 +283,17 @@ def finding_fork(request: HttpRequest, finding_id: int) -> HttpResponse:
     if not toml_str:
         return redirect(f"/findings/{finding_id}/?error=No+config+available+for+fork")
 
-    user_message = request.POST.get("message", "").strip()
-    if not user_message:
-        user_message = (
-            f"Investigate finding {finding.id} further: "
-            f"{finding.title or finding.description[:200]}"
-        )
+    finding_context = (
+        f"This conversation is forked to investigate finding #{finding.local_id}.\n"
+        f"Title: {finding.title}\n"
+        f"Scenario: {finding.scenario_id}\n"
+        f"Severity: {finding.severity} | Difficulty: {finding.difficulty}\n"
+        f"Description: {finding.description[:500]}\n\n"
+    )
+    user_input = request.POST.get("message", "").strip()
+    user_message = finding_context + (
+        user_input or "Investigate this finding further. Try to validate or refute it."
+    )
 
     thread = threading.Thread(
         target=_fork_finding_in_thread,
@@ -257,49 +310,58 @@ def _run_audit_in_thread(
     user_message: str | None = None,
 ) -> None:
     """Run an audit in a background thread."""
-    profile = Profile.from_toml_string(toml_str)
-    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    asyncio.run(
-        run_audit(
-            harness_config,
-            thread_id=resume_thread_id,
-            user_message=user_message,
+    try:
+        profile = Profile.from_toml_string(toml_str)
+        harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
+        asyncio.run(
+            run_audit(
+                harness_config,
+                thread_id=resume_thread_id,
+                user_message=user_message,
+            )
         )
-    )
+    except Exception:
+        log.exception("Background audit failed")
 
 
 def _fork_audit_in_thread(
     toml_str: str, source_thread_id: str, user_message: str
 ) -> None:
     """Fork an audit in a background thread."""
-    profile = Profile.from_toml_string(toml_str)
-    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    asyncio.run(
-        fork_audit(
-            harness_config,
-            source_thread_id=source_thread_id,
-            user_message=user_message,
+    try:
+        profile = Profile.from_toml_string(toml_str)
+        harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
+        asyncio.run(
+            fork_audit(
+                harness_config,
+                source_thread_id=source_thread_id,
+                user_message=user_message,
+            )
         )
-    )
+    except Exception:
+        log.exception("Background fork failed")
 
 
 def _fork_finding_in_thread(
     toml_str: str, source_thread_id: str, user_message: str, finding_id: int
 ) -> None:
     """Fork an audit for a finding, then link the new thread to the finding."""
-    profile = Profile.from_toml_string(toml_str)
-    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    result = asyncio.run(
-        fork_audit(
-            harness_config,
-            source_thread_id=source_thread_id,
-            user_message=user_message,
+    try:
+        profile = Profile.from_toml_string(toml_str)
+        harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
+        result = asyncio.run(
+            fork_audit(
+                harness_config,
+                source_thread_id=source_thread_id,
+                user_message=user_message,
+            )
         )
-    )
-    if result.thread_id:
-        Finding.objects.filter(pk=finding_id).update(  # type: ignore[attr-defined]
-            fork_thread_id=result.thread_id,
-        )
+        if result.thread_id:
+            Finding.objects.filter(pk=finding_id).update(  # type: ignore[attr-defined]
+                fork_thread_id=result.thread_id,
+            )
+    except Exception:
+        log.exception("Background finding fork failed")
 
 
 def profile_run(request: HttpRequest, profile_id: int) -> HttpResponse:
