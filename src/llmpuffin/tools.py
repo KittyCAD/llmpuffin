@@ -125,9 +125,7 @@ def _persist_finding_to_db(
                 )
             return finding.id, finding.local_id, finding.rule_id
     except Exception as exc:
-        log.exception(
-            "Failed to insert finding in audit_run %s: %s", audit_run_id, exc
-        )
+        log.exception("Failed to insert finding in audit_run %s: %s", audit_run_id, exc)
         raise RuntimeError(
             f"Failed to insert finding in audit_run {audit_run_id}: {exc}"
         ) from exc

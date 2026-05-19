@@ -25,19 +25,21 @@ router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
-async def runs_list(
-    request: Request, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def runs_list(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
     rows = (
-        await db.execute(
-            select(AuditRun)
-            .options(
-                selectinload(AuditRun.profile),
-                selectinload(AuditRun.threads),
+        (
+            await db.execute(
+                select(AuditRun)
+                .options(
+                    selectinload(AuditRun.profile),
+                    selectinload(AuditRun.threads),
+                )
+                .order_by(AuditRun.started_at.desc())
             )
-            .order_by(AuditRun.started_at.desc())
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # Annotate finding counts (non-deleted)
     finding_counts = dict(
@@ -65,9 +67,7 @@ async def runs_list(
                 "finished_at": r.finished_at,
             }
         )
-    return templates.TemplateResponse(
-        request, "runs_list.html", {"runs": runs}
-    )
+    return templates.TemplateResponse(request, "runs_list.html", {"runs": runs})
 
 
 @router.get("/runs/{run_id}/", response_class=HTMLResponse)

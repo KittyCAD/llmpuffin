@@ -41,6 +41,7 @@ from langchain_core.stores import BaseStore
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import GraphRecursionError
 
+from llmpuffin.models import AuditProfile
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import get_postgres_url
 from llmpuffin.harness import Harness, HarnessConfig
@@ -491,9 +492,7 @@ async def _get_container_id(tid: str) -> str | None:
         async with async_session() as s:
             row = (
                 await s.execute(
-                    select(AuditThread.container_id).where(
-                        AuditThread.thread_id == tid
-                    )
+                    select(AuditThread.container_id).where(AuditThread.thread_id == tid)
                 )
             ).scalar_one_or_none()
         return row or None
@@ -564,13 +563,9 @@ async def _capture_git_info(execution, audit_run_id: int) -> str:
     return repo_path
 
 
-async def _get_or_create_profile(
-    session, config: HarnessConfig
-) -> "AuditProfile":  # type: ignore[name-defined]
+async def _get_or_create_profile(session, config: HarnessConfig) -> AuditProfile:
     """Get or create an AuditProfile for this config. CLI runs get jit=True."""
     from sqlalchemy import select
-
-    from llmpuffin.models import AuditProfile
 
     profile = (
         await session.execute(
@@ -636,9 +631,7 @@ async def _create_audit_run(
             await s.flush()
 
         thread_obj = (
-            await s.execute(
-                select(AuditThread).where(AuditThread.thread_id == tid)
-            )
+            await s.execute(select(AuditThread).where(AuditThread.thread_id == tid))
         ).scalar_one_or_none()
         if thread_obj is None:
             thread_obj = AuditThread(
@@ -674,9 +667,7 @@ async def _finalize_audit_run(
         async with async_session() as s:
             row = (
                 await s.execute(
-                    select(AuditThread.audit_run_id).where(
-                        AuditThread.thread_id == tid
-                    )
+                    select(AuditThread.audit_run_id).where(AuditThread.thread_id == tid)
                 )
             ).scalar_one_or_none()
             if row is None:

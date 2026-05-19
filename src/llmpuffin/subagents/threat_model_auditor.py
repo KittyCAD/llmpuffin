@@ -4,11 +4,7 @@ from typing import Callable
 
 from llmpuffin.subagents._constants import MAIN_AGENT_TOOLS
 
-TOOLS = (
-    "get_threat_model",
-    "get_threat_scenario",
-    *MAIN_AGENT_TOOLS
-)
+TOOLS = ("get_threat_model", "get_threat_scenario", *MAIN_AGENT_TOOLS)
 
 
 def threat_model_auditor(tools: dict[str, Callable]) -> dict:

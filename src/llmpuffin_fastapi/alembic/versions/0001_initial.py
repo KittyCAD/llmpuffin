@@ -49,14 +49,10 @@ def upgrade() -> None:
             sa.ForeignKey("audit_profile.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column(
-            "profile_toml", sa.Text(), nullable=False, server_default=""
-        ),
+        sa.Column("profile_toml", sa.Text(), nullable=False, server_default=""),
         sa.Column("container_image", sa.String(512), nullable=False),
         sa.Column("model_name", sa.String(128), nullable=False),
-        sa.Column(
-            "github_repo_url", sa.String(512), nullable=False, server_default=""
-        ),
+        sa.Column("github_repo_url", sa.String(512), nullable=False, server_default=""),
         sa.Column("git_commit", sa.String(64), nullable=False, server_default=""),
         sa.Column(
             "started_at",
@@ -77,12 +73,8 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("thread_id", sa.String(64), nullable=False, unique=True),
-        sa.Column(
-            "container_id", sa.String(128), nullable=False, server_default=""
-        ),
-        sa.Column(
-            "status", sa.String(32), nullable=False, server_default="running"
-        ),
+        sa.Column("container_id", sa.String(128), nullable=False, server_default=""),
+        sa.Column("status", sa.String(32), nullable=False, server_default="running"),
         sa.Column("error", sa.Text(), nullable=False, server_default=""),
         sa.Column(
             "created_at",
@@ -102,9 +94,7 @@ def upgrade() -> None:
             sa.ForeignKey("audit_run.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column(
-            "thread_id", sa.String(64), nullable=False, server_default=""
-        ),
+        sa.Column("thread_id", sa.String(64), nullable=False, server_default=""),
         sa.Column("local_id", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("rule_id", sa.String(128), nullable=False),
         sa.Column("title", sa.String(512), nullable=False, server_default=""),
@@ -118,15 +108,11 @@ def upgrade() -> None:
         sa.Column(
             "validated", sa.Boolean(), nullable=False, server_default=sa.text("false")
         ),
-        sa.Column(
-            "validated_evidence", sa.Text(), nullable=False, server_default=""
-        ),
+        sa.Column("validated_evidence", sa.Text(), nullable=False, server_default=""),
         sa.Column(
             "deleted", sa.Boolean(), nullable=False, server_default=sa.text("false")
         ),
-        sa.Column(
-            "fork_thread_id", sa.String(64), nullable=False, server_default=""
-        ),
+        sa.Column("fork_thread_id", sa.String(64), nullable=False, server_default=""),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

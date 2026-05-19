@@ -195,9 +195,7 @@ class Finding(Base):
     validated: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
-    validated_evidence: Mapped[str] = mapped_column(
-        Text, default="", server_default=""
-    )
+    validated_evidence: Mapped[str] = mapped_column(Text, default="", server_default="")
     deleted: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )

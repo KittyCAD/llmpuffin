@@ -7,6 +7,7 @@ from llmpuffin.subagents._utils import load_agent_md
 
 TOOLS = MAIN_AGENT_TOOLS
 
+
 def function_analyzer(tools: dict[str, Callable]) -> dict:
     return {
         "name": "function-analyzer",

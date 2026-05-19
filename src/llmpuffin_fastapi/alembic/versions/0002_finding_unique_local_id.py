@@ -69,9 +69,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_finding_audit_run_local_id", "finding", type_="unique"
-    )
+    op.drop_constraint("uq_finding_audit_run_local_id", "finding", type_="unique")
     op.create_index(
         "ix_finding_audit_run_local_id", "finding", ["audit_run_id", "local_id"]
     )

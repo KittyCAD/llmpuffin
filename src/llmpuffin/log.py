@@ -27,8 +27,9 @@ def setup(verbose: bool = False, level: str | None = None) -> None:
     if not any(getattr(h, "_llmpuffin", False) for h in log.handlers):
         handler = logging.StreamHandler()
         handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s | %(message)s",
-                              datefmt="%H:%M:%S")
+            logging.Formatter(
+                "%(asctime)s %(levelname)s %(name)s | %(message)s", datefmt="%H:%M:%S"
+            )
         )
         handler._llmpuffin = True  # type: ignore[attr-defined]
         log.addHandler(handler)

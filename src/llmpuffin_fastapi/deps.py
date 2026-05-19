@@ -27,7 +27,8 @@ def spawn_audit(coro: Coroutine) -> asyncio.Task:
             exc = t.exception()
             if exc is not None:
                 log.exception(
-                    "Background audit task failed", exc_info=(type(exc), exc, exc.__traceback__)
+                    "Background audit task failed",
+                    exc_info=(type(exc), exc, exc.__traceback__),
                 )
 
     task.add_done_callback(_done)

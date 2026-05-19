@@ -33,9 +33,7 @@ async def checkpoints_list(request: Request):
     )
 
 
-async def _get_audit_thread(
-    db: AsyncSession, thread_id: str
-) -> AuditThread | None:
+async def _get_audit_thread(db: AsyncSession, thread_id: str) -> AuditThread | None:
     from llmpuffin.models import AuditRun
 
     return (
@@ -128,9 +126,7 @@ async def checkpoint_resume(
 
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    spawn_audit(
-        run_audit(harness_config, thread_id=thread_id, user_message=msg)
-    )
+    spawn_audit(run_audit(harness_config, thread_id=thread_id, user_message=msg))
     return RedirectResponse(
         f"/checkpoints/{thread_id}/?success={quote('Resumed')}", status_code=303
     )

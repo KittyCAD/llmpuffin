@@ -16,9 +16,7 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 def _md(text: str) -> Markup:
     if not text:
         return Markup("")
-    html = _markdown.markdown(
-        text, extensions=["fenced_code", "tables", "nl2br"]
-    )
+    html = _markdown.markdown(text, extensions=["fenced_code", "tables", "nl2br"])
     return Markup(html)
 
 

@@ -139,5 +139,5 @@ async def setup_db() -> None:
     before starting the app for the first time.
     """
     get_async_engine()
-    #await _abort_orphaned_threads()
+    # await _abort_orphaned_threads()
     await _setup_langgraph_tables()

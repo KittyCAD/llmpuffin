@@ -33,10 +33,10 @@ async def profiles_list(
     success: str | None = None,
 ):
     rows = (
-        await db.execute(
-            select(AuditProfile).where(AuditProfile.jit.is_(False))
-        )
-    ).scalars().all()
+        (await db.execute(select(AuditProfile).where(AuditProfile.jit.is_(False))))
+        .scalars()
+        .all()
+    )
     profiles = []
     for p in rows:
         try:
@@ -140,13 +140,9 @@ async def profile_detail_post(
 
 
 @router.post("/profiles/{profile_id}/run/")
-async def profile_run(
-    profile_id: int, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def profile_run(profile_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     profile = (
-        await db.execute(
-            select(AuditProfile).where(AuditProfile.id == profile_id)
-        )
+        await db.execute(select(AuditProfile).where(AuditProfile.id == profile_id))
     ).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=404)
