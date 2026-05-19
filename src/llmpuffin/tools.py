@@ -52,14 +52,18 @@ def _next_local_id(audit_run_id: int | None) -> int:
     if not audit_run_id:
         return 0
     try:
+        from sqlalchemy import select
+
+        from llmpuffin.db import sync_session
         from llmpuffin.models import Finding
 
-        max_id = (
-            Finding.objects.filter(audit_run_id=audit_run_id)  # type: ignore[attr-defined]
-            .order_by("-local_id")
-            .values_list("local_id", flat=True)
-            .first()
-        )
+        with sync_session() as s:
+            max_id = s.execute(
+                select(Finding.local_id)
+                .where(Finding.audit_run_id == audit_run_id)
+                .order_by(Finding.local_id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
         return (max_id + 1) if max_id is not None else 0
     except Exception:
         return 0
@@ -70,11 +74,18 @@ def _resolve_finding(audit_run_id: int | None, local_id: int):
     if not audit_run_id:
         return None
     try:
+        from sqlalchemy import select
+
+        from llmpuffin.db import sync_session
         from llmpuffin.models import Finding
 
-        return Finding.objects.filter(  # type: ignore[attr-defined]
-            audit_run_id=audit_run_id, local_id=local_id
-        ).first()
+        with sync_session() as s:
+            return s.execute(
+                select(Finding).where(
+                    Finding.audit_run_id == audit_run_id,
+                    Finding.local_id == local_id,
+                )
+            ).scalar_one_or_none()
     except Exception:
         return None
 
@@ -94,34 +105,40 @@ def _persist_finding_to_db(
     recommendations: str,
     locations: list[dict] | None,
 ) -> int | None:
-    """Write a finding to Django DB immediately. Returns the Finding pk."""
+    """Write a finding to the DB immediately. Returns the Finding id."""
     if not audit_run_id:
         return None
     try:
-        from llmpuffin.models import AuditRun, Finding, FindingLocation
+        from llmpuffin.db import sync_session
+        from llmpuffin.models import Finding, FindingLocation
 
-        audit_run = AuditRun.objects.get(pk=audit_run_id)
-        finding = Finding.objects.create(
-            audit_run=audit_run,
-            thread_id=thread_id,
-            local_id=local_id,
-            rule_id=rule_id,
-            title=title,
-            scenario_id=scenario_id,
-            severity=severity,
-            difficulty=difficulty,
-            level=level,
-            description=description,
-            impact=impact,
-            recommendations=recommendations,
-        )
-        for loc in locations or []:
-            FindingLocation.objects.create(
-                finding=finding,
-                file_path=loc["file"],
-                start_line=loc.get("line", 0),
+        with sync_session() as s:
+            finding = Finding(
+                audit_run_id=audit_run_id,
+                thread_id=thread_id,
+                local_id=local_id,
+                rule_id=rule_id,
+                title=title,
+                scenario_id=scenario_id,
+                severity=severity,
+                difficulty=difficulty,
+                level=level,
+                description=description,
+                impact=impact,
+                recommendations=recommendations,
             )
-        return finding.pk
+            s.add(finding)
+            s.flush()
+            for loc in locations or []:
+                s.add(
+                    FindingLocation(
+                        finding_id=finding.id,
+                        file_path=loc["file"],
+                        start_line=loc.get("line", 0),
+                    )
+                )
+            s.commit()
+            return finding.id
     except Exception as exc:
         log.warning("Failed to persist finding to DB: %s", exc)
         return None
@@ -321,26 +338,36 @@ Existing mitigations to verify:
 
         # Update DB
         try:
+            from sqlalchemy import update as sa_update
+
+            from llmpuffin.db import sync_session
             from llmpuffin.models import Finding
 
-            Finding.objects.filter(  # type: ignore[attr-defined]
-                pk=db_finding.pk, audit_run_id=audit_run_id
-            ).update(
-                **{
-                    k: v
-                    for k, v in {
-                        "severity": severity,
-                        "difficulty": difficulty,
-                        "level": _SEVERITY_TO_LEVEL.get(severity, None)
-                        if severity
-                        else None,
-                        "description": description,
-                        "impact": impact,
-                        "recommendations": recommendations,
-                    }.items()
-                    if v is not None
-                }
-            )
+            values = {
+                k: v
+                for k, v in {
+                    "severity": severity,
+                    "difficulty": difficulty,
+                    "level": _SEVERITY_TO_LEVEL.get(severity, None)
+                    if severity
+                    else None,
+                    "description": description,
+                    "impact": impact,
+                    "recommendations": recommendations,
+                }.items()
+                if v is not None
+            }
+            if values:
+                with sync_session() as s:
+                    s.execute(
+                        sa_update(Finding)
+                        .where(
+                            Finding.id == db_finding.id,
+                            Finding.audit_run_id == audit_run_id,
+                        )
+                        .values(**values)
+                    )
+                    s.commit()
         except Exception as exc:
             log.warning("Failed to update finding in DB: %s", exc)
 
@@ -363,11 +390,21 @@ Existing mitigations to verify:
 
         # Soft-delete in DB
         try:
+            from sqlalchemy import update as sa_update
+
+            from llmpuffin.db import sync_session
             from llmpuffin.models import Finding
 
-            Finding.objects.filter(  # type: ignore[attr-defined]
-                pk=db_finding.pk, audit_run_id=audit_run_id
-            ).update(deleted=True)
+            with sync_session() as s:
+                s.execute(
+                    sa_update(Finding)
+                    .where(
+                        Finding.id == db_finding.id,
+                        Finding.audit_run_id == audit_run_id,
+                    )
+                    .values(deleted=True)
+                )
+                s.commit()
         except Exception as exc:
             log.warning("Failed to soft-delete finding in DB: %s", exc)
 
@@ -401,14 +438,21 @@ Existing mitigations to verify:
 
         # Update DB
         try:
+            from sqlalchemy import update as sa_update
+
+            from llmpuffin.db import sync_session
             from llmpuffin.models import Finding
 
-            Finding.objects.filter(  # type: ignore[attr-defined]
-                pk=db_finding.pk, audit_run_id=audit_run_id
-            ).update(
-                validated=True,
-                validated_evidence=evidence,
-            )
+            with sync_session() as s:
+                s.execute(
+                    sa_update(Finding)
+                    .where(
+                        Finding.id == db_finding.id,
+                        Finding.audit_run_id == audit_run_id,
+                    )
+                    .values(validated=True, validated_evidence=evidence)
+                )
+                s.commit()
         except Exception as exc:
             log.warning("Failed to validate finding in DB: %s", exc)
 
@@ -423,11 +467,21 @@ Existing mitigations to verify:
         if not audit_run_id:
             return "No findings (no audit run)."
         try:
+            from sqlalchemy import select
+
+            from llmpuffin.db import sync_session
             from llmpuffin.models import Finding
 
-            findings = Finding.objects.filter(  # type: ignore[attr-defined]
-                audit_run_id=audit_run_id
-            ).order_by("local_id")
+            with sync_session() as s:
+                findings = (
+                    s.execute(
+                        select(Finding)
+                        .where(Finding.audit_run_id == audit_run_id)
+                        .order_by(Finding.local_id)
+                    )
+                    .scalars()
+                    .all()
+                )
             if not findings:
                 return "No findings reported yet."
             lines = []

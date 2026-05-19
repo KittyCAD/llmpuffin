@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ finding.rule_id }}{% endblock %}
+{% block content %}
+<p><a href="/runs/{{ finding.audit_run_id }}/">← run {{ finding.audit_run_id }}</a></p>
+<h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
+
+{% if github_configured %}
+<form method="post" action="/findings/{{ finding.id }}/issue/" style="display:inline">
+  <button type="submit" onclick="return confirm('Create a GitHub issue for this finding?')">create GitHub issue</button>
+</form>
+{% endif %}
+
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<table>
+<tr><th>Scenario</th><td>{{ finding.scenario_id }}</td></tr>
+<tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
+<tr><th>Severity</th><td>{{ finding.severity }}</td></tr>
+<tr><th>Difficulty</th><td>{{ finding.difficulty }}</td></tr>
+<tr><th>Level</th><td>{{ finding.level }}</td></tr>
+<tr><th>Validated</th><td>{% if finding.validated %}yes{% else %}no{% endif %}</td></tr>
+<tr><th>Created</th><td>{{ finding.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
+{% if finding.fork_thread_id %}
+<tr><th>Fork</th><td><a href="/checkpoints/{{ finding.fork_thread_id }}/">{{ finding.fork_thread_id }}</a></td></tr>
+{% endif %}
+</table>
+
+{% if finding.thread_id and not finding.fork_thread_id %}
+<form method="post" action="/findings/{{ finding.id }}/fork/" style="margin-top:1em">
+  <input type="text" name="message" placeholder="optional instructions for the fork" style="width:24em">
+  <button type="submit">fork conversation</button>
+</form>
+{% endif %}
+
+{% if finding.validated_evidence %}
+<h2>validation evidence</h2>
+<div class="markdown">{{ finding.validated_evidence | md }}</div>
+{% endif %}
+
+{% if locations %}
+<h2>locations</h2>
+<table>
+<tr><th>Location</th></tr>
+{% for loc in locations %}
+<tr>
+  <td>{{ location_link(loc, audit_run) }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+
+<h2>description</h2>
+<div class="markdown">{{ finding.description | md }}</div>
+
+<h2>impact</h2>
+<div class="markdown">{{ finding.impact | md }}</div>
+
+<h2>recommendations</h2>
+<div class="markdown">{{ finding.recommendations | md }}</div>
+{% endblock %}

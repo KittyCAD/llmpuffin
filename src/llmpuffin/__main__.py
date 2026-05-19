@@ -10,9 +10,14 @@ from pathlib import Path
 
 from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
-from llmpuffin.db import setup as setup_django
+from llmpuffin.db import setup_db
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
+
+
+async def _async_main(harness_config: HarnessConfig):
+    await setup_db()
+    return await run_audit(harness_config)
 
 
 def main() -> None:
@@ -46,7 +51,6 @@ def main() -> None:
     global_config = Config.load(args.config)
     os.environ.setdefault("LLMPUFFIN_POSTGRES", global_config.postgres.url)
     setup_logging(verbose=args.verbose)
-    setup_django()
 
     profile_text = args.profile.read_text()
     profile = Profile.from_toml_string(profile_text)
@@ -56,7 +60,7 @@ def main() -> None:
         profile_toml=profile_text,
     )
 
-    result = asyncio.run(run_audit(harness_config))
+    result = asyncio.run(_async_main(harness_config))
     n = len(result.report.findings)
     print(
         f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} "

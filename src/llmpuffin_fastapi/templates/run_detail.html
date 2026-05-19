@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}run {{ run.id }}{% endblock %}
+{% block content %}
+<p><a href="/">← all runs</a></p>
+<h1>Run {{ run.id }}</h1>
+
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+
+<table>
+<tr><th>Image</th><td>{{ run.container_image }}</td></tr>
+<tr><th>Model</th><td>{{ run.model_name }}</td></tr>
+<tr><th>Status</th><td>{{ run.status }}</td></tr>
+{% if run.error %}<tr><th>Error</th><td>{{ run.error }}</td></tr>{% endif %}
+<tr><th>Started</th><td>{{ run.started_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
+<tr><th>Finished</th><td>{{ (run.finished_at | datetimefmt("%Y-%m-%d %H:%M:%S")) or "—" }}</td></tr>
+</table>
+
+{% if run.status != "running" %}
+<form method="post" action="/runs/{{ run.id }}/delete/" style="margin-top:1em">
+  <button type="submit" onclick="return confirm('Delete this run and all its findings?')">delete run</button>
+</form>
+{% endif %}
+
+<h2>threads</h2>
+<table>
+<tr><th>Thread ID</th><th>Status</th><th>Created</th><th></th></tr>
+{% for t in threads %}
+<tr>
+  <td><a href="/checkpoints/{{ t.thread_id }}/">{{ t.thread_id }}</a></td>
+  <td>{{ t.status }}{% if t.error %} <span class="error">({{ t.error | truncatechars(60) }})</span>{% endif %}</td>
+  <td>{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
+  <td>
+    {% if t.status != "running" %}
+    <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" style="margin-bottom:0.3em">
+      <input type="text" name="message" placeholder="optional message" style="width:16em">
+      <button type="submit">resume</button>
+    </form>
+    <form method="post" action="/runs/{{ run.id }}/fork/{{ t.thread_id }}/">
+      <input type="text" name="message" placeholder="message for fork" required style="width:16em">
+      <button type="submit">fork</button>
+    </form>
+    {% endif %}
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="4">No threads yet.</td></tr>
+{% endfor %}
+</table>
+
+{% if findings %}
+<h2>findings ({{ findings|length }})</h2>
+<table>
+<tr><th>ID</th><th>Title</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Validated</th><th>Deleted</th><th>Thread</th></tr>
+{% for f in findings %}
+<tr{% if f.deleted %} style="opacity:0.5"{% endif %}>
+  <td><a href="/findings/{{ f.id }}/">{{ f.local_id }}</a></td>
+  <td>{{ (f.title or f.description) | truncatechars(80) }}</td>
+  <td>{{ f.scenario_id }}</td>
+  <td>{{ f.severity }}</td>
+  <td>{{ f.difficulty }}</td>
+  <td>{% if f.validated %}yes{% else %}no{% endif %}</td>
+  <td>{% if f.deleted %}yes{% else %}no{% endif %}</td>
+  <td>{% if f.thread_id %}<a href="/checkpoints/{{ f.thread_id }}/">{{ f.thread_id }}</a>{% else %}—{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

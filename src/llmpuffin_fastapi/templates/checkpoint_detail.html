@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ session.thread_id }}{% endblock %}
+{% block content %}
+
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if audit_thread and audit_thread.status != "running" %}
+<form method="post" action="/checkpoints/{{ session.thread_id }}/resume/" style="margin-bottom:1.5em">
+  <input type="text" name="message" placeholder="Send a message to resume this thread..." style="width:40em" required>
+  <button type="submit">send</button>
+</form>
+{% endif %}
+
+<div id="messages"
+     hx-get="/checkpoints/{{ session.thread_id }}/messages/"
+     hx-trigger="every 3s"
+     hx-swap="morph:innerHTML scroll:false"
+     hx-ext="morph">
+  {% include "_checkpoint_messages.html" %}
+</div>
+{% endblock %}

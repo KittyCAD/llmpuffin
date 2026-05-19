@@ -9,7 +9,13 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "deepagents[quickjs]",
-    "django>=5",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "jinja2>=3",
+    "python-multipart>=0.0.9",
+    "sqlalchemy[asyncio]>=2",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
     "markdown",
     "langchain-anthropic>=0.3",
     "langgraph-checkpoint-postgres",
@@ -28,7 +34,7 @@ llmpuffin = "llmpuffin.__main__:main"
 llmpuffin-run = "llmpuffin_dev.run:main"
 llmpuffin-check = "llmpuffin_dev.check:main"
 llmpuffin-pg = "llmpuffin_dev.postgres:main"
-llmpuffin-web = "llmpuffin_web.manage:main"
+llmpuffin-fastapi = "llmpuffin_fastapi.main:main"
 
 [tool.ruff]
 src = ["src"]

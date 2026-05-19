@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}audit runs{% endblock %}
+{% block content %}
+<h1>audit runs</h1>
+<table>
+<tr><th>Run</th><th>Profile</th><th>Image</th><th>Model</th><th>Status</th><th>Threads</th><th>Findings</th><th>Started</th><th>Finished</th><th></th></tr>
+{% for r in runs %}
+<tr>
+  <td><a href="/runs/{{ r.id }}/">{{ r.id }}</a></td>
+  <td>{{ r.profile.name }}</td>
+  <td>{{ r.container_image }}</td>
+  <td>{{ r.model_name }}</td>
+  <td>{{ r.status }}</td>
+  <td>{{ r.thread_count }}</td>
+  <td>{{ r.finding_count }}</td>
+  <td>{{ r.started_at | datetimefmt }}</td>
+  <td>{{ (r.finished_at | datetimefmt) or "—" }}</td>
+  <td>{% if r.status != "running" %}<form method="post" action="/runs/{{ r.id }}/delete/" style="display:inline"><button type="submit" onclick="return confirm('Delete this run?')">delete</button></form>{% endif %}</td>
+</tr>
+{% else %}
+<tr><td colspan="10">No runs yet.</td></tr>
+{% endfor %}
+</table>
+{% endblock %}

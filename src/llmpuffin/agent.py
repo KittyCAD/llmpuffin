@@ -495,25 +495,40 @@ async def _run_audit_inner(
 
 async def _get_container_id(tid: str) -> str | None:
     """Look up the container ID for a thread from the DB."""
-    try:
-        from llmpuffin.models import AuditThread
+    from sqlalchemy import select
 
-        thread = await AuditThread.objects.filter(thread_id=tid).afirst()
-        if thread and thread.container_id:
-            return thread.container_id
+    from llmpuffin.db import async_session
+    from llmpuffin.models import AuditThread
+
+    try:
+        async with async_session() as s:
+            row = (
+                await s.execute(
+                    select(AuditThread.container_id).where(
+                        AuditThread.thread_id == tid
+                    )
+                )
+            ).scalar_one_or_none()
+        return row or None
     except Exception:
-        pass
-    return None
+        return None
 
 
 async def _save_container_id(tid: str, container_id: str) -> None:
     """Store the container ID on the thread."""
-    try:
-        from llmpuffin.models import AuditThread
+    from sqlalchemy import update
 
-        await AuditThread.objects.filter(thread_id=tid).aupdate(
-            container_id=container_id
-        )
+    from llmpuffin.db import async_session
+    from llmpuffin.models import AuditThread
+
+    try:
+        async with async_session() as s:
+            await s.execute(
+                update(AuditThread)
+                .where(AuditThread.thread_id == tid)
+                .values(container_id=container_id)
+            )
+            await s.commit()
     except Exception as exc:
         log.warning("Failed to save container_id: %s", exc)
 
@@ -547,27 +562,46 @@ async def _capture_git_info(execution, audit_run_id: int | None) -> str:
     git_commit = head_result.stdout.strip()
 
     if audit_run_id:
+        from sqlalchemy import update
+
+        from llmpuffin.db import async_session
         from llmpuffin.models import AuditRun
 
-        await AuditRun.objects.filter(pk=audit_run_id).aupdate(
-            github_repo_url=github_repo_url,
-            git_commit=git_commit,
-        )
+        async with async_session() as s:
+            await s.execute(
+                update(AuditRun)
+                .where(AuditRun.id == audit_run_id)
+                .values(github_repo_url=github_repo_url, git_commit=git_commit)
+            )
+            await s.commit()
     log.info("Git info: %s @ %s", github_repo_url, git_commit[:12])
     return repo_path
 
 
-async def _get_or_create_profile(config: HarnessConfig) -> object:
+async def _get_or_create_profile(
+    session, config: HarnessConfig
+) -> "AuditProfile":  # type: ignore[name-defined]
     """Get or create an AuditProfile for this config. CLI runs get jit=True."""
+    from sqlalchemy import select
+
     from llmpuffin.models import AuditProfile
 
-    profile, _ = await AuditProfile.objects.aget_or_create(
-        name=config.profile.name,
-        defaults={"profile_toml": config.profile_toml, "jit": True},
-    )
-    if profile.profile_toml != config.profile_toml:
+    profile = (
+        await session.execute(
+            select(AuditProfile).where(AuditProfile.name == config.profile.name)
+        )
+    ).scalar_one_or_none()
+    if profile is None:
+        profile = AuditProfile(
+            name=config.profile.name,
+            profile_toml=config.profile_toml,
+            jit=True,
+        )
+        session.add(profile)
+        await session.flush()
+    elif profile.profile_toml != config.profile_toml:
         profile.profile_toml = config.profile_toml
-        await profile.asave(update_fields=["profile_toml"])
+        await session.flush()
     return profile
 
 
@@ -576,84 +610,109 @@ async def _create_audit_run(
     tid: str,
     resume_thread_id: str | None,
 ) -> int | None:
-    """Create or resume an AuditRun, register the thread. Returns audit_run.pk."""
-    try:
-        from llmpuffin.models import AuditRun, AuditThread
+    """Create or resume an AuditRun, register the thread. Returns audit_run.id."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
 
-        if resume_thread_id:
-            old_thread = (
-                await AuditThread.objects.filter(thread_id=resume_thread_id)
-                .select_related("audit_run")
-                .afirst()
-            )
-            if old_thread:
-                audit_run = old_thread.audit_run
+    from llmpuffin.db import async_session
+    from llmpuffin.models import AuditRun, AuditThread
+
+    try:
+        async with async_session() as s:
+            if resume_thread_id:
+                old_thread = (
+                    await s.execute(
+                        select(AuditThread)
+                        .options(selectinload(AuditThread.audit_run))
+                        .where(AuditThread.thread_id == resume_thread_id)
+                    )
+                ).scalar_one_or_none()
+                if old_thread:
+                    audit_run = old_thread.audit_run
+                else:
+                    db_profile = await _get_or_create_profile(s, config)
+                    audit_run = AuditRun(
+                        profile_id=db_profile.id,
+                        profile_toml=config.profile_toml,
+                        container_image=config.profile.image,
+                        model_name=config.profile.agent.model,
+                    )
+                    s.add(audit_run)
+                    await s.flush()
             else:
-                db_profile = await _get_or_create_profile(config)
-                audit_run = await AuditRun.objects.acreate(
-                    profile=db_profile,
+                db_profile = await _get_or_create_profile(s, config)
+                audit_run = AuditRun(
+                    profile_id=db_profile.id,
                     profile_toml=config.profile_toml,
                     container_image=config.profile.image,
                     model_name=config.profile.agent.model,
                 )
-        else:
-            db_profile = await _get_or_create_profile(config)
-            audit_run = await AuditRun.objects.acreate(
-                profile=db_profile,
-                profile_toml=config.profile_toml,
-                container_image=config.profile.image,
-                model_name=config.profile.agent.model,
-            )
+                s.add(audit_run)
+                await s.flush()
 
-        thread_obj, _ = await AuditThread.objects.aget_or_create(
-            thread_id=tid,
-            defaults={"audit_run": audit_run},
-        )
-        thread_obj.status = AuditStatus.RUNNING.value
-        thread_obj.error = ""
-        await thread_obj.asave(update_fields=["status", "error"])
-        return audit_run.pk
+            thread_obj = (
+                await s.execute(
+                    select(AuditThread).where(AuditThread.thread_id == tid)
+                )
+            ).scalar_one_or_none()
+            if thread_obj is None:
+                thread_obj = AuditThread(
+                    thread_id=tid,
+                    audit_run_id=audit_run.id,
+                    status=AuditStatus.RUNNING.value,
+                    error="",
+                )
+                s.add(thread_obj)
+            else:
+                thread_obj.status = AuditStatus.RUNNING.value
+                thread_obj.error = ""
+
+            run_id = audit_run.id
+            await s.commit()
+            return run_id
     except Exception as exc:
         log.warning("Failed to create audit run in DB: %s", exc)
         return None
 
 
-def _finalize_audit_run_sync(
-    tid: str | None, status: AuditStatus, error: str | None
-) -> None:
-    """Update the thread status at the end of a run (sync, for use in executor)."""
-    if not tid:
-        return
-    try:
-        from django.utils import timezone
-        from llmpuffin.models import AuditThread
-
-        thread = (
-            AuditThread.objects.filter(thread_id=tid)
-            .select_related("audit_run")
-            .first()
-        )
-        if not thread:
-            log.warning("AuditThread %s not found in DB", tid)
-            return
-
-        thread.status = status.value
-        thread.error = error or ""
-        thread.save(update_fields=["status", "error"])
-
-        audit_run = thread.audit_run
-        audit_run.finished_at = timezone.now()
-        audit_run.save(update_fields=["finished_at"])
-    except Exception as exc:
-        log.warning("Failed to finalize thread in DB: %s", exc)
-
-
 async def _finalize_audit_run(
     tid: str | None, status: AuditStatus, error: str | None
 ) -> None:
-    """Finalize via the loop's default executor (our shutdown-safe one)."""
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _finalize_audit_run_sync, tid, status, error)
+    """Update the thread status and the run's finished_at."""
+    if not tid:
+        return
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select, update
+
+    from llmpuffin.db import async_session
+    from llmpuffin.models import AuditRun, AuditThread
+
+    try:
+        async with async_session() as s:
+            row = (
+                await s.execute(
+                    select(AuditThread.audit_run_id).where(
+                        AuditThread.thread_id == tid
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                log.warning("AuditThread %s not found in DB", tid)
+                return
+            await s.execute(
+                update(AuditThread)
+                .where(AuditThread.thread_id == tid)
+                .values(status=status.value, error=error or "")
+            )
+            await s.execute(
+                update(AuditRun)
+                .where(AuditRun.id == row)
+                .values(finished_at=datetime.now(timezone.utc))
+            )
+            await s.commit()
+    except Exception as exc:
+        log.warning("Failed to finalize thread in DB: %s", exc)
 
 
 def _truncate(s: str, n: int) -> str:

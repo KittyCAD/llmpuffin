@@ -1,74 +1,110 @@
-"""Django models for llmpuffin audit data.
+"""SQLAlchemy models for llmpuffin audit data.
 
-These models are the canonical storage for audit runs, findings, and
-their relationship to threat model scenarios. The langgraph checkpoint
-tables (managed by checkpointer.setup()) live alongside these in the
-same PostgreSQL database.
+Canonical storage for audit runs, findings, and their relationship to threat
+model scenarios. The langgraph checkpoint tables (managed by checkpointer
+setup()) live alongside these in the same PostgreSQL database.
 """
 
+from __future__ import annotations
+
 import tomllib
+from datetime import datetime
 
-from django.db import models
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
-class AuditProfile(models.Model):
-    """A reusable audit configuration (llmpuffin.toml stored in DB).
+class Base(DeclarativeBase):
+    pass
 
-    This is the core llmpuffin concept of a config file — it defines
-    what image to audit, which threat model to use, and how the agent
-    should behave. Runs are created from profiles.
+
+class AuditProfile(Base):
+    """A reusable audit configuration (profile TOML stored in DB).
+
+    Defines what image to audit, which threat model to use, and how the
+    agent should behave. Runs are created from profiles.
     """
 
-    name = models.CharField(max_length=256, unique=True)
-    profile_toml = models.TextField(help_text="llmpuffin TOML configuration content")
-    jit = models.BooleanField(
-        default=False,
-        help_text="Auto-created from CLI run, hidden from web profile list",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    __tablename__ = "audit_profile"
 
-    class Meta:
-        app_label = "llmpuffin"
-        ordering = ["name"]
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), unique=True)
+    profile_toml: Mapped[str] = mapped_column(Text)
+    jit: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    runs: Mapped[list[AuditRun]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan"
+    )
 
     def __str__(self) -> str:
         return self.name
 
     def parsed_config(self) -> dict:
-        """Parse the TOML config content and return as dict."""
         return tomllib.loads(self.profile_toml)
 
 
-class AuditRun(models.Model):
+class AuditRun(Base):
     """A single execution of the audit harness.
 
     Currently one thread per run. Resuming reuses the same thread_id
-    (langgraph appends to the checkpoint chain). Forking (multiple
-    divergent threads from the same checkpoint) is not yet supported.
+    (langgraph appends to the checkpoint chain).
     """
 
-    profile = models.ForeignKey(
-        AuditProfile,
-        on_delete=models.CASCADE,
-        related_name="runs",
-    )
-    profile_toml = models.TextField(blank=True, default="")
-    container_image = models.CharField(max_length=512)
-    model_name = models.CharField(max_length=128)
-    github_repo_url = models.CharField(max_length=512, blank=True, default="")
-    git_commit = models.CharField(max_length=64, blank=True, default="")
-    started_at = models.DateTimeField(auto_now_add=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
+    __tablename__ = "audit_run"
 
-    class Meta:
-        app_label = "llmpuffin"
-        ordering = ["-started_at"]
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("audit_profile.id", ondelete="CASCADE")
+    )
+    profile_toml: Mapped[str] = mapped_column(Text, default="", server_default="")
+    container_image: Mapped[str] = mapped_column(String(512))
+    model_name: Mapped[str] = mapped_column(String(128))
+    github_repo_url: Mapped[str] = mapped_column(
+        String(512), default="", server_default=""
+    )
+    git_commit: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    profile: Mapped[AuditProfile] = relationship(back_populates="runs")
+    threads: Mapped[list[AuditThread]] = relationship(
+        back_populates="audit_run",
+        cascade="all, delete-orphan",
+        order_by="AuditThread.created_at",
+    )
+    findings: Mapped[list[Finding]] = relationship(
+        back_populates="audit_run",
+        cascade="all, delete-orphan",
+        order_by="Finding.created_at.desc()",
+    )
 
     @property
     def status(self) -> str:
-        """Derived from thread statuses: running if any thread is running, else worst status."""
-        statuses = list(self.threads.values_list("status", flat=True))
+        """Derived from thread statuses: running if any thread is running,
+        else worst status."""
+        statuses = [t.status for t in self.threads]
         if not statuses:
             return "pending"
         if "running" in statuses:
@@ -81,18 +117,15 @@ class AuditRun(models.Model):
 
     @property
     def error(self) -> str:
-        """Aggregate errors from all threads."""
-        errors = self.threads.exclude(error="").values_list("error", flat=True)
-        return "\n".join(errors)
+        return "\n".join(t.error for t in self.threads if t.error)
 
     def __str__(self) -> str:
-        threads = ", ".join(t.thread_id for t in self.threads.all()[:3])
-        return f"Run {self.pk} [{threads}] ({self.status})"
+        threads = ", ".join(t.thread_id for t in self.threads[:3])
+        return f"Run {self.id} [{threads}] ({self.status})"
 
     def github_file_url(
         self, file_path: str, line: int | None = None, end_line: int | None = None
     ) -> str | None:
-        """Build a GitHub URL for a file path, or None if no repo configured."""
         base = self.github_repo_url.rstrip("/")
         if not base:
             return None
@@ -108,74 +141,101 @@ class AuditRun(models.Model):
         return url
 
 
-class AuditThread(models.Model):
+class AuditThread(Base):
     """A checkpoint thread belonging to an audit run.
 
     Each agent invocation (start or resume) creates a new thread.
     """
 
-    audit_run = models.ForeignKey(
-        AuditRun, on_delete=models.CASCADE, related_name="threads"
-    )
-    thread_id = models.CharField(max_length=64, unique=True, db_index=True)
-    container_id = models.CharField(max_length=128, blank=True, default="")
-    status = models.CharField(max_length=32, default="running")
-    error = models.TextField(blank=True, default="")
-    created_at = models.DateTimeField(auto_now_add=True)
+    __tablename__ = "audit_thread"
 
-    class Meta:
-        app_label = "llmpuffin"
-        ordering = ["created_at"]
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    audit_run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("audit_run.id", ondelete="CASCADE")
+    )
+    thread_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    container_id: Mapped[str] = mapped_column(
+        String(128), default="", server_default=""
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), default="running", server_default="running"
+    )
+    error: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    audit_run: Mapped[AuditRun] = relationship(back_populates="threads")
 
     def __str__(self) -> str:
         return self.thread_id
 
 
-class Finding(models.Model):
+class Finding(Base):
     """A security finding discovered during an audit."""
 
-    audit_run = models.ForeignKey(
-        AuditRun, on_delete=models.CASCADE, related_name="findings"
-    )
-    thread_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
-    local_id = models.IntegerField(default=0)
-    rule_id = models.CharField(max_length=128, db_index=True)
-    title = models.CharField(max_length=512, blank=True, default="")
-    scenario_id = models.CharField(max_length=128, db_index=True)
-    severity = models.CharField(max_length=32)  # high, medium, low, informational
-    difficulty = models.CharField(max_length=32)  # high, medium, low
-    level = models.CharField(max_length=32)  # error, warning, note
-    description = models.TextField()
-    impact = models.TextField()
-    recommendations = models.TextField()
-    validated = models.BooleanField(default=False)
-    validated_evidence = models.TextField(blank=True, default="")
-    deleted = models.BooleanField(default=False)
-    fork_thread_id = models.CharField(
-        max_length=64, blank=True, default="", db_index=True
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
+    __tablename__ = "finding"
 
-    class Meta:
-        app_label = "llmpuffin"
-        ordering = ["-created_at"]
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    audit_run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("audit_run.id", ondelete="CASCADE")
+    )
+    thread_id: Mapped[str] = mapped_column(
+        String(64), default="", server_default="", index=True
+    )
+    local_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    rule_id: Mapped[str] = mapped_column(String(128), index=True)
+    title: Mapped[str] = mapped_column(String(512), default="", server_default="")
+    scenario_id: Mapped[str] = mapped_column(String(128), index=True)
+    severity: Mapped[str] = mapped_column(String(32))
+    difficulty: Mapped[str] = mapped_column(String(32))
+    level: Mapped[str] = mapped_column(String(32))
+    description: Mapped[str] = mapped_column(Text)
+    impact: Mapped[str] = mapped_column(Text)
+    recommendations: Mapped[str] = mapped_column(Text)
+    validated: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    validated_evidence: Mapped[str] = mapped_column(
+        Text, default="", server_default=""
+    )
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    fork_thread_id: Mapped[str] = mapped_column(
+        String(64), default="", server_default="", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    audit_run: Mapped[AuditRun] = relationship(back_populates="findings")
+    locations: Mapped[list[FindingLocation]] = relationship(
+        back_populates="finding", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_finding_audit_run_local_id", "audit_run_id", "local_id"),
+    )
 
     def __str__(self) -> str:
         return f"{self.rule_id}: {self.title or self.description[:80]}"
 
 
-class FindingLocation(models.Model):
+class FindingLocation(Base):
     """A source location associated with a finding."""
 
-    finding = models.ForeignKey(
-        Finding, on_delete=models.CASCADE, related_name="locations"
-    )
-    file_path = models.CharField(max_length=1024)
-    start_line = models.IntegerField(default=0)
-    end_line = models.IntegerField(null=True, blank=True)
+    __tablename__ = "finding_location"
 
-    class Meta:
-        app_label = "llmpuffin"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    finding_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("finding.id", ondelete="CASCADE")
+    )
+    file_path: Mapped[str] = mapped_column(String(1024))
+    start_line: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    end_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    finding: Mapped[Finding] = relationship(back_populates="locations")
 
     def __str__(self) -> str:
         return f"{self.file_path}:{self.start_line}"
