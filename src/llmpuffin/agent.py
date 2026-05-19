@@ -68,6 +68,7 @@ class AuditResult:
 SYSTEM_PROMPT = """\
 You are a security auditor performing a code review.
 The source code is in the current working directory of a container.
+Do not use /src as starting point, use the `cwd`. You may lookup code in /src.
 
 Start by invoking the skill audit-context-building.
 
@@ -303,6 +304,8 @@ async def _fork_audit_inner(
 
     try:
         with harness.start_environment() as execution:
+            cwd = execution.exec(["pwd"], timeout=5)
+            log.info("Container cwd: %s", cwd.stdout.strip())
             await sync_to_async(_save_container_id)(new_tid, execution.container.id)
             repo_path = await sync_to_async(_capture_git_info)(execution, audit_run_id)
 
@@ -411,10 +414,12 @@ async def _run_audit_inner(
 
     # Look up existing container for resume
     existing_container_id = await sync_to_async(_get_container_id)(tid)
-    log.info("Starting container: %s", p.image)
+    log.info("Starting container: %s (code_dir: %s)", p.image, p.code_dir)
 
     try:
         with harness.start_environment(container_id=existing_container_id) as execution:
+            cwd = execution.exec(["pwd"], timeout=5)
+            log.info("Container cwd: %s", cwd.stdout.strip())
             # Store container ID for future resumes
             await sync_to_async(_save_container_id)(tid, execution.container.id)
             repo_path = await sync_to_async(_capture_git_info)(execution, audit_run_id)

@@ -8,35 +8,46 @@ import subprocess
 import sys
 from pathlib import Path
 
+from llmpuffin.config import Profile
 
 PROFILES_DIR = Path("profiles")
 SHARED_DOCKERFILE = PROFILES_DIR / "Dockerfile"
 SHARED_IMAGE = "llmpuffin-workspace"
 
 
-def _build_image() -> None:
-    """Build the shared workspace image with all repos."""
-    if not SHARED_DOCKERFILE.exists():
-        print(f"Dockerfile not found at {SHARED_DOCKERFILE}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"Building image {SHARED_IMAGE}...")
+def _build_image(image: str, dockerfile: Path) -> None:
+    """Build a container image."""
+    print(f"Building image {image} from {dockerfile}...")
     cmd = [
         "podman",
         "build",
         "-t",
-        SHARED_IMAGE,
+        image,
         "-f",
-        str(SHARED_DOCKERFILE),
+        str(dockerfile),
     ]
     gh_token = os.environ.get("GH_TOKEN", "")
     if gh_token:
         cmd.extend(["--build-arg", f"GH_TOKEN={gh_token}"])
+    # Build context is always profiles/ so clone.sh is available
     cmd.append(str(PROFILES_DIR))
 
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        print(f"Failed to build image {SHARED_IMAGE}", file=sys.stderr)
+        print(f"Failed to build image {image}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _build_for_profile(profile_path: Path) -> None:
+    """Build the image for a profile — per-profile Dockerfile or shared."""
+    profile = Profile.from_toml(profile_path)
+    per_profile_dockerfile = profile_path.parent / "Dockerfile"
+    if per_profile_dockerfile.exists():
+        _build_image(profile.image, per_profile_dockerfile)
+    elif SHARED_DOCKERFILE.exists():
+        _build_image(profile.image, SHARED_DOCKERFILE)
+    else:
+        print(f"No Dockerfile found for {profile.name}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -80,10 +91,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.no_build:
-        _build_image()
-
     if args.profile:
+        if not args.no_build:
+            _build_for_profile(args.profile)
         sys.exit(_run_profile(args.profile, args.verbose))
 
     # Run all profiles
@@ -91,6 +101,10 @@ def main() -> None:
     if not profiles:
         print("No profiles found in profiles/", file=sys.stderr)
         sys.exit(1)
+
+    if not args.no_build:
+        for profile_path in profiles:
+            _build_for_profile(profile_path)
 
     print(
         f"Running {len(profiles)} profile(s): {', '.join(p.parent.name for p in profiles)}"

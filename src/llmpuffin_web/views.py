@@ -168,7 +168,8 @@ def runs_list(request: HttpRequest) -> HttpResponse:
     from django.db.models import Count, Q
 
     runs = (
-        AuditRun.objects.select_related("profile").prefetch_related("threads")
+        AuditRun.objects.select_related("profile")
+        .prefetch_related("threads")
         .annotate(
             thread_count=Count("threads", distinct=True),
             finding_count=Count(
