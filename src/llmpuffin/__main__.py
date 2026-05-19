@@ -50,7 +50,7 @@ def main() -> None:
 
     global_config = Config.load(args.config)
     os.environ.setdefault("LLMPUFFIN_POSTGRES", global_config.postgres.url)
-    setup_logging(verbose=args.verbose)
+    setup_logging(verbose=args.verbose, level=global_config.logging.level)
 
     profile_text = args.profile.read_text()
     profile = Profile.from_toml_string(profile_text)

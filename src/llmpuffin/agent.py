@@ -47,7 +47,7 @@ from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.sarif import SarifReport
 from llmpuffin.threat_model import ThreatModel
 from llmpuffin.log import log
-from llmpuffin.subagents import ALL as SUBAGENTS
+from llmpuffin.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.tools import make_tools
 
 
@@ -112,7 +112,7 @@ def _build_agent(
     execution,
     report: SarifReport,
     threat_model: ThreatModel,
-    audit_run_id: int | None,
+    audit_run_id: int,
     thread_id: str,
     repo_path: str,
     checkpointer: BaseCheckpointSaver,
@@ -170,6 +170,8 @@ def _build_agent(
         thread_id=thread_id,
         repo_path=repo_path,
     )
+    main_tools = [tools[name] for name in MAIN_AGENT_TOOLS]
+    subagents = build_subagents(tools)
 
     middleware = []
     if agent_cfg.interpreter:
@@ -183,14 +185,14 @@ def _build_agent(
 
     return create_deep_agent(
         model=f"anthropic:{agent_cfg.model}",
-        tools=tools,
+        tools=main_tools,
         backend=backend,
         store=store,
         checkpointer=checkpointer,
         middleware=middleware,
         interrupt_on=interrupt_on_config,
         skills=skills_list or None,
-        subagents=SUBAGENTS,
+        subagents=subagents,
         system_prompt=SYSTEM_PROMPT,
     )
 
@@ -243,19 +245,10 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
         status = AuditStatus.RECURSION_LIMIT
         error = f"Agent hit recursion limit ({max_iterations} iterations)"
         log.warning("  %s", error)
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        status = AuditStatus.ABORTED
-        error = "Aborted by user"
-        log.warning("  %s", error)
     except Exception as exc:
-        if "cannot schedule new futures after shutdown" in str(exc):
-            status = AuditStatus.ABORTED
-            error = "Aborted: process shutting down"
-            log.warning("  %s", error)
-        else:
-            status = AuditStatus.ERROR
-            error = str(exc)
-            log.error("  Agent error: %s", error)
+        status = AuditStatus.ERROR
+        error = str(exc)
+        log.error("  Agent error: %s", error)
     return status, error
 
 
@@ -350,15 +343,12 @@ async def _fork_audit_inner(
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
+        await _finalize_audit_run(new_tid, status, error)
+        raise
     except Exception as exc:
-        if "cannot schedule new futures after shutdown" in str(exc):
-            status = AuditStatus.ABORTED
-            error = "Aborted: process shutting down"
-            log.warning("  %s", error)
-        else:
-            status = AuditStatus.ERROR
-            error = str(exc)
-            log.error("Container startup failed: %s", error)
+        status = AuditStatus.ERROR
+        error = str(exc)
+        log.error("Container startup failed: %s", error)
 
     log.info(
         "Fork complete. %d finding(s) recorded. Status: %s",
@@ -471,15 +461,12 @@ async def _run_audit_inner(
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
+        await _finalize_audit_run(tid, status, error)
+        raise
     except Exception as exc:
-        if "cannot schedule new futures after shutdown" in str(exc):
-            status = AuditStatus.ABORTED
-            error = "Aborted: process shutting down"
-            log.warning("  %s", error)
-        else:
-            status = AuditStatus.ERROR
-            error = str(exc)
-            log.error("Container startup failed: %s", error)
+        status = AuditStatus.ERROR
+        error = str(exc)
+        log.error("Container startup failed: %s", error)
 
     log.info(
         "Audit finished. %d finding(s) recorded. Status: %s",
@@ -533,7 +520,7 @@ async def _save_container_id(tid: str, container_id: str) -> None:
         log.warning("Failed to save container_id: %s", exc)
 
 
-async def _capture_git_info(execution, audit_run_id: int | None) -> str:
+async def _capture_git_info(execution, audit_run_id: int) -> str:
     """Run git commands in the container and store repo URL + commit on the AuditRun.
 
     Returns the repo path (e.g. "KittyCAD/engine").
@@ -561,19 +548,18 @@ async def _capture_git_info(execution, audit_run_id: int | None) -> str:
         raise RuntimeError(f"Failed to get git HEAD: {head_result.stderr.strip()}")
     git_commit = head_result.stdout.strip()
 
-    if audit_run_id:
-        from sqlalchemy import update
+    from sqlalchemy import update
 
-        from llmpuffin.db import async_session
-        from llmpuffin.models import AuditRun
+    from llmpuffin.db import async_session
+    from llmpuffin.models import AuditRun
 
-        async with async_session() as s:
-            await s.execute(
-                update(AuditRun)
-                .where(AuditRun.id == audit_run_id)
-                .values(github_repo_url=github_repo_url, git_commit=git_commit)
-            )
-            await s.commit()
+    async with async_session() as s:
+        await s.execute(
+            update(AuditRun)
+            .where(AuditRun.id == audit_run_id)
+            .values(github_repo_url=github_repo_url, git_commit=git_commit)
+        )
+        await s.commit()
     log.info("Git info: %s @ %s", github_repo_url, git_commit[:12])
     return repo_path
 
@@ -609,7 +595,7 @@ async def _create_audit_run(
     config: HarnessConfig,
     tid: str,
     resume_thread_id: str | None,
-) -> int | None:
+) -> int:
     """Create or resume an AuditRun, register the thread. Returns audit_run.id."""
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
@@ -617,28 +603,17 @@ async def _create_audit_run(
     from llmpuffin.db import async_session
     from llmpuffin.models import AuditRun, AuditThread
 
-    try:
-        async with async_session() as s:
-            if resume_thread_id:
-                old_thread = (
-                    await s.execute(
-                        select(AuditThread)
-                        .options(selectinload(AuditThread.audit_run))
-                        .where(AuditThread.thread_id == resume_thread_id)
-                    )
-                ).scalar_one_or_none()
-                if old_thread:
-                    audit_run = old_thread.audit_run
-                else:
-                    db_profile = await _get_or_create_profile(s, config)
-                    audit_run = AuditRun(
-                        profile_id=db_profile.id,
-                        profile_toml=config.profile_toml,
-                        container_image=config.profile.image,
-                        model_name=config.profile.agent.model,
-                    )
-                    s.add(audit_run)
-                    await s.flush()
+    async with async_session() as s:
+        if resume_thread_id:
+            old_thread = (
+                await s.execute(
+                    select(AuditThread)
+                    .options(selectinload(AuditThread.audit_run))
+                    .where(AuditThread.thread_id == resume_thread_id)
+                )
+            ).scalar_one_or_none()
+            if old_thread:
+                audit_run = old_thread.audit_run
             else:
                 db_profile = await _get_or_create_profile(s, config)
                 audit_run = AuditRun(
@@ -649,30 +624,37 @@ async def _create_audit_run(
                 )
                 s.add(audit_run)
                 await s.flush()
+        else:
+            db_profile = await _get_or_create_profile(s, config)
+            audit_run = AuditRun(
+                profile_id=db_profile.id,
+                profile_toml=config.profile_toml,
+                container_image=config.profile.image,
+                model_name=config.profile.agent.model,
+            )
+            s.add(audit_run)
+            await s.flush()
 
-            thread_obj = (
-                await s.execute(
-                    select(AuditThread).where(AuditThread.thread_id == tid)
-                )
-            ).scalar_one_or_none()
-            if thread_obj is None:
-                thread_obj = AuditThread(
-                    thread_id=tid,
-                    audit_run_id=audit_run.id,
-                    status=AuditStatus.RUNNING.value,
-                    error="",
-                )
-                s.add(thread_obj)
-            else:
-                thread_obj.status = AuditStatus.RUNNING.value
-                thread_obj.error = ""
+        thread_obj = (
+            await s.execute(
+                select(AuditThread).where(AuditThread.thread_id == tid)
+            )
+        ).scalar_one_or_none()
+        if thread_obj is None:
+            thread_obj = AuditThread(
+                thread_id=tid,
+                audit_run_id=audit_run.id,
+                status=AuditStatus.RUNNING.value,
+                error="",
+            )
+            s.add(thread_obj)
+        else:
+            thread_obj.status = AuditStatus.RUNNING.value
+            thread_obj.error = ""
 
-            run_id = audit_run.id
-            await s.commit()
-            return run_id
-    except Exception as exc:
-        log.warning("Failed to create audit run in DB: %s", exc)
-        return None
+        run_id = audit_run.id
+        await s.commit()
+        return run_id
 
 
 async def _finalize_audit_run(

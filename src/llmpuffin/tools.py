@@ -15,13 +15,6 @@ from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
 log = logging.getLogger("llmpuffin")
 
-_SEVERITY_TO_LEVEL = {
-    "high": "error",
-    "medium": "warning",
-    "low": "note",
-    "informational": "note",
-}
-
 
 def _format_threat_model_view(view: ThreatModelView) -> str:
     """Format a ThreatModelView for the agent."""
@@ -47,32 +40,8 @@ def _format_threat_model_view(view: ThreatModelView) -> str:
     return "\n".join(lines)
 
 
-def _next_local_id(audit_run_id: int | None) -> int:
-    """Get the next local_id for a finding in this audit run."""
-    if not audit_run_id:
-        return 0
-    try:
-        from sqlalchemy import select
-
-        from llmpuffin.db import sync_session
-        from llmpuffin.models import Finding
-
-        with sync_session() as s:
-            max_id = s.execute(
-                select(Finding.local_id)
-                .where(Finding.audit_run_id == audit_run_id)
-                .order_by(Finding.local_id.desc())
-                .limit(1)
-            ).scalar_one_or_none()
-        return (max_id + 1) if max_id is not None else 0
-    except Exception:
-        return 0
-
-
-def _resolve_finding(audit_run_id: int | None, local_id: int):
+def _resolve_finding(audit_run_id: int, local_id: int):
     """Look up a Finding by local_id within the audit run. Returns the Finding or None."""
-    if not audit_run_id:
-        return None
     try:
         from sqlalchemy import select
 
@@ -91,44 +60,61 @@ def _resolve_finding(audit_run_id: int | None, local_id: int):
 
 
 def _persist_finding_to_db(
-    audit_run_id: int | None,
+    audit_run_id: int,
     thread_id: str,
-    local_id: int,
-    rule_id: str,
-    title: str,
     scenario_id: str,
+    title: str,
     severity: str,
     difficulty: str,
-    level: str,
     description: str,
     impact: str,
     recommendations: str,
     locations: list[dict] | None,
-) -> int | None:
-    """Write a finding to the DB immediately. Returns the Finding id."""
-    if not audit_run_id:
-        return None
-    try:
-        from llmpuffin.db import sync_session
-        from llmpuffin.models import Finding, FindingLocation
+) -> tuple[int, int, str]:
+    """Allocate local_id in SQL and insert a finding in one transaction.
 
-        with sync_session() as s:
+    Concurrent transactions are serialized by a per-audit-run advisory lock
+    held until commit, so the MAX(local_id) read and the INSERT cannot
+    interleave. No retry needed.
+
+    Returns (finding_pk_id, local_id, rule_id).
+    """
+    from sqlalchemy import func, select, text
+
+    from llmpuffin.db import sync_session
+    from llmpuffin.models import Finding, FindingLocation
+
+    next_local_id = (
+        select(func.coalesce(func.max(Finding.local_id) + 1, 0))
+        .where(Finding.audit_run_id == audit_run_id)
+        .scalar_subquery()
+    )
+    rule_id_expr = func.concat(
+        scenario_id + "-",
+        func.to_char(next_local_id, text("'FM000'")),
+    )
+
+    try:
+        with sync_session() as s, s.begin():
+            # Serialize concurrent allocations for this audit_run. The lock
+            # is released automatically at COMMIT/ROLLBACK.
+            s.execute(select(func.pg_advisory_xact_lock(audit_run_id)))
             finding = Finding(
                 audit_run_id=audit_run_id,
                 thread_id=thread_id,
-                local_id=local_id,
-                rule_id=rule_id,
+                local_id=next_local_id,
+                rule_id=rule_id_expr,
                 title=title,
                 scenario_id=scenario_id,
                 severity=severity,
                 difficulty=difficulty,
-                level=level,
                 description=description,
                 impact=impact,
                 recommendations=recommendations,
             )
             s.add(finding)
             s.flush()
+            s.refresh(finding, attribute_names=["local_id", "rule_id"])
             for loc in locations or []:
                 s.add(
                     FindingLocation(
@@ -137,20 +123,23 @@ def _persist_finding_to_db(
                         start_line=loc.get("line", 0),
                     )
                 )
-            s.commit()
-            return finding.id
+            return finding.id, finding.local_id, finding.rule_id
     except Exception as exc:
-        log.warning("Failed to persist finding to DB: %s", exc)
-        return None
+        log.exception(
+            "Failed to insert finding in audit_run %s: %s", audit_run_id, exc
+        )
+        raise RuntimeError(
+            f"Failed to insert finding in audit_run {audit_run_id}: {exc}"
+        ) from exc
 
 
 def make_tools(
     report: SarifReport,
     threat_model: ThreatModel,
-    audit_run_id: int | None = None,
+    audit_run_id: int,
     thread_id: str = "",
     repo_path: str = "",
-) -> list[Callable]:
+) -> dict[str, Callable]:
     """Create threat model and finding tools."""
 
     # Create a perspective view if we know the repo, otherwise show everything
@@ -252,8 +241,21 @@ Existing mitigations to verify:
             locations: Optional list of locations, each a dict with "file" (str) and "line" (int).
                        Example: [{"file": "src/main.py", "line": 42}]
         """
-        local_id = _next_local_id(audit_run_id)
-        level = _SEVERITY_TO_LEVEL.get(severity, "warning")
+        # Persist first so we get the authoritative, race-safe local_id +
+        # rule_id from the DB. The SARIF entry uses the same values to keep
+        # the two stores consistent.
+        _, local_id, rule_id = _persist_finding_to_db(
+            audit_run_id,
+            thread_id,
+            scenario_id,
+            title,
+            severity,
+            difficulty,
+            description,
+            impact,
+            recommendations,
+            locations,
+        )
 
         sarif_locations = []
         if locations:
@@ -264,7 +266,6 @@ Existing mitigations to verify:
                         start_line=loc.get("line", 0),
                     )
                 )
-        rule_id = f"{scenario_id}-{local_id:03d}"
         finding = SarifFinding(
             rule_id=rule_id,
             title=title,
@@ -273,27 +274,10 @@ Existing mitigations to verify:
             recommendations=recommendations,
             severity=severity,
             difficulty=difficulty,
-            level=level,
             locations=sarif_locations,
             threat_scenario_ids=[scenario_id],
         )
         report.add_finding(finding)
-
-        _persist_finding_to_db(
-            audit_run_id,
-            thread_id,
-            local_id,
-            rule_id,
-            title,
-            scenario_id,
-            severity,
-            difficulty,
-            level,
-            description,
-            impact,
-            recommendations,
-            locations,
-        )
 
         return f"Finding recorded. finding_id: {local_id}"
 
@@ -326,7 +310,6 @@ Existing mitigations to verify:
         if sarif_finding:
             if severity is not None:
                 sarif_finding.severity = severity
-                sarif_finding.level = _SEVERITY_TO_LEVEL.get(severity, "warning")
             if difficulty is not None:
                 sarif_finding.difficulty = difficulty
             if description is not None:
@@ -348,9 +331,6 @@ Existing mitigations to verify:
                 for k, v in {
                     "severity": severity,
                     "difficulty": difficulty,
-                    "level": _SEVERITY_TO_LEVEL.get(severity, None)
-                    if severity
-                    else None,
                     "description": description,
                     "impact": impact,
                     "recommendations": recommendations,
@@ -464,8 +444,6 @@ Existing mitigations to verify:
         Use this to see what has been reported so far and which findings
         need validation.
         """
-        if not audit_run_id:
-            return "No findings (no audit run)."
         try:
             from sqlalchemy import select
 
@@ -502,12 +480,12 @@ Existing mitigations to verify:
             log.warning("Failed to list findings: %s", exc)
             return "Error listing findings."
 
-    return [
-        get_threat_model,
-        get_threat_scenario,
-        report_finding,
-        list_findings,
-        update_finding,
-        delete_finding,
-        validate_finding,
-    ]
+    return {
+        "get_threat_model": get_threat_model,
+        "get_threat_scenario": get_threat_scenario,
+        "report_finding": report_finding,
+        "list_findings": list_findings,
+        "update_finding": update_finding,
+        "delete_finding": delete_finding,
+        "validate_finding": validate_finding,
+    }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -11,16 +12,43 @@ from llmpuffin.config import Config
 from llmpuffin.db import setup_db
 from llmpuffin.log import setup as setup_logging
 
+from llmpuffin_fastapi.deps import _tasks
 from llmpuffin_fastapi.routes import checkpoints, findings, profiles, runs
 from llmpuffin_fastapi.routes import store as store_routes
 
 log = logging.getLogger("llmpuffin")
 
+# Max seconds to wait for in-flight audits to cancel + finalize on shutdown.
+_SHUTDOWN_TIMEOUT = 30.0
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    # Configure logging here (after uvicorn has installed its own handlers)
+    # so the `llmpuffin` logger isn't masked by uvicorn's dictConfig.
+    config = Config.load()
+    setup_logging(level=config.logging.level)
+    log.info("llmpuffin starting on port %s", config.web.port)
     await setup_db()
-    yield
+
+    try:
+        yield
+    finally:
+        if _tasks:
+            log.info("Cancelling %d in-flight audit task(s)…", len(_tasks))
+            for t in list(_tasks):
+                t.cancel()
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*_tasks, return_exceptions=True),
+                    timeout=_SHUTDOWN_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "Audit tasks did not finish within %.0fs of shutdown; %d still pending",
+                    _SHUTDOWN_TIMEOUT,
+                    len(_tasks),
+                )
 
 
 def create_app() -> FastAPI:
@@ -41,7 +69,6 @@ def main() -> None:
     import uvicorn
 
     config = Config.load()
-    setup_logging()
     uvicorn.run(
         "llmpuffin_fastapi.main:app",
         host="0.0.0.0",

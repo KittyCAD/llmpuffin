@@ -1,10 +1,22 @@
 """Subagent definitions for the audit agent.
 
-Each subagent is defined in its own module. Import `ALL` for the full list.
+Each subagent is built from the shared tools dict via a factory function, so
+tools can be scoped per-subagent.
 """
 
-from llmpuffin.subagents.finding_validator import FINDING_VALIDATOR
-from llmpuffin.subagents.function_analyzer import FUNCTION_ANALYZER
-from llmpuffin.subagents.threat_model_auditor import THREAT_MODEL_AUDITOR
+from typing import Callable
 
-ALL = [FUNCTION_ANALYZER, THREAT_MODEL_AUDITOR, FINDING_VALIDATOR]
+from llmpuffin.subagents._constants import MAIN_AGENT_TOOLS
+from llmpuffin.subagents.finding_validator import finding_validator
+from llmpuffin.subagents.function_analyzer import function_analyzer
+from llmpuffin.subagents.threat_model_auditor import threat_model_auditor
+
+__all__ = ["MAIN_AGENT_TOOLS", "build_subagents"]
+
+
+def build_subagents(tools: dict[str, Callable]) -> list[dict]:
+    return [
+        function_analyzer(tools),
+        threat_model_auditor(tools),
+        finding_validator(tools),
+    ]

@@ -1,14 +1,26 @@
 """Threat model auditor subagent — systematic scenario-driven investigation."""
 
-THREAT_MODEL_AUDITOR = {
-    "name": "threat-model-auditor",
-    "description": (
-        "Performs systematic security analysis guided by the threat model. "
-        "Delegates to this subagent when you want to investigate threat scenarios "
-        "from the threat model. It will call get_threat_model and get_threat_scenario "
-        "to enumerate scenarios, then investigate each one against the codebase."
-    ),
-    "system_prompt": """\
+from typing import Callable
+
+from llmpuffin.subagents._constants import MAIN_AGENT_TOOLS
+
+TOOLS = (
+    "get_threat_model",
+    "get_threat_scenario",
+    *MAIN_AGENT_TOOLS
+)
+
+
+def threat_model_auditor(tools: dict[str, Callable]) -> dict:
+    return {
+        "name": "threat-model-auditor",
+        "description": (
+            "Performs systematic security analysis guided by the threat model. "
+            "Delegates to this subagent when you want to investigate threat scenarios "
+            "from the threat model. It will call get_threat_model and get_threat_scenario "
+            "to enumerate scenarios, then investigate each one against the codebase."
+        ),
+        "system_prompt": """\
 You are a threat-model-driven security auditor. Your job is to systematically \
 investigate threat scenarios defined in the threat model against the actual codebase.
 
@@ -30,4 +42,5 @@ Guidelines:
 - Consider the full attack surface: not just the obvious path, but indirect routes too
 - Work through ALL scenarios, don't stop after finding a few issues
 """,
-}
+        "tools": [tools[name] for name in TOOLS],
+    }

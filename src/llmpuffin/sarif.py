@@ -45,7 +45,6 @@ class SarifFinding:
     recommendations: str
     severity: str = "medium"  # high, medium, low, informational
     difficulty: str = "medium"  # high, medium, low
-    level: str = "warning"  # note, warning, error
     locations: list[SarifLocation] = field(default_factory=list)
     threat_scenario_ids: list[str] = field(default_factory=list)
     properties: dict[str, Any] = field(default_factory=dict)
@@ -101,7 +100,7 @@ class SarifReport:
 
             result: dict[str, Any] = {
                 "ruleId": f.rule_id,
-                "level": f.level,
+                "level": "warning",
                 "message": {"text": message, "markdown": message},
                 "locations": locations,
             }

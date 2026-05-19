@@ -7,12 +7,18 @@
       {% if msg.content %}<div class="markdown">{{ msg.content | md }}</div>{% endif %}
       {% for tc in msg.tool_calls %}
         <pre class="tools">{{ tc.name }}({{ tc.args_json }})</pre>
+        {% if tc.result is not none %}
+          <pre class="tool-result">{{ tc.result }}</pre>
+        {% endif %}
       {% endfor %}
     </div>
   {% elif msg.role == "ai" %}
     <div class="msg llm"><span class="role">llm</span><div class="markdown">{{ msg.content | md }}</div></div>
   {% elif msg.role == "tool" %}
-    <div class="msg tool"><span class="role">tool</span><pre>{{ msg.content }}</pre></div>
+    {# Skip ToolMessages that were already paired into an AIMessage above. #}
+    {% if msg.tool_call_id is none %}
+      <div class="msg tool"><span class="role">tool</span><pre>{{ msg.content }}</pre></div>
+    {% endif %}
   {% elif msg.role == "human" %}
     <div class="msg human"><span class="role">human</span><pre>{{ msg.content }}</pre></div>
   {% else %}

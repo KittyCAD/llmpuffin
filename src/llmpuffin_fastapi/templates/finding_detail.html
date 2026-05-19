@@ -18,7 +18,6 @@
 <tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
 <tr><th>Severity</th><td>{{ finding.severity }}</td></tr>
 <tr><th>Difficulty</th><td>{{ finding.difficulty }}</td></tr>
-<tr><th>Level</th><td>{{ finding.level }}</td></tr>
 <tr><th>Validated</th><td>{% if finding.validated %}yes{% else %}no{% endif %}</td></tr>
 <tr><th>Created</th><td>{{ finding.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
 {% if finding.fork_thread_id %}

@@ -15,10 +15,10 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -189,7 +189,6 @@ class Finding(Base):
     scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     severity: Mapped[str] = mapped_column(String(32))
     difficulty: Mapped[str] = mapped_column(String(32))
-    level: Mapped[str] = mapped_column(String(32))
     description: Mapped[str] = mapped_column(Text)
     impact: Mapped[str] = mapped_column(Text)
     recommendations: Mapped[str] = mapped_column(Text)
@@ -215,7 +214,9 @@ class Finding(Base):
     )
 
     __table_args__ = (
-        Index("ix_finding_audit_run_local_id", "audit_run_id", "local_id"),
+        UniqueConstraint(
+            "audit_run_id", "local_id", name="uq_finding_audit_run_local_id"
+        ),
     )
 
     def __str__(self) -> str:

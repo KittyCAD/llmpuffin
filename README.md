@@ -19,7 +19,7 @@ podman machine init && podman machine start
 
 ## Database
 
-Start a local PostgreSQL for session checkpointing (user-local, no daemon):
+Start a local PostgreSQL for session checkpointing and audit data (user-local, no daemon):
 
 ```
 uv run llmpuffin-pg start
@@ -32,7 +32,7 @@ Data lives in `.postgres/pgdata/`, port 5434.
 Apply database migrations after starting PostgreSQL:
 
 ```
-uv run llmpuffin-web migrate
+uv run alembic -c src/llmpuffin_fastapi/alembic.ini upgrade head
 ```
 
 ## Configuration
@@ -45,7 +45,6 @@ url = "postgresql://localhost:5434/llmpuffin"
 
 [web]
 port = 8000
-debug = true
 
 [logging]
 level = "INFO"
@@ -88,28 +87,31 @@ Available profiles in `profiles/`:
 View audit runs and findings:
 
 ```
-uv run llmpuffin-web runserver
+uv run llmpuffin-fastapi
 ```
 
 - http://localhost:8000/ — audit runs and findings
+- http://localhost:8000/profiles/ — audit profiles (create, run)
 - http://localhost:8000/checkpoints/ — checkpoint viewer (conversation history)
-- http://localhost:8000/admin/ — admin dashboard
-
-Create an admin user on first setup:
-
-```
-uv run llmpuffin-web createsuperuser
-```
+- http://localhost:8000/store/ — langgraph store browser
 
 Override the connection string with `LLMPUFFIN_POSTGRES` env var, or set it in `llmpuffin.toml`.
+
+## Development
+
+Always run the check script after making changes — it formats, lints, runs tests, and byte-compiles every module under `src/`:
+
+```
+uv run llmpuffin-check
+```
+
+This is the canonical pre-commit gate. See `AGENTS.md` for contributor guidelines.
 
 ## Caveats
 
 - **Subagent messages are not visible in checkpoints.** Subagents (threat-model-auditor, finding-validator, function-analyzer) run in their own internal state via deepagents. Only the final summary is returned to the parent thread's checkpoint. Internal subagent tool calls and reasoning are logged to the server console but do not appear in the checkpoint viewer.
 
-- **Graceful shutdown requires `--noreload`.** Run `uv run llmpuffin-web runserver --noreload` for graceful Ctrl+C handling — active audits will finish and save their status as "aborted". With the auto-reloader (default), the parent process kills the child before threads can clean up.
-
-- **Stuck threads after crashes.** If the process is killed (SIGKILL, OOM, etc.) before completion, the thread remains in "running" status. Use the Django admin panel (`/admin/llmpuffin/auditthread/`) and the "Mark as completed" action to reset stuck threads.
+- **Stuck threads after crashes.** If the process is killed (SIGKILL, OOM, etc.) before the lifespan can finalize, the thread may remain in `"running"` status. The FastAPI lifespan marks orphaned threads as `"aborted"` on startup; if a thread is still stuck, update its row directly in PostgreSQL.
 
 ## Architecture
 

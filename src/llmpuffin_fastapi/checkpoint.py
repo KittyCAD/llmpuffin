@@ -14,8 +14,10 @@ _serde = JsonPlusSerializer()
 
 @dataclass
 class ToolCall:
+    id: str
     name: str
     args: dict
+    result: str | None = None  # filled in when paired with its ToolMessage
 
     @property
     def args_json(self) -> str:
@@ -29,6 +31,9 @@ class Message:
     role: str
     content: str
     tool_calls: list[ToolCall] = field(default_factory=list)
+    # ToolMessage-only: id linking back to the originating AIMessage.tool_calls[i].id
+    tool_call_id: str | None = None
+    tool_name: str | None = None
 
 
 @dataclass
@@ -77,13 +82,17 @@ async def get_session(thread_id: str) -> Session | None:
                 SELECT type, blob
                 FROM checkpoint_writes
                 WHERE thread_id = %s AND channel = 'messages'
-                ORDER BY checkpoint_id, idx
+                ORDER BY checkpoint_id, idx, task_id
             """,
                 (thread_id,),
             )
             rows = await cur.fetchall()
 
             messages: list[Message] = []
+            # Map tool_call_id → ToolCall on the most recent AI message that
+            # emitted it, so we can attach the ToolMessage's content as `result`.
+            pending_calls: dict[str, ToolCall] = {}
+
             for typ, blob in rows:
                 data = _serde.loads_typed((typ, blob))
                 items = data if isinstance(data, list) else [data]
@@ -108,24 +117,49 @@ async def get_session(thread_id: str) -> Session | None:
                         )
                     else:
                         content = str(raw_content)
-                    tc = getattr(msg, "tool_calls", None)
-                    tool_call_objs = (
-                        [ToolCall(name=c["name"], args=c.get("args", {})) for c in tc]
-                        if tc
-                        else []
-                    )
 
                     if cls_name == "HumanMessage":
-                        role = "human"
-                    elif cls_name == "AIMessage":
-                        role = "ai"
-                    elif cls_name == "ToolMessage":
-                        role = "tool"
-                    else:
-                        role = cls_name.lower()
+                        messages.append(Message(role="human", content=content))
+                        continue
 
-                    messages.append(
-                        Message(role=role, content=content, tool_calls=tool_call_objs)
-                    )
+                    if cls_name == "AIMessage":
+                        tc = getattr(msg, "tool_calls", None) or []
+                        tool_call_objs = [
+                            ToolCall(
+                                id=c.get("id", ""),
+                                name=c["name"],
+                                args=c.get("args", {}),
+                            )
+                            for c in tc
+                        ]
+                        for obj in tool_call_objs:
+                            if obj.id:
+                                pending_calls[obj.id] = obj
+                        messages.append(
+                            Message(
+                                role="ai",
+                                content=content,
+                                tool_calls=tool_call_objs,
+                            )
+                        )
+                        continue
+
+                    if cls_name == "ToolMessage":
+                        tc_id = getattr(msg, "tool_call_id", None)
+                        tool_name = getattr(msg, "name", None)
+                        # Pair result back to its originating AIMessage tool call.
+                        if tc_id and tc_id in pending_calls:
+                            pending_calls[tc_id].result = content
+                        messages.append(
+                            Message(
+                                role="tool",
+                                content=content,
+                                tool_call_id=tc_id,
+                                tool_name=tool_name,
+                            )
+                        )
+                        continue
+
+                    messages.append(Message(role=cls_name.lower(), content=content))
 
             return Session(thread_id=thread_id, steps=steps, messages=messages)
