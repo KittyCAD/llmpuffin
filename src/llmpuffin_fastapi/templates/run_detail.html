@@ -23,10 +23,11 @@
 
 <h2>threads</h2>
 <table>
-<tr><th>Thread ID</th><th>Status</th><th>Created</th><th></th></tr>
+<tr><th>Thread ID</th><th>Container</th><th>Status</th><th>Created</th><th></th></tr>
 {% for t in threads %}
 <tr>
   <td><a href="/checkpoints/{{ t.thread_id }}/">{{ t.thread_id }}</a></td>
+  <td>{% if t.container_id %}<code>{{ t.container_id | truncatechars(12) }}</code>{% else %}—{% endif %}</td>
   <td>{{ t.status }}{% if t.error %} <span class="error">({{ t.error | truncatechars(60) }})</span>{% endif %}</td>
   <td>{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
   <td>
@@ -43,7 +44,7 @@
   </td>
 </tr>
 {% else %}
-<tr><td colspan="4">No threads yet.</td></tr>
+<tr><td colspan="5">No threads yet.</td></tr>
 {% endfor %}
 </table>
 

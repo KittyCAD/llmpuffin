@@ -31,7 +31,6 @@ Example profile.toml:
     [agent]
     model = "claude-sonnet-4-20250514"
     max_iterations = 200
-    interpreter = true
     skills_dir = "vendor/trailofbits-skills/plugins"
     # interrupt_on = ["execute", "write_file"]
 """
@@ -140,7 +139,6 @@ class ProfileAgent:
 
     model: str = "claude-sonnet-4-20250514"
     max_iterations: int = 200
-    interpreter: bool = False
     interrupt_on: list[str] = field(default_factory=list)
     skills_dir: Path | None = None
 
@@ -183,7 +181,6 @@ class Profile:
             agent=ProfileAgent(
                 model=agent_data.get("model", "claude-sonnet-4-20250514"),
                 max_iterations=agent_data.get("max_iterations", 200),
-                interpreter=agent_data.get("interpreter", False),
                 interrupt_on=agent_data.get("interrupt_on", []),
                 skills_dir=skills_dir,
             ),

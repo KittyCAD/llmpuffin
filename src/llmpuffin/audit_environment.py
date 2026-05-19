@@ -55,7 +55,7 @@ class AuditEnvironment:
         kwargs = {}
         if self.podman_uri:
             kwargs["base_url"] = self.podman_uri
-        client = PodmanClient(**kwargs)
+        client = PodmanClient(**kwargs, timeout=3000)
 
         # Try to resume an existing container by ID
         if container_id:
@@ -116,7 +116,7 @@ class AuditExecution:
     ) -> None:
         self.stop()
 
-    def exec(self, command: list[str], timeout: int = 30) -> ExecResult:
+    def exec(self, command: list[str], timeout: int = 300) -> ExecResult:
         """Execute a command inside the container.
 
         Args:

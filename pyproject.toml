@@ -26,9 +26,6 @@ dependencies = [
     "sarif-om>=1.0",
 ]
 
-[project.optional-dependencies]
-interpreter = ["langchain-quickjs>=0.1.0"]
-
 [project.scripts]
 llmpuffin = "llmpuffin.__main__:main"
 llmpuffin-run = "llmpuffin_dev.run:main"
@@ -46,5 +43,5 @@ podman = { path = "../podman-py", editable = true }
 dev = ["pytest", "ruff"]
 
 [build-system]
-requires = ["uv_build>=0.9.13,<0.10.0"]
+requires = ["uv_build>=0.9.13,<0.12.0"]
 build-backend = "uv_build"

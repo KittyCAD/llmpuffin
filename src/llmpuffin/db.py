@@ -7,7 +7,9 @@ import os
 from typing import AsyncIterator
 from urllib.parse import urlparse, urlunparse
 
-from sqlalchemy import update
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.store.postgres.aio import AsyncPostgresStore
+from sqlalchemy import create_engine, update
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,7 +17,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy import create_engine
+
+from llmpuffin.config import Config
+from llmpuffin.models import AuditThread
 
 log = logging.getLogger("llmpuffin")
 
@@ -24,8 +28,6 @@ def get_postgres_url() -> str:
     """Get the canonical postgresql:// URL from env or config."""
     if url := os.environ.get("LLMPUFFIN_POSTGRES"):
         return url
-    from llmpuffin.config import Config
-
     return Config.load().postgres.url
 
 
@@ -101,8 +103,6 @@ async def _abort_orphaned_threads() -> None:
     When the process is killed (SIGKILL, OOM) the finalizer never runs and
     the thread stays running forever.
     """
-    from llmpuffin.models import AuditThread
-
     async with async_session() as s:
         result = await s.execute(
             update(AuditThread)
@@ -121,9 +121,6 @@ async def _setup_langgraph_tables() -> None:
     """Create langgraph checkpoint/store tables if they don't exist."""
     url = get_postgres_url()
     try:
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        from langgraph.store.postgres.aio import AsyncPostgresStore
-
         async with AsyncPostgresSaver.from_conn_string(url) as cp:
             await cp.setup()
         async with AsyncPostgresStore.from_conn_string(url) as store:

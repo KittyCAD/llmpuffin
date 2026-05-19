@@ -20,6 +20,82 @@ nav a { margin-right: 1.5em; }
 .msg.llm.tool-call { border-left-color: #ffa726; }
 .msg.tool { border-left-color: #888; }
 .msg.human { border-left-color: #81c784; }
+.subagent { margin: 0.5em 0 0.5em 1.5em; padding: 0.5em 0.5em 0.5em 1em; border-left: 3px dashed #b388ff; background: rgba(179, 136, 255, 0.05); }
+.subagent-header { color: #b388ff; font-weight: bold; font-size: 0.85em; text-transform: uppercase; margin-bottom: 0.4em; }
+.subagent-result { margin-top: 0.4em; }
+.subagent-result summary { cursor: pointer; color: #b388ff; font-size: 0.85em; }
+.tool-output > summary { cursor: pointer; color: #888; font-size: 0.9em; padding: 0.2em 0; }
+.tool-output > summary em { color: #6ec6ff; font-style: normal; font-size: 0.85em; }
+.tool-output > pre { margin-top: 0.3em; }
+
+/* Custom collapsible — checkbox-only, so toggle state survives morph swaps
+   as long as the checkbox id stays stable. */
+.collapsible { margin: 0.3em 0; }
+.collapsible > input[type="checkbox"] { display: none; }
+.collapsible-body { position: relative; max-height: 14em; overflow: hidden; transition: max-height 0.2s ease; }
+.collapsible-body > pre { margin: 0; }
+/* Very soft blur ramp: many overlapping layers with progressively stronger
+   blur, each masked with a wide gradient that overlaps its neighbors heavily.
+   No single layer has a sharp mask edge, so the transition from sharp text
+   to fully blurred + faded background is perceptually continuous. */
+.collapsible-fade {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 13em;
+  pointer-events: none;
+}
+.collapsible-fade > span {
+  position: absolute; left: 0; right: 0; bottom: 0; top: 0;
+}
+.collapsible-fade > span:nth-child(1) {
+  backdrop-filter: blur(0.3px); -webkit-backdrop-filter: blur(0.3px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 100%);
+}
+.collapsible-fade > span:nth-child(2) {
+  backdrop-filter: blur(0.8px); -webkit-backdrop-filter: blur(0.8px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 15%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 15%, black 100%);
+}
+.collapsible-fade > span:nth-child(3) {
+  backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 30%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 30%, black 100%);
+}
+.collapsible-fade > span:nth-child(4) {
+  backdrop-filter: blur(2.5px); -webkit-backdrop-filter: blur(2.5px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 45%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 45%, black 100%);
+}
+.collapsible-fade > span:nth-child(5) {
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 60%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 60%, black 100%);
+}
+.collapsible-fade > span:nth-child(6) {
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 75%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 75%, black 100%);
+}
+.collapsible-fade > span:nth-child(7) {
+  background: linear-gradient(to bottom,
+    rgba(26, 26, 46, 0) 0%,
+    rgba(26, 26, 46, 0.05) 25%,
+    rgba(26, 26, 46, 0.2) 50%,
+    rgba(26, 26, 46, 0.5) 75%,
+    rgba(26, 26, 46, 0.85) 100%);
+}
+.collapsible-toggle {
+  display: inline-block; cursor: pointer; color: #6ec6ff;
+  font-size: 0.85em; padding: 0.2em 0.6em; margin-bottom: 0.3em;
+  border: 1px solid #444; border-radius: 3px; background: #2a2a4a;
+  user-select: none;
+}
+.collapsible-toggle:hover { background: #3a3a5a; }
+.collapsible-toggle::before { content: "▸ expand "; }
+.collapsible-preview { color: #888; font-size: 0.85em; margin-left: 0.5em; font-style: italic; }
+.collapsible > input[type="checkbox"]:checked ~ .collapsible-body { max-height: none; }
+.collapsible > input[type="checkbox"]:checked ~ .collapsible-body .collapsible-fade { display: none; }
+.collapsible > input[type="checkbox"]:checked ~ .collapsible-toggle::before { content: "▾ collapse "; }
+.collapsible > input[type="checkbox"]:checked ~ .collapsible-toggle .collapsible-preview { display: none; }
 .role { font-weight: bold; font-size: 0.85em; text-transform: uppercase; }
 .tools { color: #ffa726; }
 .tool-args { margin: 0.4em 0 0 1em; }

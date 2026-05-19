@@ -810,11 +810,6 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.optional-dependencies]
-interpreter = [
-    { name = "langchain-quickjs" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -829,7 +824,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "jinja2", specifier = ">=3" },
     { name = "langchain-anthropic", specifier = ">=0.3" },
-    { name = "langchain-quickjs", marker = "extra == 'interpreter'", specifier = ">=0.1.0" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "markdown" },
     { name = "podman", editable = "../podman-py" },
@@ -841,7 +835,6 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-provides-extras = ["interpreter"]
 
 [package.metadata.requires-dev]
 dev = [

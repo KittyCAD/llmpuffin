@@ -30,25 +30,34 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
+from urllib.parse import urlparse
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
+from deepagents.backends.utils import create_file_data
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.stores import BaseStore
+from langchain_quickjs import CodeInterpreterMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.errors import GraphRecursionError
+from langgraph.store.memory import InMemoryStore as _InMemoryStore
+from langgraph.store.postgres.aio import AsyncPostgresStore
+from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 
-from llmpuffin.models import AuditProfile
 from llmpuffin.backend import ContainerBackend
-from llmpuffin.db import get_postgres_url
+from llmpuffin.db import async_session, get_postgres_url
 from llmpuffin.harness import Harness, HarnessConfig
-from llmpuffin.sarif import SarifReport
-from llmpuffin.threat_model import ThreatModel
 from llmpuffin.log import log
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread
+from llmpuffin.sarif import SarifReport
 from llmpuffin.subagents import MAIN_AGENT_TOOLS, build_subagents
+from llmpuffin.threat_model import ThreatModel
 from llmpuffin.tools import make_tools
 
 
@@ -134,9 +143,6 @@ def _build_agent(
     # Load skills from disk into an in-memory store
     skills_list: list[str] = []
     if agent_cfg.skills_dir and agent_cfg.skills_dir.is_dir():
-        from deepagents.backends.utils import create_file_data
-        from langgraph.store.memory import InMemoryStore as _InMemoryStore
-
         skills_store = _InMemoryStore()
         skills_backend = StoreBackend(
             store=skills_store, namespace=lambda rt: ("skills",)
@@ -174,11 +180,7 @@ def _build_agent(
     main_tools = [tools[name] for name in MAIN_AGENT_TOOLS]
     subagents = build_subagents(tools)
 
-    middleware = []
-    if agent_cfg.interpreter:
-        from langchain_quickjs import CodeInterpreterMiddleware
-
-        middleware.append(CodeInterpreterMiddleware())
+    middleware = [CodeInterpreterMiddleware()]
 
     interrupt_on_config = None
     if agent_cfg.interrupt_on:
@@ -264,9 +266,6 @@ async def fork_audit(
     report = SarifReport()
 
     postgres_url = get_postgres_url()
-    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-    from langgraph.store.postgres.aio import AsyncPostgresStore
-
     async with (
         AsyncPostgresSaver.from_conn_string(postgres_url) as checkpointer,
         AsyncPostgresStore.from_conn_string(postgres_url) as store,
@@ -380,9 +379,6 @@ async def run_audit(
     )
 
     postgres_url = get_postgres_url()
-    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-    from langgraph.store.postgres.aio import AsyncPostgresStore
-
     async with (
         AsyncPostgresSaver.from_conn_string(postgres_url) as checkpointer,
         AsyncPostgresStore.from_conn_string(postgres_url) as store,
@@ -483,11 +479,6 @@ async def _run_audit_inner(
 
 async def _get_container_id(tid: str) -> str | None:
     """Look up the container ID for a thread from the DB."""
-    from sqlalchemy import select
-
-    from llmpuffin.db import async_session
-    from llmpuffin.models import AuditThread
-
     try:
         async with async_session() as s:
             row = (
@@ -502,11 +493,6 @@ async def _get_container_id(tid: str) -> str | None:
 
 async def _save_container_id(tid: str, container_id: str) -> None:
     """Store the container ID on the thread."""
-    from sqlalchemy import update
-
-    from llmpuffin.db import async_session
-    from llmpuffin.models import AuditThread
-
     try:
         async with async_session() as s:
             await s.execute(
@@ -526,8 +512,6 @@ async def _capture_git_info(execution, audit_run_id: int) -> str:
     Raises RuntimeError if git info cannot be retrieved or the remote
     is not a https://github.com URL.
     """
-    from urllib.parse import urlparse
-
     remote_result = execution.exec(["git", "remote", "get-url", "origin"], timeout=5)
     if not remote_result.ok:
         raise RuntimeError(f"Failed to get git remote: {remote_result.stderr.strip()}")
@@ -547,11 +531,6 @@ async def _capture_git_info(execution, audit_run_id: int) -> str:
         raise RuntimeError(f"Failed to get git HEAD: {head_result.stderr.strip()}")
     git_commit = head_result.stdout.strip()
 
-    from sqlalchemy import update
-
-    from llmpuffin.db import async_session
-    from llmpuffin.models import AuditRun
-
     async with async_session() as s:
         await s.execute(
             update(AuditRun)
@@ -565,8 +544,6 @@ async def _capture_git_info(execution, audit_run_id: int) -> str:
 
 async def _get_or_create_profile(session, config: HarnessConfig) -> AuditProfile:
     """Get or create an AuditProfile for this config. CLI runs get jit=True."""
-    from sqlalchemy import select
-
     profile = (
         await session.execute(
             select(AuditProfile).where(AuditProfile.name == config.profile.name)
@@ -592,12 +569,6 @@ async def _create_audit_run(
     resume_thread_id: str | None,
 ) -> int:
     """Create or resume an AuditRun, register the thread. Returns audit_run.id."""
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-
-    from llmpuffin.db import async_session
-    from llmpuffin.models import AuditRun, AuditThread
-
     async with async_session() as s:
         if resume_thread_id:
             old_thread = (
@@ -656,13 +627,6 @@ async def _finalize_audit_run(
     """Update the thread status and the run's finished_at."""
     if not tid:
         return
-    from datetime import datetime, timezone
-
-    from sqlalchemy import select, update
-
-    from llmpuffin.db import async_session
-    from llmpuffin.models import AuditRun, AuditThread
-
     try:
         async with async_session() as s:
             row = (

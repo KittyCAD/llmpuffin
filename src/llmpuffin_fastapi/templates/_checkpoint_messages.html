@@ -1,27 +1,68 @@
 <h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages){% if audit_thread %} — {{ audit_thread.status }}{% endif %}</h1>
 
-{% for msg in session.messages | reverse %}
-  {% if msg.role == "ai" and msg.tool_calls %}
-    <div class="msg llm tool-call">
-      <span class="role">llm</span>
-      {% if msg.content %}<div class="markdown">{{ msg.content | md }}</div>{% endif %}
-      {% for tc in msg.tool_calls %}
-        <pre class="tools">{{ tc.name }}({{ tc.args_json }})</pre>
-        {% if tc.result is not none %}
-          <pre class="tool-result">{{ tc.result }}</pre>
-        {% endif %}
-      {% endfor %}
+{% set _coll = namespace(n=0) %}
+
+{% macro render_tool_output(text, css_class="tool-result") -%}
+  {%- set lines = (text or "").splitlines() -%}
+  {%- if lines|length > 3 -%}
+    {%- set _coll.n = _coll.n + 1 -%}
+    {%- set cid = "coll-" ~ session.thread_id ~ "-" ~ _coll.n -%}
+    <div class="collapsible">
+      <input type="checkbox" id="{{ cid }}" hx-preserve="true">
+      <label class="collapsible-toggle" for="{{ cid }}"><span class="collapsible-preview">{{ lines[0] | truncatechars(80) }} (+{{ lines|length - 1 }} more lines)</span></label>
+      <div class="collapsible-body">
+        <pre class="{{ css_class }}">{{ text }}</pre>
+        <div class="collapsible-fade"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
     </div>
-  {% elif msg.role == "ai" %}
-    <div class="msg llm"><span class="role">llm</span><div class="markdown">{{ msg.content | md }}</div></div>
-  {% elif msg.role == "tool" %}
-    {# Skip ToolMessages that were already paired into an AIMessage above. #}
-    {% if msg.tool_call_id is none %}
-      <div class="msg tool"><span class="role">tool</span><pre>{{ msg.content }}</pre></div>
-    {% endif %}
-  {% elif msg.role == "human" %}
-    <div class="msg human"><span class="role">human</span><pre>{{ msg.content }}</pre></div>
+  {%- else -%}
+    <pre class="{{ css_class }}">{{ text }}</pre>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro render_tool_call(tc) -%}
+  {% if tc.name == "task" and tc.subagent_messages %}
+    <div class="subagent">
+      <div class="subagent-header">▼ subagent: {{ tc.subagent_type or "(unknown)" }}</div>
+      <pre class="tools">task({{ tc.args_json }})</pre>
+      {{ render_messages(tc.subagent_messages) }}
+      {% if tc.result is not none %}
+        <div class="subagent-result">
+          {{ render_tool_output(tc.result) }}
+        </div>
+      {% endif %}
+    </div>
   {% else %}
-    <div class="msg"><span class="role">{{ msg.role }}</span><pre>{{ msg.content }}</pre></div>
+    <pre class="tools">{{ tc.name }}({{ tc.args_json }})</pre>
+    {% if tc.result is not none %}
+      {{ render_tool_output(tc.result) }}
+    {% endif %}
   {% endif %}
-{% endfor %}
+{%- endmacro %}
+
+{% macro render_messages(messages) -%}
+  {% for msg in messages | reverse %}
+    {% if msg.role == "ai" and msg.tool_calls %}
+      <div class="msg llm tool-call">
+        <span class="role">llm</span>
+        {% if msg.content %}<div class="markdown">{{ msg.content | md }}</div>{% endif %}
+        {% for tc in msg.tool_calls %}
+          {{ render_tool_call(tc) }}
+        {% endfor %}
+      </div>
+    {% elif msg.role == "ai" %}
+      <div class="msg llm"><span class="role">llm</span><div class="markdown">{{ msg.content | md }}</div></div>
+    {% elif msg.role == "tool" %}
+      {# Skip ToolMessages that were already paired into an AIMessage above. #}
+      {% if msg.tool_call_id is none %}
+        <div class="msg tool"><span class="role">tool</span>{{ render_tool_output(msg.content) }}</div>
+      {% endif %}
+    {% elif msg.role == "human" %}
+      <div class="msg human"><span class="role">human</span><pre>{{ msg.content }}</pre></div>
+    {% else %}
+      <div class="msg"><span class="role">{{ msg.role }}</span><pre>{{ msg.content }}</pre></div>
+    {% endif %}
+  {% endfor %}
+{%- endmacro %}
+
+{{ render_messages(session.messages) }}

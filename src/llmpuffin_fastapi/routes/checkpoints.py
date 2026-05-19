@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from llmpuffin.agent import run_audit
 from llmpuffin.config import Profile
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditThread
+from llmpuffin.models import AuditRun, AuditThread
 
 from llmpuffin_fastapi.checkpoint import get_session, list_sessions
 from llmpuffin_fastapi.deps import get_db, spawn_audit
@@ -34,8 +34,6 @@ async def checkpoints_list(request: Request):
 
 
 async def _get_audit_thread(db: AsyncSession, thread_id: str) -> AuditThread | None:
-    from llmpuffin.models import AuditRun
-
     return (
         await db.execute(
             select(AuditThread)

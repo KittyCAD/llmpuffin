@@ -10,6 +10,11 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
+from sqlalchemy import func, select, text
+from sqlalchemy import update as sa_update
+
+from llmpuffin.db import sync_session
+from llmpuffin.models import Finding, FindingLocation
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
@@ -43,11 +48,6 @@ def _format_threat_model_view(view: ThreatModelView) -> str:
 def _resolve_finding(audit_run_id: int, local_id: int):
     """Look up a Finding by local_id within the audit run. Returns the Finding or None."""
     try:
-        from sqlalchemy import select
-
-        from llmpuffin.db import sync_session
-        from llmpuffin.models import Finding
-
         with sync_session() as s:
             return s.execute(
                 select(Finding).where(
@@ -79,11 +79,6 @@ def _persist_finding_to_db(
 
     Returns (finding_pk_id, local_id, rule_id).
     """
-    from sqlalchemy import func, select, text
-
-    from llmpuffin.db import sync_session
-    from llmpuffin.models import Finding, FindingLocation
-
     next_local_id = (
         select(func.coalesce(func.max(Finding.local_id) + 1, 0))
         .where(Finding.audit_run_id == audit_run_id)
@@ -319,11 +314,6 @@ Existing mitigations to verify:
 
         # Update DB
         try:
-            from sqlalchemy import update as sa_update
-
-            from llmpuffin.db import sync_session
-            from llmpuffin.models import Finding
-
             values = {
                 k: v
                 for k, v in {
@@ -368,11 +358,6 @@ Existing mitigations to verify:
 
         # Soft-delete in DB
         try:
-            from sqlalchemy import update as sa_update
-
-            from llmpuffin.db import sync_session
-            from llmpuffin.models import Finding
-
             with sync_session() as s:
                 s.execute(
                     sa_update(Finding)
@@ -416,11 +401,6 @@ Existing mitigations to verify:
 
         # Update DB
         try:
-            from sqlalchemy import update as sa_update
-
-            from llmpuffin.db import sync_session
-            from llmpuffin.models import Finding
-
             with sync_session() as s:
                 s.execute(
                     sa_update(Finding)
@@ -443,11 +423,6 @@ Existing mitigations to verify:
         need validation.
         """
         try:
-            from sqlalchemy import select
-
-            from llmpuffin.db import sync_session
-            from llmpuffin.models import Finding
-
             with sync_session() as s:
                 findings = (
                     s.execute(

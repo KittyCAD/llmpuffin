@@ -1,5 +1,6 @@
 """Lint, format, and compile-check all source files. Run via: uv run llmpuffin-check"""
 
+import compileall
 import subprocess
 import sys
 
@@ -15,8 +16,6 @@ def main() -> None:
         result = subprocess.run(cmd)
         if result.returncode != 0:
             failed = True
-
-    import compileall
 
     if not compileall.compile_dir("src/", quiet=1, force=True):
         failed = True

@@ -8,5 +8,4 @@ output = "examples/vulnerable-app/results.sarif"
 [agent]
 model = "claude-sonnet-4-20250514"
 max_iterations = 200
-interpreter = false
 skills_dir = "vendor/trailofbits-skills/plugins"

@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit
 from llmpuffin.config import Config, Profile
+from llmpuffin.db import async_session
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
@@ -183,8 +184,6 @@ async def finding_fork(
             log.exception("Background finding fork failed")
             return
         if result.thread_id:
-            from llmpuffin.db import async_session
-
             async with async_session() as s:
                 await s.execute(
                     sa_update(Finding)

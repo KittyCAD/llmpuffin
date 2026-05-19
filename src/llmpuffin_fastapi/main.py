@@ -6,6 +6,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI
 
 from llmpuffin.config import Config
@@ -66,8 +67,6 @@ app = create_app()
 
 def main() -> None:
     """Run uvicorn on the port configured in llmpuffin.toml."""
-    import uvicorn
-
     config = Config.load()
     uvicorn.run(
         "llmpuffin_fastapi.main:app",
