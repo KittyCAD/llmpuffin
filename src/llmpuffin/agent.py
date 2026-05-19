@@ -27,6 +27,7 @@ The agentic loop — LangGraph orchestrator for security audits.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
@@ -54,6 +55,7 @@ class AuditStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     RECURSION_LIMIT = "recursion_limit"
+    ABORTED = "aborted"
     ERROR = "error"
 
 
@@ -241,10 +243,19 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
         status = AuditStatus.RECURSION_LIMIT
         error = f"Agent hit recursion limit ({max_iterations} iterations)"
         log.warning("  %s", error)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        status = AuditStatus.ABORTED
+        error = "Aborted by user"
+        log.warning("  %s", error)
     except Exception as exc:
-        status = AuditStatus.ERROR
-        error = str(exc)
-        log.error("  Agent error: %s", error)
+        if "cannot schedule new futures after shutdown" in str(exc):
+            status = AuditStatus.ABORTED
+            error = "Aborted: process shutting down"
+            log.warning("  %s", error)
+        else:
+            status = AuditStatus.ERROR
+            error = str(exc)
+            log.error("  Agent error: %s", error)
     return status, error
 
 
@@ -294,9 +305,7 @@ async def _fork_audit_inner(
     new_tid = uuid.uuid4().hex[:12]
     log.info("Forking thread %s → %s", source_thread_id, new_tid)
 
-    from asgiref.sync import sync_to_async
-
-    audit_run_id = await sync_to_async(_create_audit_run)(
+    audit_run_id = await _create_audit_run(
         config,
         new_tid,
         source_thread_id,
@@ -306,8 +315,8 @@ async def _fork_audit_inner(
         with harness.start_environment() as execution:
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
-            await sync_to_async(_save_container_id)(new_tid, execution.container.id)
-            repo_path = await sync_to_async(_capture_git_info)(execution, audit_run_id)
+            await _save_container_id(new_tid, execution.container.id)
+            repo_path = await _capture_git_info(execution, audit_run_id)
 
             agent = _build_agent(
                 config,
@@ -337,10 +346,19 @@ async def _fork_audit_inner(
             status, error = await _stream_agent(
                 agent, messages, run_config, p.agent.max_iterations
             )
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        status = AuditStatus.ABORTED
+        error = "Aborted by user"
+        log.warning("Aborted: %s", error)
     except Exception as exc:
-        status = AuditStatus.ERROR
-        error = str(exc)
-        log.error("Container startup failed: %s", error)
+        if "cannot schedule new futures after shutdown" in str(exc):
+            status = AuditStatus.ABORTED
+            error = "Aborted: process shutting down"
+            log.warning("  %s", error)
+        else:
+            status = AuditStatus.ERROR
+            error = str(exc)
+            log.error("Container startup failed: %s", error)
 
     log.info(
         "Fork complete. %d finding(s) recorded. Status: %s",
@@ -349,9 +367,7 @@ async def _fork_audit_inner(
     )
     report.write(p.output)
 
-    from asgiref.sync import sync_to_async
-
-    await sync_to_async(_finalize_audit_run)(new_tid, status, error)
+    await _finalize_audit_run(new_tid, status, error)
 
     return AuditResult(report=report, status=status, error=error, thread_id=new_tid)
 
@@ -408,12 +424,10 @@ async def _run_audit_inner(
     tid = thread_id or uuid.uuid4().hex[:12]
     log.info("Session thread_id: %s", tid)
 
-    from asgiref.sync import sync_to_async
-
-    audit_run_id = await sync_to_async(_create_audit_run)(config, tid, thread_id)
+    audit_run_id = await _create_audit_run(config, tid, thread_id)
 
     # Look up existing container for resume
-    existing_container_id = await sync_to_async(_get_container_id)(tid)
+    existing_container_id = await _get_container_id(tid)
     log.info("Starting container: %s (code_dir: %s)", p.image, p.code_dir)
 
     try:
@@ -421,8 +435,8 @@ async def _run_audit_inner(
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
             # Store container ID for future resumes
-            await sync_to_async(_save_container_id)(tid, execution.container.id)
-            repo_path = await sync_to_async(_capture_git_info)(execution, audit_run_id)
+            await _save_container_id(tid, execution.container.id)
+            repo_path = await _capture_git_info(execution, audit_run_id)
 
             agent = _build_agent(
                 config,
@@ -453,10 +467,19 @@ async def _run_audit_inner(
                 run_config,
                 p.agent.max_iterations,
             )
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        status = AuditStatus.ABORTED
+        error = "Aborted by user"
+        log.warning("Aborted: %s", error)
     except Exception as exc:
-        status = AuditStatus.ERROR
-        error = str(exc)
-        log.error("Container startup failed: %s", error)
+        if "cannot schedule new futures after shutdown" in str(exc):
+            status = AuditStatus.ABORTED
+            error = "Aborted: process shutting down"
+            log.warning("  %s", error)
+        else:
+            status = AuditStatus.ERROR
+            error = str(exc)
+            log.error("Container startup failed: %s", error)
 
     log.info(
         "Audit finished. %d finding(s) recorded. Status: %s",
@@ -465,19 +488,17 @@ async def _run_audit_inner(
     )
     report.write(p.output)
 
-    from asgiref.sync import sync_to_async
-
-    await sync_to_async(_finalize_audit_run)(tid, status, error)
+    await _finalize_audit_run(tid, status, error)
 
     return AuditResult(report=report, status=status, error=error, thread_id=tid)
 
 
-def _get_container_id(tid: str) -> str | None:
+async def _get_container_id(tid: str) -> str | None:
     """Look up the container ID for a thread from the DB."""
     try:
         from llmpuffin.models import AuditThread
 
-        thread = AuditThread.objects.filter(thread_id=tid).first()
+        thread = await AuditThread.objects.filter(thread_id=tid).afirst()
         if thread and thread.container_id:
             return thread.container_id
     except Exception:
@@ -485,17 +506,19 @@ def _get_container_id(tid: str) -> str | None:
     return None
 
 
-def _save_container_id(tid: str, container_id: str) -> None:
+async def _save_container_id(tid: str, container_id: str) -> None:
     """Store the container ID on the thread."""
     try:
         from llmpuffin.models import AuditThread
 
-        AuditThread.objects.filter(thread_id=tid).update(container_id=container_id)
+        await AuditThread.objects.filter(thread_id=tid).aupdate(
+            container_id=container_id
+        )
     except Exception as exc:
         log.warning("Failed to save container_id: %s", exc)
 
 
-def _capture_git_info(execution, audit_run_id: int | None) -> str:
+async def _capture_git_info(execution, audit_run_id: int | None) -> str:
     """Run git commands in the container and store repo URL + commit on the AuditRun.
 
     Returns the repo path (e.g. "KittyCAD/engine").
@@ -515,7 +538,6 @@ def _capture_git_info(execution, audit_run_id: int | None) -> str:
             f"Git remote must be a https://github.com URL, got: {git_remote}"
         )
 
-    # Normalize to a clean GitHub repo URL (strip .git suffix)
     repo_path = parsed.path.removesuffix(".git").strip("/")
     github_repo_url = f"https://github.com/{repo_path}"
 
@@ -527,7 +549,7 @@ def _capture_git_info(execution, audit_run_id: int | None) -> str:
     if audit_run_id:
         from llmpuffin.models import AuditRun
 
-        AuditRun.objects.filter(pk=audit_run_id).update(  # type: ignore[attr-defined]
+        await AuditRun.objects.filter(pk=audit_run_id).aupdate(
             github_repo_url=github_repo_url,
             git_commit=git_commit,
         )
@@ -535,21 +557,21 @@ def _capture_git_info(execution, audit_run_id: int | None) -> str:
     return repo_path
 
 
-def _get_or_create_profile(config: HarnessConfig) -> object:
+async def _get_or_create_profile(config: HarnessConfig) -> object:
     """Get or create an AuditProfile for this config. CLI runs get jit=True."""
     from llmpuffin.models import AuditProfile
 
-    profile, _ = AuditProfile.objects.get_or_create(
+    profile, _ = await AuditProfile.objects.aget_or_create(
         name=config.profile.name,
         defaults={"profile_toml": config.profile_toml, "jit": True},
     )
     if profile.profile_toml != config.profile_toml:
         profile.profile_toml = config.profile_toml
-        profile.save(update_fields=["profile_toml"])
+        await profile.asave(update_fields=["profile_toml"])
     return profile
 
 
-def _create_audit_run(
+async def _create_audit_run(
     config: HarnessConfig,
     tid: str,
     resume_thread_id: str | None,
@@ -559,43 +581,47 @@ def _create_audit_run(
         from llmpuffin.models import AuditRun, AuditThread
 
         if resume_thread_id:
-            old_thread = AuditThread.objects.filter(thread_id=resume_thread_id).first()
+            old_thread = (
+                await AuditThread.objects.filter(thread_id=resume_thread_id)
+                .select_related("audit_run")
+                .afirst()
+            )
             if old_thread:
                 audit_run = old_thread.audit_run
             else:
-                db_profile = _get_or_create_profile(config)
-                audit_run = AuditRun.objects.create(
+                db_profile = await _get_or_create_profile(config)
+                audit_run = await AuditRun.objects.acreate(
                     profile=db_profile,
                     profile_toml=config.profile_toml,
                     container_image=config.profile.image,
                     model_name=config.profile.agent.model,
                 )
         else:
-            db_profile = _get_or_create_profile(config)
-            audit_run = AuditRun.objects.create(
+            db_profile = await _get_or_create_profile(config)
+            audit_run = await AuditRun.objects.acreate(
                 profile=db_profile,
                 profile_toml=config.profile_toml,
                 container_image=config.profile.image,
                 model_name=config.profile.agent.model,
             )
 
-        thread_obj, _ = AuditThread.objects.get_or_create(
+        thread_obj, _ = await AuditThread.objects.aget_or_create(
             thread_id=tid,
             defaults={"audit_run": audit_run},
         )
         thread_obj.status = AuditStatus.RUNNING.value
         thread_obj.error = ""
-        thread_obj.save(update_fields=["status", "error"])
+        await thread_obj.asave(update_fields=["status", "error"])
         return audit_run.pk
     except Exception as exc:
         log.warning("Failed to create audit run in DB: %s", exc)
         return None
 
 
-def _finalize_audit_run(
+def _finalize_audit_run_sync(
     tid: str | None, status: AuditStatus, error: str | None
 ) -> None:
-    """Update the thread status at the end of a run."""
+    """Update the thread status at the end of a run (sync, for use in executor)."""
     if not tid:
         return
     try:
@@ -620,6 +646,14 @@ def _finalize_audit_run(
         audit_run.save(update_fields=["finished_at"])
     except Exception as exc:
         log.warning("Failed to finalize thread in DB: %s", exc)
+
+
+async def _finalize_audit_run(
+    tid: str | None, status: AuditStatus, error: str | None
+) -> None:
+    """Finalize via the loop's default executor (our shutdown-safe one)."""
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _finalize_audit_run_sync, tid, status, error)
 
 
 def _truncate(s: str, n: int) -> str:

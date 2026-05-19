@@ -107,6 +107,8 @@ Override the connection string with `LLMPUFFIN_POSTGRES` env var, or set it in `
 
 - **Subagent messages are not visible in checkpoints.** Subagents (threat-model-auditor, finding-validator, function-analyzer) run in their own internal state via deepagents. Only the final summary is returned to the parent thread's checkpoint. Internal subagent tool calls and reasoning are logged to the server console but do not appear in the checkpoint viewer.
 
+- **Graceful shutdown requires `--noreload`.** Run `uv run llmpuffin-web runserver --noreload` for graceful Ctrl+C handling — active audits will finish and save their status as "aborted". With the auto-reloader (default), the parent process kills the child before threads can clean up.
+
 - **Stuck threads after crashes.** If the process is killed (SIGKILL, OOM, etc.) before completion, the thread remains in "running" status. Use the Django admin panel (`/admin/llmpuffin/auditthread/`) and the "Mark as completed" action to reset stuck threads.
 
 ## Architecture

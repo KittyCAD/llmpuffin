@@ -21,6 +21,52 @@ from llmpuffin_web.store import list_namespaces as list_store_namespaces
 log = logging.getLogger("llmpuffin")
 
 
+def _run_coro(coro):
+    """Run a coroutine with an executor that survives interpreter shutdown.
+
+    Sets a custom default executor on the loop that ignores the global
+    concurrent.futures _shutdown flag. This ensures Django's async ORM
+    (asave/afirst via sync_to_async → loop.run_in_executor) can still
+    write to the DB during finalization after Ctrl+C.
+    """
+    import concurrent.futures.thread as _cft
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures._base import Future
+    from concurrent.futures.thread import _WorkItem
+
+    class _Executor(ThreadPoolExecutor):
+        def _adjust_thread_count(self):
+            super()._adjust_thread_count()
+            for t in self._threads:
+                _cft._threads_queues.pop(t, None)  # type: ignore[attr-defined]
+
+        def submit(self, fn, /, *args, **kwargs):
+            with self._shutdown_lock:
+                if self._broken:
+                    raise RuntimeError(self._broken)
+                if self._shutdown:
+                    raise RuntimeError("cannot schedule new futures after shutdown")
+                f = Future()
+                w = _WorkItem(f, fn, args, kwargs)
+                self._work_queue.put(w)
+                self._adjust_thread_count()
+                return f
+
+    loop = asyncio.new_event_loop()
+    executor = _Executor(max_workers=4)
+    loop.set_default_executor(executor)
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            executor.shutdown(wait=True)
+            asyncio.set_event_loop(None)
+            loop.close()
+
+
 def checkpoints_list(request: HttpRequest) -> HttpResponse:
     sessions = list_sessions()
     return render(
@@ -91,7 +137,7 @@ def checkpoint_resume(request: HttpRequest, thread_id: str) -> HttpResponse:
         target=_run_audit_in_thread,
         args=(toml_str,),
         kwargs={"resume_thread_id": thread_id, "user_message": user_message},
-        daemon=True,
+        daemon=False,
     )
     thread.start()
     return redirect(f"/checkpoints/{thread_id}/?success=Resumed")
@@ -220,7 +266,7 @@ def run_resume(request: HttpRequest, run_id: int, thread_id: str) -> HttpRespons
         target=_run_audit_in_thread,
         args=(toml_str,),
         kwargs={"resume_thread_id": thread_id, "user_message": user_message},
-        daemon=True,
+        daemon=False,
     )
     thread.start()
     return redirect(f"/runs/{run_id}/?success=Resumed+from+thread+{thread_id}")
@@ -245,7 +291,7 @@ def run_fork(request: HttpRequest, run_id: int, thread_id: str) -> HttpResponse:
     thread = threading.Thread(
         target=_fork_audit_in_thread,
         args=(toml_str, thread_id, user_message),
-        daemon=True,
+        daemon=False,
     )
     thread.start()
     return redirect(f"/runs/{run_id}/?success=Forked+from+thread+{thread_id}")
@@ -374,7 +420,7 @@ def finding_fork(request: HttpRequest, finding_id: int) -> HttpResponse:
     thread = threading.Thread(
         target=_fork_finding_in_thread,
         args=(toml_str, finding.thread_id, user_message, finding.id),
-        daemon=True,
+        daemon=False,
     )
     thread.start()
     return redirect(f"/findings/{finding_id}/?success=Fork+started")
@@ -389,7 +435,7 @@ def _run_audit_in_thread(
     try:
         profile = Profile.from_toml_string(toml_str)
         harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-        asyncio.run(
+        _run_coro(
             run_audit(
                 harness_config,
                 thread_id=resume_thread_id,
@@ -407,7 +453,7 @@ def _fork_audit_in_thread(
     try:
         profile = Profile.from_toml_string(toml_str)
         harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-        asyncio.run(
+        _run_coro(
             fork_audit(
                 harness_config,
                 source_thread_id=source_thread_id,
@@ -425,7 +471,7 @@ def _fork_finding_in_thread(
     try:
         profile = Profile.from_toml_string(toml_str)
         harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-        result = asyncio.run(
+        result = _run_coro(
             fork_audit(
                 harness_config,
                 source_thread_id=source_thread_id,
@@ -451,7 +497,7 @@ def profile_run(request: HttpRequest, profile_id: int) -> HttpResponse:
     thread = threading.Thread(
         target=_run_audit_in_thread,
         args=(profile.profile_toml,),
-        daemon=True,
+        daemon=False,
     )
     thread.start()
     return redirect(f"/profiles/{profile_id}/?success=Audit+started")

@@ -3,6 +3,9 @@
 - Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
 
 
+Bugs:
+- duplicate ids in fidnings
+
 Prompt:
 - avoid duplicating risks like, yes hoops could be vulnerable
 - explain other repos are available
