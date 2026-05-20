@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}about{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 48rem;">
+  <h1>About llmpuffin</h1>
+  <div class="card">
+    <p>
+      <strong>llmpuffin</strong> is an agentic codebase security review harness.
+      It runs LLM agents inside Podman containers to audit codebases against a
+      declarative TOML threat model (TRAIL methodology), producing SARIF reports
+      with findings linked back to threat scenarios.
+    </p>
+    <h3>References</h3>
+    <ul>
+      <li><a href="https://blog.trailofbits.com/2025/02/28/threat-modeling-the-trail-of-bits-way/" target="_blank" rel="noopener">TRAIL methodology — Trail of Bits</a></li>
+      <li><a href="https://parallel.ai/articles/what-is-an-agent-harness" target="_blank" rel="noopener">What is an agent harness?</a></li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

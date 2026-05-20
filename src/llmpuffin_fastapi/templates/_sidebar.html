@@ -1,0 +1,83 @@
+{# Floating sidebar. Active state computed from request.url.path. #}
+{% set path = request.url.path %}
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo"></div>
+    <div class="sidebar-wordmark">llmpuffin</div>
+    <button class="sidebar-toggle" data-sidebar-toggle title="Toggle sidebar">
+      <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2"/>
+        <path d="M9 3v18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="sidebar-section">
+    <a class="sidebar-item primary" href="/profiles/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"/><path d="M12 5v14"/>
+      </svg>
+      <span class="label">New audit</span>
+    </a>
+  </div>
+
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-section">
+    <a class="sidebar-item {% if path == '/profiles/' or path == '/' %}active{% endif %}" href="/profiles/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      </svg>
+      <span class="label">Profiles</span>
+    </a>
+    <a class="sidebar-item {% if path == '/runs/' or path.startswith('/runs/') %}active{% endif %}" href="/runs/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <span class="label">Runs</span>
+    </a>
+    <a class="sidebar-item {% if path.startswith('/findings') %}active{% endif %}" href="/findings/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 2h8"/><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2"/>
+      </svg>
+      <span class="label">Findings</span>
+    </a>
+    <a class="sidebar-item {% if path.startswith('/checkpoints') %}active{% endif %}" href="/checkpoints/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="6" x2="6" y1="3" y2="15"/>
+        <circle cx="18" cy="6" r="3"/>
+        <circle cx="6" cy="18" r="3"/>
+        <path d="M18 9a9 9 0 0 1-9 9"/>
+      </svg>
+      <span class="label">Checkpoints</span>
+    </a>
+    <a class="sidebar-item {% if path.startswith('/store') %}active{% endif %}" href="/store/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+        <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
+        <path d="M3 12A9 3 0 0 0 21 12"/>
+      </svg>
+      <span class="label">Store</span>
+    </a>
+  </div>
+
+  <div class="sidebar-spacer"></div>
+
+  <div class="sidebar-section">
+    <a class="sidebar-item {% if path.startswith('/about') %}active{% endif %}" href="/about/">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 16v-4"/><path d="M12 8h.01"/>
+      </svg>
+      <span class="label">About</span>
+    </a>
+  </div>
+</aside>

@@ -1,34 +1,47 @@
 {% extends "base.html" %}
 {% block title %}profiles{% endblock %}
 {% block content %}
-<h1>audit profiles</h1>
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>Profiles</h1>
+  <a href="#create" class="btn primary">+ New profile</a>
+</div>
 
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if success %}<p class="success">{{ success }}</p>{% endif %}
 
+<div class="card mt-4" style="padding: 0;">
 <table>
-<tr><th>Name</th><th>Image</th><th>Updated</th><th></th></tr>
+<thead>
+  <tr><th>Name</th><th>Image</th><th>Updated</th><th></th></tr>
+</thead>
+<tbody>
 {% for p in profiles %}
 <tr>
   <td><a href="/profiles/{{ p.id }}/">{{ p.name }}</a></td>
-  <td>{{ p.image }}</td>
-  <td>{{ p.updated_at | datetimefmt }}</td>
+  <td class="mono text-xs text-muted">{{ p.image }}</td>
+  <td class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
   <td>
     <form method="post" action="/profiles/{{ p.id }}/run/" class="inline">
-      <button type="submit">run</button>
+      <button type="submit" class="primary">run</button>
     </form>
   </td>
 </tr>
 {% else %}
-<tr><td colspan="4">No profiles yet.</td></tr>
+<tr><td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">No profiles yet. Create one below to get started.</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 
-<h2>create profile</h2>
-<form method="post" action="/profiles/create/">
-  <p><label>Name: <input type="text" name="name" required></label></p>
-  <p><label>Config (TOML):</label></p>
-  <textarea name="profile_toml" rows="16" required>
+<h2 id="create">Create profile</h2>
+<form method="post" action="/profiles/create/" class="card col gap-3" style="max-width: 56rem;">
+  <div>
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" required>
+  </div>
+  <div>
+    <label for="profile_toml">Config (TOML)</label>
+    <textarea name="profile_toml" id="profile_toml" rows="16" required>
 [audit]
 name = "vulnerable-app"
 image = "llmpuffin-vulnerable-app"
@@ -41,6 +54,7 @@ output = "examples/vulnerable-app/results.sarif"
 [agent]
 skills_dir = "vendor/trailofbits-skills/plugins"
 </textarea>
-  <p><button type="submit">create</button></p>
+  </div>
+  <div><button type="submit" class="primary">Create</button></div>
 </form>
 {% endblock %}

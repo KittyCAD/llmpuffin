@@ -1,72 +1,139 @@
 {% extends "base.html" %}
 {% block title %}run {{ run.id }}{% endblock %}
 {% block content %}
-<p><a href="/">← all runs</a></p>
-<h1>Run {{ run.id }}</h1>
+{% set tab = request.query_params.get('tab') or 'threads' %}
 
-{% if success %}<p class="success">{{ success }}</p>{% endif %}
+<p><a href="/runs/">← all runs</a></p>
 
-<table>
-<tr><th>Profile</th><td>{% if run.profile %}<a href="/profiles/{{ run.profile_id }}/">{{ run.profile.name }}</a>{% else %}—{% endif %}</td></tr>
-<tr><th>Image</th><td>{{ run.container_image }}</td></tr>
-<tr><th>Model</th><td>{{ run.model_name }}</td></tr>
-<tr><th>Repo</th><td>{% if run.github_repo_url %}<a href="{{ run.github_repo_url }}" target="_blank" rel="noopener">{{ run.github_repo_url }}</a>{% else %}—{% endif %}</td></tr>
-<tr><th>Commit</th><td>{% if run.git_commit %}{% if run.github_repo_url %}<a href="{{ run.github_repo_url.rstrip('/') }}/commit/{{ run.git_commit }}" target="_blank" rel="noopener"><code>{{ run.git_commit | truncatechars(12) }}</code></a>{% else %}<code>{{ run.git_commit | truncatechars(12) }}</code>{% endif %}{% else %}—{% endif %}</td></tr>
-<tr><th>Status</th><td>{{ run.status }}</td></tr>
-{% if run.error %}<tr><th>Error</th><td>{{ run.error }}</td></tr>{% endif %}
-<tr><th>Started</th><td>{{ run.started_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
-<tr><th>Finished</th><td>{{ (run.finished_at | datetimefmt("%Y-%m-%d %H:%M:%S")) or "—" }}</td></tr>
-</table>
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>
+    Run #{{ run.id }}
+    {% if run.profile %}
+      <span class="text-muted" style="font-weight: 400;">— {{ run.profile.name }}</span>
+    {% endif %}
+  </h1>
+  <div class="row gap-2">
+    {% if run.status == "running" %}
+      <span class="badge primary"><span class="dot"></span>running</span>
+    {% elif run.status == "completed" %}
+      <span class="badge success"><span class="dot"></span>completed</span>
+    {% elif run.status == "failed" %}
+      <span class="badge destructive"><span class="dot"></span>failed</span>
+    {% else %}
+      <span class="badge outline">{{ run.status }}</span>
+    {% endif %}
+    {% if run.status != "running" %}
+      <form method="post" action="/runs/{{ run.id }}/delete/" class="inline">
+        <button type="submit" class="destructive" onclick="return confirm('Delete this run and all its findings?')">delete</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
 
-{% if run.status != "running" %}
-<form method="post" action="/runs/{{ run.id }}/delete/" style="margin-top:1em">
-  <button type="submit" onclick="return confirm('Delete this run and all its findings?')">delete run</button>
-</form>
+{% if success %}<p class="success mt-2">{{ success }}</p>{% endif %}
+{% if error %}<p class="error mt-2">{{ error }}</p>{% endif %}
+
+{# ─── Tabs ─── #}
+<div class="tabs mt-4">
+  <a class="tab {% if tab == 'threads' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=threads">
+    Threads <span class="tab-count">{{ threads|length }}</span>
+  </a>
+  <a class="tab {% if tab == 'findings' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=findings">
+    Findings <span class="tab-count">{{ findings|length }}</span>
+  </a>
+  <a class="tab {% if tab == 'config' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=config">
+    Config
+  </a>
+</div>
+
+{# ─── Threads tab ─── #}
+{% if tab == 'threads' %}
+  <div class="card" style="padding: 0;">
+  <table>
+  <thead>
+    <tr><th>Thread</th><th>Container</th><th>Status</th><th>Created</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for t in threads %}
+  <tr>
+    <td><a href="/checkpoints/{{ t.thread_id }}/" class="mono text-xs">{{ t.thread_id | truncatechars(16) }}</a></td>
+    <td>{% if t.container_id %}<code class="mono text-xs">{{ t.container_id | truncatechars(12) }}</code>{% else %}—{% endif %}</td>
+    <td>
+      {% if t.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
+      {% elif t.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
+      {% elif t.status == "failed" %}<span class="badge destructive"><span class="dot"></span>failed</span>
+      {% elif t.status == "aborted" %}<span class="badge warning"><span class="dot"></span>aborted</span>
+      {% else %}<span class="badge outline">{{ t.status }}</span>{% endif %}
+      {% if t.error %}<div class="text-xs error mt-1">{{ t.error | truncatechars(80) }}</div>{% endif %}
+    </td>
+    <td class="text-muted text-xs">{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
+    <td>
+      {% if t.status != "running" %}
+      <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" class="row gap-2" style="margin-bottom: 0.25rem;">
+        <input type="text" name="message" placeholder="optional message" style="max-width: 16rem;">
+        <button type="submit">resume</button>
+      </form>
+      <form method="post" action="/runs/{{ run.id }}/fork/{{ t.thread_id }}/" class="row gap-2">
+        <input type="text" name="message" placeholder="message for fork" required style="max-width: 16rem;">
+        <button type="submit">fork</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">No threads yet.</td></tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
 {% endif %}
 
-<h2>threads</h2>
-<table>
-<tr><th>Thread ID</th><th>Container</th><th>Status</th><th>Created</th><th></th></tr>
-{% for t in threads %}
-<tr>
-  <td><a href="/checkpoints/{{ t.thread_id }}/">{{ t.thread_id }}</a></td>
-  <td>{% if t.container_id %}<code>{{ t.container_id | truncatechars(12) }}</code>{% else %}—{% endif %}</td>
-  <td>{{ t.status }}{% if t.error %} <span class="error">({{ t.error | truncatechars(60) }})</span>{% endif %}</td>
-  <td>{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
-  <td>
-    {% if t.status != "running" %}
-    <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" style="margin-bottom:0.3em">
-      <input type="text" name="message" placeholder="optional message" style="width:16em">
-      <button type="submit">resume</button>
-    </form>
-    <form method="post" action="/runs/{{ run.id }}/fork/{{ t.thread_id }}/">
-      <input type="text" name="message" placeholder="message for fork" required style="width:16em">
-      <button type="submit">fork</button>
-    </form>
-    {% endif %}
-  </td>
-</tr>
-{% else %}
-<tr><td colspan="5">No threads yet.</td></tr>
-{% endfor %}
-</table>
+{# ─── Findings tab ─── #}
+{% if tab == 'findings' %}
+  {% if findings %}
+  <div class="card" style="padding: 0;">
+  <table>
+  <thead>
+    <tr><th>#</th><th>Title</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Validated</th><th>Thread</th></tr>
+  </thead>
+  <tbody>
+  {% for f in findings %}
+  <tr{% if f.deleted %} style="opacity:0.5"{% endif %}>
+    <td><a href="/findings/{{ f.id }}/">{{ f.local_id }}</a></td>
+    <td><a href="/findings/{{ f.id }}/">{{ (f.title or f.description) | truncatechars(80) }}</a></td>
+    <td class="text-xs text-muted">{{ f.scenario_id }}</td>
+    <td><span class="badge sev-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+    <td>{{ f.difficulty }}</td>
+    <td>{% if f.validated %}<span class="badge success">yes</span>{% else %}<span class="badge outline">no</span>{% endif %}</td>
+    <td>{% if f.thread_id %}<a href="/checkpoints/{{ f.thread_id }}/" class="mono text-xs">{{ f.thread_id | truncatechars(12) }}</a>{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted">No findings yet.</p>
+  {% endif %}
+{% endif %}
 
-{% if findings %}
-<h2>findings ({{ findings|length }})</h2>
-<table>
-<tr><th>ID</th><th>Title</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Validated</th><th>Deleted</th><th>Thread</th></tr>
-{% for f in findings %}
-<tr{% if f.deleted %} style="opacity:0.5"{% endif %}>
-  <td><a href="/findings/{{ f.id }}/">{{ f.local_id }}</a></td>
-  <td>{{ (f.title or f.description) | truncatechars(80) }}</td>
-  <td>{{ f.scenario_id }}</td>
-  <td>{{ f.severity }}</td>
-  <td>{{ f.difficulty }}</td>
-  <td>{% if f.validated %}yes{% else %}no{% endif %}</td>
-  <td>{% if f.deleted %}yes{% else %}no{% endif %}</td>
-  <td>{% if f.thread_id %}<a href="/checkpoints/{{ f.thread_id }}/">{{ f.thread_id }}</a>{% else %}—{% endif %}</td>
-</tr>
-{% endfor %}
-</table>
+{# ─── Config tab ─── #}
+{% if tab == 'config' %}
+  <div class="card col gap-2">
+    <div class="row gap-4" style="flex-wrap: wrap;">
+      <div><div class="text-xs text-muted">Profile</div>{% if run.profile %}<a href="/profiles/{{ run.profile_id }}/">{{ run.profile.name }}</a>{% else %}—{% endif %}</div>
+      <div><div class="text-xs text-muted">Model</div><span class="mono text-sm">{{ run.model_name }}</span></div>
+      <div><div class="text-xs text-muted">Image</div><span class="mono text-sm">{{ run.container_image }}</span></div>
+      <div><div class="text-xs text-muted">Repo</div>{% if run.github_repo_url %}<a href="{{ run.github_repo_url }}" target="_blank" rel="noopener">{{ run.github_repo_url }}</a>{% else %}—{% endif %}</div>
+      <div><div class="text-xs text-muted">Commit</div>{% if run.git_commit %}{% if run.github_repo_url %}<a href="{{ run.github_repo_url.rstrip('/') }}/commit/{{ run.git_commit }}" target="_blank" rel="noopener"><code>{{ run.git_commit | truncatechars(12) }}</code></a>{% else %}<code>{{ run.git_commit | truncatechars(12) }}</code>{% endif %}{% else %}—{% endif %}</div>
+      <div><div class="text-xs text-muted">Started</div><span class="text-sm">{{ run.started_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span></div>
+      <div><div class="text-xs text-muted">Finished</div><span class="text-sm">{{ (run.finished_at | datetimefmt("%Y-%m-%d %H:%M:%S")) or "—" }}</span></div>
+    </div>
+    {% if run.error %}<div class="error mt-2">{{ run.error }}</div>{% endif %}
+  </div>
+
+  {% if run.profile_toml or (run.profile and run.profile.profile_toml) %}
+  <h3>Profile TOML</h3>
+  <pre class="card mono text-xs">{{ run.profile_toml or run.profile.profile_toml }}</pre>
+  {% endif %}
 {% endif %}
 {% endblock %}

@@ -14,7 +14,7 @@ from llmpuffin.db import setup_db
 from llmpuffin.log import setup as setup_logging
 
 from llmpuffin_fastapi.deps import _tasks
-from llmpuffin_fastapi.routes import checkpoints, findings, profiles, runs
+from llmpuffin_fastapi.routes import about, checkpoints, findings, profiles, runs
 from llmpuffin_fastapi.routes import store as store_routes
 
 log = logging.getLogger("llmpuffin")
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(checkpoints.router)
     app.include_router(findings.router)
     app.include_router(store_routes.router)
+    app.include_router(about.router)
     return app
 
 

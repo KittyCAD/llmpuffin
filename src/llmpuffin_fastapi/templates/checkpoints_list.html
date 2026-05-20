@@ -1,17 +1,30 @@
 {% extends "base.html" %}
 {% block title %}checkpoints{% endblock %}
 {% block content %}
-<h1>checkpoints</h1>
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>Checkpoints</h1>
+  <span class="text-muted text-sm">{{ sessions|length }} thread{{ sessions|pluralize }}</span>
+</div>
+
+<div class="card mt-4" style="padding: 0;">
 <table>
-<tr><th>Thread ID</th><th>Checkpoints</th><th>Status</th></tr>
+<thead><tr><th>Thread</th><th>Checkpoints</th><th>Status</th></tr></thead>
+<tbody>
 {% for s in sessions %}
 <tr>
-  <td><a href="/checkpoints/{{ s.thread_id }}/">{{ s.thread_id }}</a></td>
+  <td><a href="/checkpoints/{{ s.thread_id }}/" class="mono text-xs">{{ s.thread_id }}</a></td>
   <td>{{ s.steps }}</td>
-  <td>{{ s.status or "—" }}</td>
+  <td>
+    {% if s.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
+    {% elif s.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
+    {% elif s.status %}<span class="badge outline">{{ s.status }}</span>
+    {% else %}—{% endif %}
+  </td>
 </tr>
 {% else %}
-<tr><td colspan="3">No checkpoints yet.</td></tr>
+<tr><td colspan="3" class="text-muted" style="text-align: center; padding: 2rem;">No checkpoints yet.</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endblock %}

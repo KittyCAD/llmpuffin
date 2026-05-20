@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 {% block title %}store{% endblock %}
 {% block content %}
-<h1>Store namespaces</h1>
+<h1>Store</h1>
+
+<div class="card mt-4" style="padding: 0;">
 <table>
-<tr><th>Namespace</th><th>Items</th></tr>
+<thead><tr><th>Namespace</th><th>Items</th></tr></thead>
+<tbody>
 {% for ns in namespaces %}
 <tr>
-  <td><a href="/store/{{ ns.prefix }}/">{{ ns.prefix }}</a></td>
+  <td><a href="/store/{{ ns.prefix }}/" class="mono text-xs">{{ ns.prefix }}</a></td>
   <td>{{ ns.count }}</td>
 </tr>
 {% else %}
-<tr><td colspan="2">Store is empty.</td></tr>
+<tr><td colspan="2" class="text-muted" style="text-align: center; padding: 2rem;">Store is empty.</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endblock %}

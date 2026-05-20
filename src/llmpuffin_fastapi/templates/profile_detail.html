@@ -2,35 +2,50 @@
 {% block title %}{{ profile.name }}{% endblock %}
 {% block content %}
 <p><a href="/profiles/">← all profiles</a></p>
-<h1>{{ profile.name }}</h1>
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>{{ profile.name }}</h1>
+  <form method="post" action="/profiles/{{ profile.id }}/run/" class="inline">
+    <button type="submit" class="primary">run audit</button>
+  </form>
+</div>
 
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if success %}<p class="success">{{ success }}</p>{% endif %}
 
-<form method="post" action="/profiles/{{ profile.id }}/">
-  <p><label>Name: <input type="text" name="name" value="{{ profile.name }}" required></label></p>
-  <p><label>Config (TOML):</label></p>
-  <textarea name="profile_toml" rows="20" required>{{ profile.profile_toml }}</textarea>
-  <p><button type="submit">save</button></p>
-</form>
-
-<form method="post" action="/profiles/{{ profile.id }}/run/">
-  <p><button type="submit">run audit</button></p>
+<form method="post" action="/profiles/{{ profile.id }}/" class="card col gap-3 mt-4" style="max-width: 64rem;">
+  <div>
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" value="{{ profile.name }}" required>
+  </div>
+  <div>
+    <label for="profile_toml">Config (TOML)</label>
+    <textarea name="profile_toml" id="profile_toml" rows="20" required>{{ profile.profile_toml }}</textarea>
+  </div>
+  <div><button type="submit" class="primary">Save</button></div>
 </form>
 
 {% if runs %}
-<h2>runs</h2>
+<h2>Runs</h2>
+<div class="card" style="padding: 0;">
 <table>
-<tr><th>Run</th><th>Status</th><th>Model</th><th>Started</th><th>Finished</th></tr>
+<thead><tr><th>#</th><th>Status</th><th>Model</th><th>Started</th><th>Finished</th></tr></thead>
+<tbody>
 {% for r in runs %}
 <tr>
-  <td><a href="/runs/{{ r.id }}/">{{ r.id }}</a></td>
-  <td>{{ r.status }}</td>
-  <td>{{ r.model_name }}</td>
-  <td>{{ r.started_at | datetimefmt }}</td>
-  <td>{{ (r.finished_at | datetimefmt) or "—" }}</td>
+  <td><a href="/runs/{{ r.id }}/">#{{ r.id }}</a></td>
+  <td>
+    {% if r.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
+    {% elif r.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
+    {% elif r.status == "failed" %}<span class="badge destructive"><span class="dot"></span>failed</span>
+    {% else %}<span class="badge outline">{{ r.status }}</span>{% endif %}
+  </td>
+  <td class="mono text-xs text-muted">{{ r.model_name }}</td>
+  <td class="text-muted text-xs">{{ r.started_at | datetimefmt }}</td>
+  <td class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
 </tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endif %}
 {% endblock %}

@@ -1,42 +1,52 @@
 {% extends "base.html" %}
 {% block title %}{{ finding.rule_id }}{% endblock %}
 {% block content %}
-<p><a href="/runs/{{ finding.audit_run_id }}/">← run {{ finding.audit_run_id }}</a></p>
-<h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
+<p><a href="/runs/{{ finding.audit_run_id }}/">← run #{{ finding.audit_run_id }}</a></p>
+
+<div class="row" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
+  <h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
+  <div class="row gap-2">
+    <span class="badge sev-{{ finding.severity|lower }}">{{ finding.severity }}</span>
+    <span class="badge outline">{{ finding.difficulty }}</span>
+    {% if finding.validated %}<span class="badge success"><span class="dot"></span>validated</span>{% endif %}
+  </div>
+</div>
 
 {% if finding.github_issue_url %}
-<p>
+<p class="mt-2">
   GitHub issue: <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener">{{ finding.github_issue_url }}</a>
   {% if github_configured %}
-  <form method="post" action="/findings/{{ finding.id }}/issue/" style="display:inline; margin-left:0.5em">
+  <form method="post" action="/findings/{{ finding.id }}/issue/" class="inline" style="margin-left:0.5em">
     <button type="submit" onclick="return confirm('Update the GitHub issue title and body?')">update issue</button>
   </form>
   {% endif %}
 </p>
 {% elif github_configured %}
-<form method="post" action="/findings/{{ finding.id }}/issue/" style="display:inline">
-  <button type="submit" onclick="return confirm('Create a GitHub issue for this finding?')">create GitHub issue</button>
+<form method="post" action="/findings/{{ finding.id }}/issue/" class="inline mt-2">
+  <button type="submit" class="primary" onclick="return confirm('Create a GitHub issue for this finding?')">create GitHub issue</button>
 </form>
 {% endif %}
 
-{% if success %}<p class="success">{{ success }}</p>{% endif %}
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if success %}<p class="success mt-2">{{ success }}</p>{% endif %}
+{% if error %}<p class="error mt-2">{{ error }}</p>{% endif %}
 
+<div class="card mt-4" style="padding: 0;">
 <table>
 <tr><th>Scenario</th><td>{{ finding.scenario_id }}</td></tr>
-<tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
+<tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/" class="mono text-xs">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
 <tr><th>Severity</th><td>{{ finding.severity }}</td></tr>
 <tr><th>Difficulty</th><td>{{ finding.difficulty }}</td></tr>
 <tr><th>Validated</th><td>{% if finding.validated %}yes{% else %}no{% endif %}</td></tr>
 <tr><th>Created</th><td>{{ finding.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
 {% if finding.fork_thread_id %}
-<tr><th>Fork</th><td><a href="/checkpoints/{{ finding.fork_thread_id }}/">{{ finding.fork_thread_id }}</a></td></tr>
+<tr><th>Fork</th><td><a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id }}</a></td></tr>
 {% endif %}
 </table>
+</div>
 
 {% if finding.thread_id and not finding.fork_thread_id %}
-<form method="post" action="/findings/{{ finding.id }}/fork/" style="margin-top:1em">
-  <input type="text" name="message" placeholder="optional instructions for the fork" style="width:24em">
+<form method="post" action="/findings/{{ finding.id }}/fork/" class="row gap-2 mt-4">
+  <input type="text" name="message" placeholder="optional instructions for the fork" style="max-width: 24rem;">
   <button type="submit">fork conversation</button>
 </form>
 {% endif %}
@@ -49,23 +59,25 @@
 {% endif %}
 
 {% if locations %}
-<h2>locations</h2>
+<h2>Locations</h2>
+<div class="card" style="padding: 0;">
 <table>
-<tr><th>Location</th></tr>
+<thead><tr><th>Location</th></tr></thead>
+<tbody>
 {% for loc in locations %}
-<tr>
-  <td>{{ location_link(loc, audit_run) }}</td>
-</tr>
+<tr><td class="mono text-xs">{{ location_link(loc, audit_run) }}</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endif %}
 
-<h2>description</h2>
-<div class="markdown">{{ finding.description | md }}</div>
+<h2>Description</h2>
+<div class="card markdown">{{ finding.description | md }}</div>
 
-<h2>impact</h2>
-<div class="markdown">{{ finding.impact | md }}</div>
+<h2>Impact</h2>
+<div class="card markdown">{{ finding.impact | md }}</div>
 
-<h2>recommendations</h2>
-<div class="markdown">{{ finding.recommendations | md }}</div>
+<h2>Recommendations</h2>
+<div class="card markdown">{{ finding.recommendations | md }}</div>
 {% endblock %}

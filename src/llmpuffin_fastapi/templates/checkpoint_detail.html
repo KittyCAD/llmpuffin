@@ -6,9 +6,9 @@
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
 {% if audit_thread and audit_thread.status != "running" %}
-<form method="post" action="/checkpoints/{{ session.thread_id }}/resume/" style="margin-bottom:1.5em">
-  <input type="text" name="message" placeholder="Send a message to resume this thread..." style="width:40em" required>
-  <button type="submit">send</button>
+<form method="post" action="/checkpoints/{{ session.thread_id }}/resume/" class="row gap-2" style="margin-bottom:1.5em">
+  <input type="text" name="message" placeholder="Send a message to resume this thread..." required>
+  <button type="submit" class="primary">send</button>
 </form>
 {% endif %}
 

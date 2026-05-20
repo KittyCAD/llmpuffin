@@ -1,24 +1,54 @@
 {% extends "base.html" %}
-{% block title %}audit runs{% endblock %}
+{% block title %}runs{% endblock %}
 {% block content %}
-<h1>audit runs</h1>
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>Runs</h1>
+  <span class="text-muted text-sm">{{ runs|length }} total</span>
+</div>
+
+<div class="card mt-4" style="padding: 0;">
 <table>
-<tr><th>Run</th><th>Profile</th><th>Image</th><th>Model</th><th>Status</th><th>Threads</th><th>Findings</th><th>Started</th><th>Finished</th><th></th></tr>
+<thead>
+  <tr>
+    <th>#</th><th>Profile</th><th>Image</th><th>Model</th>
+    <th>Status</th><th>Threads</th><th>Findings</th>
+    <th>Started</th><th>Finished</th><th></th>
+  </tr>
+</thead>
+<tbody>
 {% for r in runs %}
 <tr>
-  <td><a href="/runs/{{ r.id }}/">{{ r.id }}</a></td>
-  <td>{{ r.profile.name }}</td>
-  <td>{{ r.container_image }}</td>
-  <td>{{ r.model_name }}</td>
-  <td>{{ r.status }}</td>
+  <td><a href="/runs/{{ r.id }}/">#{{ r.id }}</a></td>
+  <td>{% if r.profile %}<a href="/profiles/{{ r.profile.id }}/">{{ r.profile.name }}</a>{% else %}—{% endif %}</td>
+  <td class="mono text-xs text-muted">{{ r.container_image | truncatechars(40) }}</td>
+  <td class="mono text-xs text-muted">{{ r.model_name | truncatechars(28) }}</td>
+  <td>
+    {% if r.status == "running" %}
+      <span class="badge primary"><span class="dot"></span>running</span>
+    {% elif r.status == "completed" %}
+      <span class="badge success"><span class="dot"></span>completed</span>
+    {% elif r.status == "failed" %}
+      <span class="badge destructive"><span class="dot"></span>failed</span>
+    {% else %}
+      <span class="badge outline">{{ r.status }}</span>
+    {% endif %}
+  </td>
   <td>{{ r.thread_count }}</td>
   <td>{{ r.finding_count }}</td>
-  <td>{{ r.started_at | datetimefmt }}</td>
-  <td>{{ (r.finished_at | datetimefmt) or "—" }}</td>
-  <td>{% if r.status != "running" %}<form method="post" action="/runs/{{ r.id }}/delete/" style="display:inline"><button type="submit" onclick="return confirm('Delete this run?')">delete</button></form>{% endif %}</td>
+  <td class="text-muted text-xs">{{ r.started_at | datetimefmt }}</td>
+  <td class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
+  <td>
+    {% if r.status != "running" %}
+      <form method="post" action="/runs/{{ r.id }}/delete/" class="inline">
+        <button type="submit" class="destructive" onclick="return confirm('Delete this run?')">delete</button>
+      </form>
+    {% endif %}
+  </td>
 </tr>
 {% else %}
-<tr><td colspan="10">No runs yet.</td></tr>
+<tr><td colspan="10" class="text-muted" style="text-align: center; padding: 2rem;">No runs yet — start an audit from <a href="/profiles/">Profiles</a>.</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endblock %}

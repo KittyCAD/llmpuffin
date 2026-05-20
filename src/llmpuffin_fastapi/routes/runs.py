@@ -24,7 +24,12 @@ log = logging.getLogger("llmpuffin")
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/")
+async def root_redirect():
+    return RedirectResponse("/profiles/", status_code=303)
+
+
+@router.get("/runs/", response_class=HTMLResponse)
 async def runs_list(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
     rows = (
         (
@@ -122,7 +127,7 @@ async def run_delete(run_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
         )
     await db.delete(run)
     await db.commit()
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/runs/", status_code=303)
 
 
 def _toml_for_run(run: AuditRun) -> str:

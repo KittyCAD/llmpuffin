@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import distinct, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +16,7 @@ from llmpuffin.agent import fork_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.db import async_session
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditRun, AuditThread, Finding
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 
 from llmpuffin_fastapi.deps import get_db, spawn_audit
 from llmpuffin_fastapi.github import create_issue, update_issue
@@ -24,6 +24,115 @@ from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
 router = APIRouter()
+
+
+@router.get("/findings/", response_class=HTMLResponse)
+async def findings_list(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    profile_id: str = "",
+    severity: str = "",
+    difficulty: str = "",
+    validated: str = "",  # "yes" | "no" | ""
+    has_issue: str = "",  # "yes" | "no" | ""
+    q: str = "",
+):
+    profile_id_int: int | None
+    try:
+        profile_id_int = int(profile_id) if profile_id else None
+    except ValueError:
+        profile_id_int = None
+
+    stmt = (
+        select(Finding)
+        .options(selectinload(Finding.audit_run).selectinload(AuditRun.profile))
+        .where(Finding.deleted.is_(False))
+        .order_by(Finding.created_at.desc())
+    )
+    if profile_id_int is not None:
+        stmt = stmt.join(AuditRun, Finding.audit_run_id == AuditRun.id).where(
+            AuditRun.profile_id == profile_id_int
+        )
+    if severity:
+        stmt = stmt.where(Finding.severity == severity)
+    if difficulty:
+        stmt = stmt.where(Finding.difficulty == difficulty)
+    if validated == "yes":
+        stmt = stmt.where(Finding.validated.is_(True))
+    elif validated == "no":
+        stmt = stmt.where(Finding.validated.is_(False))
+    if has_issue == "yes":
+        stmt = stmt.where(Finding.github_issue_url != "")
+    elif has_issue == "no":
+        stmt = stmt.where(Finding.github_issue_url == "")
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Finding.title.ilike(pattern),
+                Finding.rule_id.ilike(pattern),
+                Finding.scenario_id.ilike(pattern),
+            )
+        )
+
+    findings = (await db.execute(stmt)).scalars().all()
+
+    # Collect filter-option facets.
+    profiles = (
+        (await db.execute(select(AuditProfile).order_by(AuditProfile.name)))
+        .scalars()
+        .all()
+    )
+    severities = [
+        s
+        for (s,) in (
+            await db.execute(
+                select(distinct(Finding.severity))
+                .where(Finding.deleted.is_(False))
+                .where(Finding.severity != "")
+            )
+        ).all()
+    ]
+    difficulties = [
+        d
+        for (d,) in (
+            await db.execute(
+                select(distinct(Finding.difficulty))
+                .where(Finding.deleted.is_(False))
+                .where(Finding.difficulty != "")
+            )
+        ).all()
+    ]
+
+    # Severity counts (for the chip row).
+    sev_counts_rows = (
+        await db.execute(
+            select(Finding.severity, func.count(Finding.id))
+            .where(Finding.deleted.is_(False))
+            .group_by(Finding.severity)
+        )
+    ).all()
+    sev_counts = {s or "": n for s, n in sev_counts_rows}
+
+    return templates.TemplateResponse(
+        request,
+        "findings_list.html",
+        {
+            "findings": findings,
+            "profiles": profiles,
+            "severities": sorted(severities),
+            "difficulties": sorted(difficulties),
+            "sev_counts": sev_counts,
+            "filters": {
+                "profile_id": profile_id_int,
+                "severity": severity,
+                "difficulty": difficulty,
+                "validated": validated,
+                "has_issue": has_issue,
+                "q": q,
+            },
+        },
+    )
 
 
 async def _get_finding(db: AsyncSession, finding_id: int) -> Finding | None:
