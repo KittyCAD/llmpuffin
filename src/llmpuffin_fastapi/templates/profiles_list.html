@@ -6,9 +6,6 @@
   <a href="#create" class="btn primary">+ New profile</a>
 </div>
 
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
-{% if success %}<p class="success">{{ success }}</p>{% endif %}
-
 <div class="card mt-4" style="padding: 0;">
 <table>
 <thead>
@@ -21,7 +18,7 @@
   <td class="mono text-xs text-muted">{{ p.image }}</td>
   <td class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
   <td>
-    <form method="post" action="/profiles/{{ p.id }}/run/" class="inline">
+    <form hx-post="/profiles/{{ p.id }}/run/" hx-disabled-elt="find button" class="inline">
       <button type="submit" class="primary">run</button>
     </form>
   </td>
@@ -34,7 +31,7 @@
 </div>
 
 <h2 id="create">Create profile</h2>
-<form method="post" action="/profiles/create/" class="card col gap-3" style="max-width: 56rem;">
+<form hx-post="/profiles/create/" hx-disabled-elt="find button, find input, find textarea" class="card col gap-3" style="max-width: 56rem;">
   <div>
     <label for="name">Name</label>
     <input type="text" name="name" id="name" required>

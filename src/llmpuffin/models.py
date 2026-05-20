@@ -13,6 +13,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -21,6 +22,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+
+SEVERITY_LEVELS = ("low", "medium", "high", "informational")
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -217,6 +220,10 @@ class Finding(Base):
     __table_args__ = (
         UniqueConstraint(
             "audit_run_id", "local_id", name="uq_finding_audit_run_local_id"
+        ),
+        CheckConstraint(
+            "severity IN ('low', 'medium', 'high', 'informational')",
+            name="ck_finding_severity",
         ),
     )
 

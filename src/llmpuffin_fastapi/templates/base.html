@@ -448,6 +448,54 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+
+  {# ───────── Toast container ───────── #}
+  <div id="toasts" aria-live="polite" aria-atomic="true"></div>
+  <style>
+    #toasts {
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-width: 26rem;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      background: hsl(var(--card));
+      border: 1px solid hsl(var(--border));
+      border-left-width: 3px;
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      opacity: 0;
+      transform: translateY(0.5rem);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      display: flex;
+      gap: 0.625rem;
+      align-items: flex-start;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { border-left-color: hsl(142 71% 45%); }
+    .toast.error   { border-left-color: hsl(var(--destructive)); }
+    .toast.info    { border-left-color: hsl(var(--primary)); }
+    .toast .toast-msg { flex: 1; white-space: pre-wrap; word-break: break-word; }
+    .toast .toast-close {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: hsl(var(--muted-foreground));
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .toast .toast-close:hover { color: hsl(var(--foreground)); }
+  </style>
+
   <script>
     // Sidebar toggle handler.
     document.addEventListener("click", function(e) {
@@ -457,6 +505,100 @@
       var collapsed = html.classList.toggle("__sidebar-collapsed");
       try { localStorage.setItem("llmpuffin.sidebar.collapsed", collapsed ? "1" : "0"); } catch (e) {}
     });
+
+    // Toast helper — shows a transient toast in #toasts.
+    window.showToast = function(level, message) {
+      var container = document.getElementById("toasts");
+      if (!container) return;
+      var el = document.createElement("div");
+      el.className = "toast " + (level || "info");
+      var msg = document.createElement("div");
+      msg.className = "toast-msg";
+      msg.textContent = message;
+      var close = document.createElement("button");
+      close.type = "button";
+      close.className = "toast-close";
+      close.setAttribute("aria-label", "Dismiss");
+      close.textContent = "×";
+      var dismiss = function() {
+        el.classList.remove("show");
+        setTimeout(function() { el.remove(); }, 200);
+      };
+      close.addEventListener("click", dismiss);
+      el.appendChild(msg);
+      el.appendChild(close);
+      container.appendChild(el);
+      // Force reflow then animate in.
+      void el.offsetWidth;
+      el.classList.add("show");
+      setTimeout(dismiss, 4500);
+    };
+
+    // HTMX-driven toasts (HX-Trigger: {"toast": {"level": "...", "message": "..."}}).
+    document.body.addEventListener("toast", function(e) {
+      var d = e.detail || {};
+      window.showToast(d.level || "info", d.message || "");
+    });
+    // If a response carries both HX-Trigger (toast) and HX-Location (navigation),
+    // stash the toast so it appears after the page loads.
+    document.body.addEventListener("htmx:beforeOnLoad", function(e) {
+      var xhr = e.detail && e.detail.xhr;
+      if (!xhr || !xhr.getResponseHeader) return;
+      var trigger = xhr.getResponseHeader("HX-Trigger");
+      var location = xhr.getResponseHeader("HX-Location");
+      if (trigger && location) {
+        try {
+          var parsed = JSON.parse(trigger);
+          if (parsed && parsed.toast) {
+            sessionStorage.setItem(
+              "llmpuffin.pendingToast", JSON.stringify(parsed.toast)
+            );
+          }
+        } catch (e) {}
+      }
+    });
+    // Surface a stashed toast on page load.
+    (function() {
+      try {
+        var pending = JSON.parse(
+          sessionStorage.getItem("llmpuffin.pendingToast") || "null"
+        );
+        if (pending) {
+          sessionStorage.removeItem("llmpuffin.pendingToast");
+          window.showToast(pending.level, pending.message);
+        }
+      } catch (e) {}
+    })();
+
+    // Surface server-side errors from htmx (non-2xx, network).
+    document.body.addEventListener("htmx:responseError", function(e) {
+      var xhr = e.detail && e.detail.xhr;
+      window.showToast("error", "Request failed" + (xhr ? " (" + xhr.status + ")" : ""));
+    });
+    document.body.addEventListener("htmx:sendError", function() {
+      window.showToast("error", "Network error");
+    });
+
+    // On initial page load, show any ?success=…/?error=… params as toasts (and strip from URL).
+    (function() {
+      try {
+        var p = new URLSearchParams(window.location.search);
+        var changed = false;
+        ["success", "error", "info"].forEach(function(k) {
+          var v = p.get(k);
+          if (v) {
+            window.showToast(k, v);
+            p.delete(k);
+            changed = true;
+          }
+        });
+        if (changed) {
+          var qs = p.toString();
+          var url = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
+          window.history.replaceState({}, "", url);
+        }
+      } catch (e) {}
+    })();
   </script>
 </body>
 </html>

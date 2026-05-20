@@ -39,8 +39,8 @@
   <td class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
   <td>
     {% if r.status != "running" %}
-      <form method="post" action="/runs/{{ r.id }}/delete/" class="inline">
-        <button type="submit" class="destructive" onclick="return confirm('Delete this run?')">delete</button>
+      <form hx-post="/runs/{{ r.id }}/delete/" hx-confirm="Delete this run?" hx-disabled-elt="find button" class="inline">
+        <button type="submit" class="destructive">delete</button>
       </form>
     {% endif %}
   </td>

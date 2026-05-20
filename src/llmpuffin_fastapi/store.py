@@ -93,6 +93,32 @@ async def list_namespaces() -> list[StoreNamespace]:
             return [StoreNamespace(prefix=r[0], count=r[1]) for r in rows]
 
 
+async def update_item(prefix: str, key: str, value: dict) -> None:
+    async with await psycopg.AsyncConnection.connect(
+        get_postgres_url(), autocommit=True
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE store
+                SET value = %s, updated_at = NOW()
+                WHERE prefix = %s AND key = %s
+            """,
+                (json.dumps(value), prefix, key),
+            )
+
+
+async def delete_item(prefix: str, key: str) -> None:
+    async with await psycopg.AsyncConnection.connect(
+        get_postgres_url(), autocommit=True
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM store WHERE prefix = %s AND key = %s",
+                (prefix, key),
+            )
+
+
 async def list_items(prefix: str) -> list[StoreItem]:
     async with await psycopg.AsyncConnection.connect(
         get_postgres_url(), autocommit=True

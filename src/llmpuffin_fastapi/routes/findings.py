@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import distinct, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,7 +17,7 @@ from llmpuffin.db import async_session
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 
-from llmpuffin_fastapi.deps import get_db, spawn_audit
+from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
 from llmpuffin_fastapi.github import create_issue, update_issue
 from llmpuffin_fastapi.templates_env import templates
 
@@ -153,8 +152,6 @@ async def finding_detail(
     finding_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    success: str | None = None,
-    error: str | None = None,
 ):
     gh_config = Config.load().github
     finding = await _get_finding(db, finding_id)
@@ -169,32 +166,34 @@ async def finding_detail(
             "github_configured": gh_config.configured
             and bool(finding.audit_run.github_repo_url),
             "locations": finding.locations,
-            "success": success,
-            "error": error,
         },
     )
 
 
 @router.post("/findings/{finding_id}/issue/")
 async def finding_create_issue(
-    finding_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+    finding_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     finding = await _get_finding(db, finding_id)
     if finding is None:
         raise HTTPException(status_code=404)
     audit_run = finding.audit_run
     gh_config = Config.load().github
+    redirect = f"/findings/{finding_id}/"
 
     if not gh_config.configured or not audit_run.github_repo_url:
-        return RedirectResponse(
-            f"/findings/{finding_id}/?error={quote('GitHub App not configured')}",
-            status_code=303,
+        return toast(
+            request, "error", "GitHub App not configured", redirect_to=redirect
         )
 
     if not finding.title:
-        return RedirectResponse(
-            f"/findings/{finding_id}/?error={quote('Title is required to create GitHub issue')}",
-             status_code=303,
+        return toast(
+            request,
+            "error",
+            "Title is required to create GitHub issue",
+            redirect_to=redirect,
         )
 
     repo = audit_run.github_repo_url.rstrip("/").removeprefix("https://github.com/")
@@ -220,9 +219,11 @@ async def finding_create_issue(
                 finding.github_issue_url.rstrip("/").rsplit("/issues/", 1)[1]
             )
         except (IndexError, ValueError):
-            return RedirectResponse(
-                f"/findings/{finding_id}/?error={quote(f'Cannot parse issue number from {finding.github_issue_url}')}",
-                status_code=303,
+            return toast(
+                request,
+                "error",
+                f"Cannot parse issue number from {finding.github_issue_url}",
+                redirect_to=redirect,
             )
         try:
             issue_url = update_issue(
@@ -234,15 +235,20 @@ async def finding_create_issue(
                 private_key=gh_config.private_key,
                 installation_id=gh_config.installation_id,
             )
-            return RedirectResponse(
-                f"/findings/{finding_id}/?success={quote(f'Issue updated: {issue_url}')}",
-                status_code=303,
+            return toast(
+                request,
+                "success",
+                f"Issue updated: {issue_url}",
+                redirect_to=redirect,
+                refresh=True,
             )
         except Exception as exc:
             log.exception("Failed to update GitHub issue")
-            return RedirectResponse(
-                f"/findings/{finding_id}/?error={quote(f'Failed to update issue: {exc}')}",
-                status_code=303,
+            return toast(
+                request,
+                "error",
+                f"Failed to update issue: {exc}",
+                redirect_to=redirect,
             )
 
     try:
@@ -261,21 +267,24 @@ async def finding_create_issue(
             .values(github_issue_url=issue_url)
         )
         await db.commit()
-        return RedirectResponse(
-            f"/findings/{finding_id}/?success={quote(f'Issue created: {issue_url}')}",
-            status_code=303,
+        return toast(
+            request,
+            "success",
+            f"Issue created: {issue_url}",
+            redirect_to=redirect,
+            refresh=True,
         )
     except Exception as exc:
         log.exception("Failed to create GitHub issue")
-        return RedirectResponse(
-            f"/findings/{finding_id}/?error={quote(f'Failed to create issue: {exc}')}",
-            status_code=303,
+        return toast(
+            request, "error", f"Failed to create issue: {exc}", redirect_to=redirect
         )
 
 
 @router.post("/findings/{finding_id}/fork/")
 async def finding_fork(
     finding_id: int,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     message: Annotated[str, Form()] = "",
 ):
@@ -283,11 +292,14 @@ async def finding_fork(
     if finding is None:
         raise HTTPException(status_code=404)
     run = finding.audit_run
+    redirect = f"/findings/{finding_id}/"
 
     if not finding.thread_id:
-        return RedirectResponse(
-            f"/findings/{finding_id}/?error={quote('Finding has no originating thread')}",
-            status_code=303,
+        return toast(
+            request,
+            "error",
+            "Finding has no originating thread",
+            redirect_to=redirect,
         )
 
     source_thread = (
@@ -296,16 +308,17 @@ async def finding_fork(
         )
     ).scalar_one_or_none()
     if source_thread and source_thread.status == "running":
-        return RedirectResponse(
-            f"/findings/{finding_id}/?error={quote('Source thread is still running, cannot fork')}",
-            status_code=303,
+        return toast(
+            request,
+            "error",
+            "Source thread is still running, cannot fork",
+            redirect_to=redirect,
         )
 
     toml_str = run.profile_toml or (run.profile.profile_toml if run.profile else "")
     if not toml_str:
-        return RedirectResponse(
-            f"/findings/{finding_id}/?error={quote('No config available for fork')}",
-            status_code=303,
+        return toast(
+            request, "error", "No config available for fork", redirect_to=redirect
         )
 
     finding_context = (
@@ -342,6 +355,6 @@ async def finding_fork(
                 await s.commit()
 
     spawn_audit(_do_fork())
-    return RedirectResponse(
-        f"/findings/{finding_id}/?success={quote('Fork started')}", status_code=303
+    return toast(
+        request, "success", "Fork started", redirect_to=redirect, refresh=True
     )

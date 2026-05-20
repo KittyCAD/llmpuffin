@@ -16,19 +16,16 @@
 <p class="mt-2">
   GitHub issue: <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener">{{ finding.github_issue_url }}</a>
   {% if github_configured %}
-  <form method="post" action="/findings/{{ finding.id }}/issue/" class="inline" style="margin-left:0.5em">
-    <button type="submit" onclick="return confirm('Update the GitHub issue title and body?')">update issue</button>
+  <form hx-post="/findings/{{ finding.id }}/issue/" hx-confirm="Update the GitHub issue title and body?" hx-disabled-elt="find button" class="inline" style="margin-left:0.5em">
+    <button type="submit">update issue</button>
   </form>
   {% endif %}
 </p>
 {% elif github_configured %}
-<form method="post" action="/findings/{{ finding.id }}/issue/" class="inline mt-2">
-  <button type="submit" class="primary" onclick="return confirm('Create a GitHub issue for this finding?')">create GitHub issue</button>
+<form hx-post="/findings/{{ finding.id }}/issue/" hx-confirm="Create a GitHub issue for this finding?" hx-disabled-elt="find button" class="inline mt-2">
+  <button type="submit" class="primary">create GitHub issue</button>
 </form>
 {% endif %}
-
-{% if success %}<p class="success mt-2">{{ success }}</p>{% endif %}
-{% if error %}<p class="error mt-2">{{ error }}</p>{% endif %}
 
 <div class="card mt-4" style="padding: 0;">
 <table>
@@ -45,7 +42,7 @@
 </div>
 
 {% if finding.thread_id and not finding.fork_thread_id %}
-<form method="post" action="/findings/{{ finding.id }}/fork/" class="row gap-2 mt-4">
+<form hx-post="/findings/{{ finding.id }}/fork/" hx-disabled-elt="find button, find input" class="row gap-2 mt-4">
   <input type="text" name="message" placeholder="optional instructions for the fork" style="max-width: 24rem;">
   <button type="submit">fork conversation</button>
 </form>

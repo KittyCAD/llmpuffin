@@ -2,15 +2,95 @@
 {% block title %}store — {{ prefix }}{% endblock %}
 {% block content %}
 <p><a href="/store/">← all namespaces</a></p>
-<h1>{{ prefix }} <span class="text-muted text-sm" style="font-weight: 400;">{{ items|length }} item{{ items | pluralize }}</span></h1>
+
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>
+    <span class="mono">{{ prefix }}</span>
+    <span class="text-muted text-sm" style="font-weight: 400;">— {{ items|length }} item{{ items | pluralize }}</span>
+  </h1>
+</div>
+
 
 {% for item in items %}
-<div class="msg">
-  <span class="role">{{ item.key }}</span>
-  <pre>{{ item.value_json }}</pre>
-  <small class="text-muted">updated {{ item.updated_at }}</small>
-</div>
+<details class="card mt-4" style="padding: 0;" {% if loop.first %}open{% endif %}>
+  <summary style="cursor: pointer; padding: 0.875rem 1rem; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+    <div class="row gap-2" style="min-width: 0; flex: 1;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           style="flex-shrink: 0; color: hsl(var(--muted-foreground));">
+        {% if item.kind == 'markdown' %}
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        {% elif item.kind == 'text' %}
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+        {% else %}
+          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+        {% endif %}
+      </svg>
+      <span class="mono text-sm" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ item.key }}</span>
+      <span class="badge outline">{{ item.kind }}</span>
+    </div>
+    <div class="row gap-3 text-xs text-muted" style="flex-shrink: 0;">
+      {% if item.updated_at %}<span title="updated">{{ item.updated_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span>{% endif %}
+    </div>
+  </summary>
+
+  <div style="border-top: 1px solid hsl(var(--border)); padding: 1rem;">
+    {% if item.extra %}
+    <div class="row gap-3 text-xs text-muted" style="flex-wrap: wrap; margin-bottom: 0.75rem;">
+      {% for k, v in item.extra.items() %}
+        <span><span style="color: hsl(var(--muted-foreground));">{{ k }}:</span>
+          <code class="mono">{{ v | string | truncatechars(80) }}</code>
+        </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="store-item-view">
+      {% if item.kind == 'markdown' %}
+        <div class="markdown">{{ item.body | md }}</div>
+      {% elif item.kind == 'text' %}
+        <pre class="mono text-xs">{{ item.body }}</pre>
+      {% else %}
+        <pre class="mono text-xs">{{ item.value_json }}</pre>
+      {% endif %}
+      <div class="row gap-2 mt-3">
+        <button type="button" class="btn" onclick="storeToggleEdit(this)">edit</button>
+        <form hx-post="/store/{{ prefix }}/delete/" hx-confirm="Delete this item?" hx-disabled-elt="find button" class="inline">
+          <input type="hidden" name="key" value="{{ item.key }}">
+          <button type="submit" class="destructive">delete</button>
+        </form>
+      </div>
+    </div>
+
+    <form hx-post="/store/{{ prefix }}/edit/" hx-disabled-elt="find button, find textarea" class="store-item-edit col gap-2" style="display: none;">
+      <input type="hidden" name="key" value="{{ item.key }}">
+      <textarea name="value_json" rows="14" class="mono text-xs" required>{{ item.value_json }}</textarea>
+      <div class="row gap-2">
+        <button type="submit" class="primary">save</button>
+        <button type="button" class="btn ghost" onclick="storeCancelEdit(this)">cancel</button>
+      </div>
+    </form>
+
+    <div class="row gap-4 text-xs text-muted mt-4" style="border-top: 1px solid hsl(var(--border)); padding-top: 0.5rem;">
+      {% if item.created_at %}<span>created {{ item.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span>{% endif %}
+      {% if item.updated_at %}<span>updated {{ item.updated_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span>{% endif %}
+    </div>
+  </div>
+</details>
 {% else %}
-<p class="text-muted">No items in this namespace.</p>
+<p class="text-muted mt-4">No items in this namespace.</p>
 {% endfor %}
+
+<script>
+  function storeToggleEdit(btn) {
+    const card = btn.closest("details");
+    card.querySelector(".store-item-view").style.display = "none";
+    card.querySelector(".store-item-edit").style.display = "flex";
+  }
+  function storeCancelEdit(btn) {
+    const card = btn.closest("details");
+    card.querySelector(".store-item-view").style.display = "";
+    card.querySelector(".store-item-edit").style.display = "none";
+  }
+</script>
 {% endblock %}

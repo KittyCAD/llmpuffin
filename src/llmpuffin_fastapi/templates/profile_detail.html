@@ -4,15 +4,12 @@
 <p><a href="/profiles/">← all profiles</a></p>
 <div class="row" style="justify-content: space-between; align-items: baseline;">
   <h1>{{ profile.name }}</h1>
-  <form method="post" action="/profiles/{{ profile.id }}/run/" class="inline">
+  <form hx-post="/profiles/{{ profile.id }}/run/" hx-disabled-elt="find button" class="inline">
     <button type="submit" class="primary">run audit</button>
   </form>
 </div>
 
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
-{% if success %}<p class="success">{{ success }}</p>{% endif %}
-
-<form method="post" action="/profiles/{{ profile.id }}/" class="card col gap-3 mt-4" style="max-width: 64rem;">
+<form hx-post="/profiles/{{ profile.id }}/" hx-disabled-elt="find button, find input, find textarea" class="card col gap-3 mt-4" style="max-width: 64rem;">
   <div>
     <label for="name">Name</label>
     <input type="text" name="name" id="name" value="{{ profile.name }}" required>

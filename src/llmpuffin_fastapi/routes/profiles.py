@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 import tomllib
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,9 +15,9 @@ from sqlalchemy.orm import selectinload
 from llmpuffin.agent import run_audit
 from llmpuffin.config import Profile
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditProfile
+from llmpuffin.models import AuditProfile, AuditRun
 
-from llmpuffin_fastapi.deps import get_db, spawn_audit
+from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -29,8 +28,6 @@ router = APIRouter()
 async def profiles_list(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    error: str | None = None,
-    success: str | None = None,
 ):
     rows = (
         (await db.execute(select(AuditProfile).where(AuditProfile.jit.is_(False))))
@@ -48,14 +45,13 @@ async def profiles_list(
             {"id": p.id, "name": p.name, "image": image, "updated_at": p.updated_at}
         )
     return templates.TemplateResponse(
-        request,
-        "profiles_list.html",
-        {"profiles": profiles, "error": error, "success": success},
+        request, "profiles_list.html", {"profiles": profiles}
     )
 
 
 @router.post("/profiles/create/")
 async def profile_create(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     name: Annotated[str, Form()] = "",
     profile_toml: Annotated[str, Form()] = "",
@@ -63,19 +59,20 @@ async def profile_create(
     name = name.strip()
     profile_toml = profile_toml.strip()
     if not name or not profile_toml:
-        return RedirectResponse(
-            f"/profiles/?error={quote('Name and config are required')}",
-            status_code=303,
+        return toast(
+            request, "error", "Name and config are required", redirect_to="/profiles/"
         )
     try:
         tomllib.loads(profile_toml)
     except Exception as exc:
-        return RedirectResponse(
-            f"/profiles/?error={quote(f'Invalid TOML: {exc}')}", status_code=303
+        return toast(
+            request, "error", f"Invalid TOML: {exc}", redirect_to="/profiles/"
         )
     db.add(AuditProfile(name=name, profile_toml=profile_toml, jit=False))
     await db.commit()
-    return RedirectResponse("/profiles/", status_code=303)
+    return toast(
+        request, "success", f"Created {name}", redirect_to="/profiles/", refresh=True
+    )
 
 
 @router.get("/profiles/{profile_id}/", response_class=HTMLResponse)
@@ -83,13 +80,11 @@ async def profile_detail_get(
     profile_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    error: str | None = None,
-    success: str | None = None,
 ):
     profile = (
         await db.execute(
             select(AuditProfile)
-            .options(selectinload(AuditProfile.runs))
+            .options(selectinload(AuditProfile.runs).selectinload(AuditRun.threads))
             .where(AuditProfile.id == profile_id)
         )
     ).scalar_one_or_none()
@@ -98,12 +93,7 @@ async def profile_detail_get(
     return templates.TemplateResponse(
         request,
         "profile_detail.html",
-        {
-            "profile": profile,
-            "runs": profile.runs,
-            "error": error,
-            "success": success,
-        },
+        {"profile": profile, "runs": profile.runs},
     )
 
 
@@ -118,43 +108,47 @@ async def profile_detail_post(
     profile = (
         await db.execute(
             select(AuditProfile)
-            .options(selectinload(AuditProfile.runs))
+            .options(selectinload(AuditProfile.runs).selectinload(AuditRun.threads))
             .where(AuditProfile.id == profile_id)
         )
     ).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=404)
 
-    ctx: dict = {"profile": profile, "runs": profile.runs}
+    redirect = f"/profiles/{profile_id}/"
     try:
         tomllib.loads(profile_toml)
     except Exception as exc:
-        ctx["error"] = f"Invalid TOML: {exc}"
-        return templates.TemplateResponse(request, "profile_detail.html", ctx)
+        return toast(request, "error", f"Invalid TOML: {exc}", redirect_to=redirect)
 
     profile.name = name.strip()
     profile.profile_toml = profile_toml
     await db.commit()
-    ctx["success"] = "Profile saved."
-    return templates.TemplateResponse(request, "profile_detail.html", ctx)
+    return toast(
+        request, "success", "Profile saved.", redirect_to=redirect, refresh=True
+    )
 
 
 @router.post("/profiles/{profile_id}/run/")
-async def profile_run(profile_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def profile_run(
+    profile_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     profile = (
         await db.execute(select(AuditProfile).where(AuditProfile.id == profile_id))
     ).scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=404)
+    redirect = f"/profiles/{profile_id}/"
     try:
         parsed = Profile.from_toml_string(profile.profile_toml)
     except Exception as exc:
-        return RedirectResponse(
-            f"/profiles/{profile_id}/?error={quote(f'Invalid config: {exc}')}",
-            status_code=303,
+        return toast(
+            request, "error", f"Invalid config: {exc}", redirect_to=redirect
         )
     harness_config = HarnessConfig(profile=parsed, profile_toml=profile.profile_toml)
     spawn_audit(run_audit(harness_config))
-    return RedirectResponse(
-        f"/profiles/{profile_id}/?success={quote('Audit started')}", status_code=303
+    return toast(
+        request, "success", "Audit started", redirect_to=redirect, refresh=True
     )

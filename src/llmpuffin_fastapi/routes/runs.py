@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,7 +16,7 @@ from llmpuffin.config import Profile
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
-from llmpuffin_fastapi.deps import get_db, spawn_audit
+from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -80,8 +79,6 @@ async def run_detail(
     run_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    success: str | None = None,
-    error: str | None = None,
 ):
     run = (
         await db.execute(
@@ -99,18 +96,16 @@ async def run_detail(
     return templates.TemplateResponse(
         request,
         "run_detail.html",
-        {
-            "run": run,
-            "threads": run.threads,
-            "findings": run.findings,
-            "success": success,
-            "error": error,
-        },
+        {"run": run, "threads": run.threads, "findings": run.findings},
     )
 
 
 @router.post("/runs/{run_id}/delete/")
-async def run_delete(run_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def run_delete(
+    run_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     run = (
         await db.execute(
             select(AuditRun)
@@ -121,13 +116,17 @@ async def run_delete(run_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     if run is None:
         raise HTTPException(status_code=404)
     if run.status == "running":
-        return RedirectResponse(
-            f"/runs/{run_id}/?error={quote('Cannot delete a running audit')}",
-            status_code=303,
+        return toast(
+            request,
+            "error",
+            "Cannot delete a running audit",
+            redirect_to=f"/runs/{run_id}/",
         )
     await db.delete(run)
     await db.commit()
-    return RedirectResponse("/runs/", status_code=303)
+    return toast(
+        request, "success", f"Deleted run #{run_id}", redirect_to="/runs/", refresh=True
+    )
 
 
 def _toml_for_run(run: AuditRun) -> str:
@@ -138,6 +137,7 @@ def _toml_for_run(run: AuditRun) -> str:
 async def run_resume(
     run_id: int,
     thread_id: str,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     message: Annotated[str, Form()] = "",
 ):
@@ -160,17 +160,14 @@ async def run_resume(
     ).scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=404)
+    redirect = f"/runs/{run_id}/"
     if thread.status == "running":
-        return RedirectResponse(
-            f"/runs/{run_id}/?error={quote('Thread is already running')}",
-            status_code=303,
-        )
+        return toast(request, "error", "Thread is already running", redirect_to=redirect)
 
     toml_str = _toml_for_run(run)
     if not toml_str:
-        return RedirectResponse(
-            f"/runs/{run_id}/?error={quote('No config available for resume')}",
-            status_code=303,
+        return toast(
+            request, "error", "No config available for resume", redirect_to=redirect
         )
 
     profile = Profile.from_toml_string(toml_str)
@@ -182,9 +179,12 @@ async def run_resume(
             user_message=message.strip() or None,
         )
     )
-    return RedirectResponse(
-        f"/runs/{run_id}/?success={quote(f'Resumed from thread {thread_id}')}",
-        status_code=303,
+    return toast(
+        request,
+        "success",
+        f"Resumed from thread {thread_id}",
+        redirect_to=redirect,
+        refresh=True,
     )
 
 
@@ -192,6 +192,7 @@ async def run_resume(
 async def run_fork(
     run_id: int,
     thread_id: str,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     message: Annotated[str, Form()],
 ):
@@ -214,23 +215,19 @@ async def run_fork(
     ).scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=404)
+    redirect = f"/runs/{run_id}/"
     if thread.status == "running":
-        return RedirectResponse(
-            f"/runs/{run_id}/?error={quote('Thread is still running, cannot fork')}",
-            status_code=303,
+        return toast(
+            request, "error", "Thread is still running, cannot fork", redirect_to=redirect
         )
     msg = message.strip()
     if not msg:
-        return RedirectResponse(
-            f"/runs/{run_id}/?error={quote('Fork requires a message')}",
-            status_code=303,
-        )
+        return toast(request, "error", "Fork requires a message", redirect_to=redirect)
 
     toml_str = _toml_for_run(run)
     if not toml_str:
-        return RedirectResponse(
-            f"/runs/{run_id}/?error={quote('No config available for fork')}",
-            status_code=303,
+        return toast(
+            request, "error", "No config available for fork", redirect_to=redirect
         )
 
     profile = Profile.from_toml_string(toml_str)
@@ -242,7 +239,10 @@ async def run_fork(
             user_message=msg,
         )
     )
-    return RedirectResponse(
-        f"/runs/{run_id}/?success={quote(f'Forked from thread {thread_id}')}",
-        status_code=303,
+    return toast(
+        request,
+        "success",
+        f"Forked from thread {thread_id}",
+        redirect_to=redirect,
+        refresh=True,
     )

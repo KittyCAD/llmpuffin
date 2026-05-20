@@ -23,15 +23,12 @@
       <span class="badge outline">{{ run.status }}</span>
     {% endif %}
     {% if run.status != "running" %}
-      <form method="post" action="/runs/{{ run.id }}/delete/" class="inline">
-        <button type="submit" class="destructive" onclick="return confirm('Delete this run and all its findings?')">delete</button>
+      <form hx-post="/runs/{{ run.id }}/delete/" hx-confirm="Delete this run and all its findings?" hx-disabled-elt="find button" class="inline">
+        <button type="submit" class="destructive">delete</button>
       </form>
     {% endif %}
   </div>
 </div>
-
-{% if success %}<p class="success mt-2">{{ success }}</p>{% endif %}
-{% if error %}<p class="error mt-2">{{ error }}</p>{% endif %}
 
 {# ─── Tabs ─── #}
 <div class="tabs mt-4">
@@ -69,11 +66,11 @@
     <td class="text-muted text-xs">{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
     <td>
       {% if t.status != "running" %}
-      <form method="post" action="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" class="row gap-2" style="margin-bottom: 0.25rem;">
+      <form hx-post="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" hx-disabled-elt="find button, find input" class="row gap-2" style="margin-bottom: 0.25rem;">
         <input type="text" name="message" placeholder="optional message" style="max-width: 16rem;">
         <button type="submit">resume</button>
       </form>
-      <form method="post" action="/runs/{{ run.id }}/fork/{{ t.thread_id }}/" class="row gap-2">
+      <form hx-post="/runs/{{ run.id }}/fork/{{ t.thread_id }}/" hx-disabled-elt="find button, find input" class="row gap-2">
         <input type="text" name="message" placeholder="message for fork" required style="max-width: 16rem;">
         <button type="submit">fork</button>
       </form>
