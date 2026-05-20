@@ -25,7 +25,8 @@
 </div>
 {% endif %}
 
-{% if audit_thread and audit_thread.status != "running" %}
+{% if audit_thread %}
+{% set is_running = audit_thread.status == "running" %}
 <form
   hx-post="/checkpoints/{{ session.thread_id }}/resume/"
   hx-disabled-elt="find textarea, find button"
@@ -34,12 +35,13 @@
 >
   <textarea
     name="message"
-    placeholder="Send a message to resume this thread..."
+    placeholder="{% if is_running %}Thread is running — wait for it to finish before sending.{% else %}Send a message to resume this thread...{% endif %}"
     required
     rows="3"
+    {% if is_running %}disabled{% endif %}
     onkeydown="if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { this.form.requestSubmit(); }"
   ></textarea>
-  <button type="submit" class="primary composer-send" title="Send (⌘/Ctrl+Enter)" aria-label="Send">
+  <button type="submit" class="primary composer-send" title="Send (⌘/Ctrl+Enter)" aria-label="Send" {% if is_running %}disabled{% endif %}>
     <svg class="composer-send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/>
@@ -50,54 +52,6 @@
     </svg>
   </button>
 </form>
-
-<style>
-  .composer {
-    position: relative;
-    max-width: 48rem;
-    margin: 2rem auto 2.5rem;
-    padding: 0;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  .composer:focus-within {
-    border-color: hsl(var(--primary) / 0.5);
-    box-shadow: 0 4px 20px hsl(var(--primary) / 0.12);
-  }
-  .composer textarea {
-    width: 100%;
-    border: none;
-    background: transparent;
-    padding: 1rem 3.5rem 1rem 1.25rem;
-    resize: none;
-    min-height: 4.5rem;
-    max-height: 16rem;
-    font-family: inherit;
-    font-size: 0.95rem;
-  }
-  .composer textarea:focus { outline: none; box-shadow: none; }
-  .composer-send {
-    position: absolute;
-    right: 0.625rem;
-    bottom: 0.625rem;
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .composer-send-icon { transform: translate(-1px, 1px); }
-  .composer-send[disabled] { opacity: 0.85; cursor: progress; }
-  .composer-send-spinner { display: none; animation: composer-spin 0.8s linear infinite; }
-  .composer-send[disabled] .composer-send-icon { display: none; }
-  .composer-send[disabled] .composer-send-spinner { display: inline-block; }
-  @keyframes composer-spin { to { transform: rotate(360deg); } }
-</style>
 {% endif %}
 
 <div id="messages"
@@ -120,7 +74,7 @@
             <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if f.thread_id == session.thread_id %}current{% endif %}">
               <div class="row gap-2" style="align-items: center; min-width: 0;">
                 <span class="badge sev-{{ f.severity|lower }} text-xs"><span class="dot"></span>{{ f.severity or "?" }}</span>
-                <span class="text-xs text-muted">#{{ f.local_id or f.id }}</span>
+                <span class="text-xs text-muted">#{{ f.local_id }}</span>
               </div>
               <div class="checkpoint-finding-title">{{ f.title or f.rule_id or "(untitled)" }}</div>
               {% if f.thread_id == session.thread_id %}
@@ -137,62 +91,4 @@
 </aside>
 
 </div>{# /.checkpoint-layout #}
-
-<style>
-  .checkpoint-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 18rem;
-    gap: 1.5rem;
-    align-items: start;
-  }
-  @media (max-width: 1100px) {
-    .checkpoint-layout { grid-template-columns: 1fr; }
-  }
-  .checkpoint-main { min-width: 0; }
-  .checkpoint-sidebar {
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100vh - 2rem);
-    overflow-y: auto;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
-    padding: 0.875rem 1rem;
-  }
-  .checkpoint-sidebar-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: hsl(var(--muted-foreground));
-    margin-bottom: 0.625rem;
-  }
-  .checkpoint-findings { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-  .checkpoint-finding {
-    display: block;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: calc(var(--radius) - 2px);
-    text-decoration: none;
-    color: inherit;
-    transition: background 0.12s, border-color 0.12s;
-  }
-  .checkpoint-finding:hover {
-    background: hsl(var(--muted) / 0.4);
-    border-color: hsl(var(--primary) / 0.4);
-  }
-  .checkpoint-finding.current {
-    border-color: hsl(var(--primary) / 0.6);
-    background: hsl(var(--primary) / 0.06);
-  }
-  .checkpoint-finding-title {
-    font-size: 0.85rem;
-    margin-top: 0.25rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-</style>
 {% endblock %}

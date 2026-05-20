@@ -8,6 +8,9 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from pathlib import Path
 
 from llmpuffin.config import Config
 from llmpuffin.db import setup_db
@@ -54,6 +57,8 @@ async def _lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="llmpuffin", lifespan=_lifespan)
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(runs.router)
     app.include_router(profiles.router)
     app.include_router(checkpoints.router)
