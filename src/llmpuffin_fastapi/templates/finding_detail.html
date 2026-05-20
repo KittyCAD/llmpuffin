@@ -42,8 +42,10 @@
 {% endif %}
 
 {% if finding.validated_evidence %}
-<h2>validation evidence</h2>
-<div class="markdown">{{ finding.validated_evidence | md }}</div>
+<div class="note-card">
+  <div class="note-card-header">validation note — added after the finding was created</div>
+  <div class="markdown">{{ finding.validated_evidence | md }}</div>
+</div>
 {% endif %}
 
 {% if locations %}
