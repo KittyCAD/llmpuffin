@@ -7,8 +7,11 @@
 {% if success %}<p class="success">{{ success }}</p>{% endif %}
 
 <table>
+<tr><th>Profile</th><td>{% if run.profile %}<a href="/profiles/{{ run.profile_id }}/">{{ run.profile.name }}</a>{% else %}—{% endif %}</td></tr>
 <tr><th>Image</th><td>{{ run.container_image }}</td></tr>
 <tr><th>Model</th><td>{{ run.model_name }}</td></tr>
+<tr><th>Repo</th><td>{% if run.github_repo_url %}<a href="{{ run.github_repo_url }}" target="_blank" rel="noopener">{{ run.github_repo_url }}</a>{% else %}—{% endif %}</td></tr>
+<tr><th>Commit</th><td>{% if run.git_commit %}{% if run.github_repo_url %}<a href="{{ run.github_repo_url.rstrip('/') }}/commit/{{ run.git_commit }}" target="_blank" rel="noopener"><code>{{ run.git_commit | truncatechars(12) }}</code></a>{% else %}<code>{{ run.git_commit | truncatechars(12) }}</code>{% endif %}{% else %}—{% endif %}</td></tr>
 <tr><th>Status</th><td>{{ run.status }}</td></tr>
 {% if run.error %}<tr><th>Error</th><td>{{ run.error }}</td></tr>{% endif %}
 <tr><th>Started</th><td>{{ run.started_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>

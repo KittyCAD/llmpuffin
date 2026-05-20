@@ -4,7 +4,16 @@
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run {{ finding.audit_run_id }}</a></p>
 <h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
 
-{% if github_configured %}
+{% if finding.github_issue_url %}
+<p>
+  GitHub issue: <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener">{{ finding.github_issue_url }}</a>
+  {% if github_configured %}
+  <form method="post" action="/findings/{{ finding.id }}/issue/" style="display:inline; margin-left:0.5em">
+    <button type="submit" onclick="return confirm('Update the GitHub issue title and body?')">update issue</button>
+  </form>
+  {% endif %}
+</p>
+{% elif github_configured %}
 <form method="post" action="/findings/{{ finding.id }}/issue/" style="display:inline">
   <button type="submit" onclick="return confirm('Create a GitHub issue for this finding?')">create GitHub issue</button>
 </form>

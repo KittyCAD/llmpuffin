@@ -37,6 +37,7 @@ Example profile.toml:
 
 from __future__ import annotations
 
+import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,13 +61,13 @@ class WebConfig:
 
 @dataclass
 class GitHubConfig:
-    app_id: str = ""
-    private_key_path: str = ""
+    app_id: str = "3779149"
+    private_key: str = ""
     installation_id: str = ""
 
     @property
     def configured(self) -> bool:
-        return bool(self.app_id and self.private_key_path and self.installation_id)
+        return bool(self.app_id and self.private_key and self.installation_id)
 
 
 @dataclass
@@ -111,7 +112,7 @@ class Config:
             ),
             github=GitHubConfig(
                 app_id=str(gh.get("app_id", "")),
-                private_key_path=gh.get("private_key_path", ""),
+                private_key=os.environ.get("GH_LLMPUFFIN_KEY", ""),
                 installation_id=str(gh.get("installation_id", "")),
             ),
             logging=LoggingConfig(

@@ -7,10 +7,9 @@ debug = true
 secret_key = "dev-insecure-key-change-in-prod"
 allowed_hosts = ["*"]
 
-# [github]
-# app_id = "123456"
-# private_key_path = "path/to/private-key.pem"
-# installation_id = "78901234"
+[github]
+app_id = "3779149"
+installation_id = "133980810"
 
 [logging]
 level = "DEBUG"

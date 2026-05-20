@@ -202,6 +202,9 @@ class Finding(Base):
     fork_thread_id: Mapped[str] = mapped_column(
         String(64), default="", server_default="", index=True
     )
+    github_issue_url: Mapped[str] = mapped_column(
+        String(512), default="", server_default=""
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

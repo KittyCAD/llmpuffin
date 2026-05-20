@@ -39,13 +39,15 @@ def _build_image(image: str, dockerfile: Path) -> None:
 
 
 def _build_for_profile(profile_path: Path) -> None:
-    """Build the image for a profile — per-profile Dockerfile or shared."""
+    """Build the image for a profile — shared base image, then per-profile."""
     profile = Profile.from_toml(profile_path)
+
+    if SHARED_DOCKERFILE.exists():
+        _build_image(SHARED_IMAGE, SHARED_DOCKERFILE)
+
     per_profile_dockerfile = profile_path.parent / "Dockerfile"
     if per_profile_dockerfile.exists():
         _build_image(profile.image, per_profile_dockerfile)
-    elif SHARED_DOCKERFILE.exists():
-        _build_image(profile.image, SHARED_DOCKERFILE)
     else:
         print(f"No Dockerfile found for {profile.name}", file=sys.stderr)
         sys.exit(1)
