@@ -20,7 +20,7 @@
   </script>
 
   {# Component / token stylesheet. Must precede the Tailwind script so CSS vars are defined when @theme resolves them. #}
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ static_hash() }}">
 
   {# Tailwind v4 browser build — utility classes (bg-card, text-foreground, etc.) available alongside hand-rolled component CSS in app.css. #}
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -81,18 +81,11 @@
         _id: 0,
         push(level, message) {
           const id = ++this._id;
-          this.items.push({ id, level: level || "info", message: message || "", show: false });
-          queueMicrotask(() => {
-            const t = this.items.find(x => x.id === id);
-            if (t) t.show = true;
-          });
+          this.items.push({ id, level: level || "info", message: message || "" });
           setTimeout(() => this.dismiss(id), 4500);
         },
         dismiss(id) {
-          const t = this.items.find(x => x.id === id);
-          if (!t) return;
-          t.show = false;
-          setTimeout(() => { this.items = this.items.filter(x => x.id !== id); }, 200);
+          this.items = this.items.filter(x => x.id !== id);
         },
       });
     });
@@ -121,33 +114,33 @@
       } catch (e) {}
     });
 
-    // htmx → toast bridges (must wait for <body> to exist).
-    document.addEventListener("DOMContentLoaded", () => {
-      document.body.addEventListener("toast", e => {
-        const d = e.detail || {};
-        Alpine.store("toasts").push(d.level, d.message);
-      });
-      document.body.addEventListener("htmx:beforeOnLoad", e => {
-        const xhr = e.detail && e.detail.xhr;
-        if (!xhr || !xhr.getResponseHeader) return;
-        const trigger = xhr.getResponseHeader("HX-Trigger");
-        const loc = xhr.getResponseHeader("HX-Location");
-        if (trigger && loc) {
-          try {
-            const parsed = JSON.parse(trigger);
-            if (parsed && parsed.toast) {
-              sessionStorage.setItem("llmpuffin.pendingToast", JSON.stringify(parsed.toast));
-            }
-          } catch (e) {}
-        }
-      });
-      document.body.addEventListener("htmx:responseError", e => {
-        const xhr = e.detail && e.detail.xhr;
-        Alpine.store("toasts").push("error", "Request failed" + (xhr ? " (" + xhr.status + ")" : ""));
-      });
-      document.body.addEventListener("htmx:sendError", () => {
-        Alpine.store("toasts").push("error", "Network error");
-      });
+    // htmx → toast bridges.
+    // Listen on `document` (not `document.body`) so events from elements
+    // removed by hx-swap="outerHTML" still bubble up.
+    document.addEventListener("toast", e => {
+      const d = e.detail || {};
+      Alpine.store("toasts").push(d.level, d.message);
+    });
+    document.addEventListener("htmx:beforeOnLoad", e => {
+      const xhr = e.detail && e.detail.xhr;
+      if (!xhr || !xhr.getResponseHeader) return;
+      const trigger = xhr.getResponseHeader("HX-Trigger");
+      const loc = xhr.getResponseHeader("HX-Location");
+      if (trigger && loc) {
+        try {
+          const parsed = JSON.parse(trigger);
+          if (parsed && parsed.toast) {
+            sessionStorage.setItem("llmpuffin.pendingToast", JSON.stringify(parsed.toast));
+          }
+        } catch (e) {}
+      }
+    });
+    document.addEventListener("htmx:responseError", e => {
+      const xhr = e.detail && e.detail.xhr;
+      Alpine.store("toasts").push("error", "Request failed" + (xhr ? " (" + xhr.status + ")" : ""));
+    });
+    document.addEventListener("htmx:sendError", () => {
+      Alpine.store("toasts").push("error", "Network error");
     });
   </script>
 
@@ -175,8 +168,7 @@
   {# ───────── Toast container ───────── #}
   <div id="toasts" aria-live="polite" aria-atomic="true" x-data>
     <template x-for="t in $store.toasts.items" :key="t.id">
-      <div class="toast"
-           :class="[t.level, { 'show': t.show }]">
+      <div class="toast" :class="t.level">
         <div class="toast-msg" x-text="t.message"></div>
         <button type="button" class="toast-close"
                 aria-label="Dismiss"

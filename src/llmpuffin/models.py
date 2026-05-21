@@ -206,6 +206,9 @@ class Finding(Base):
     fork_thread_id: Mapped[str] = mapped_column(
         String(64), default="", server_default="", index=True
     )
+    tool_call_id: Mapped[str] = mapped_column(
+        String(128), default="", server_default=""
+    )
     github_issue_url: Mapped[str] = mapped_column(
         String(512), default="", server_default=""
     )
@@ -219,6 +222,10 @@ class Finding(Base):
     )
     attachments: Mapped[list[FindingAttachment]] = relationship(
         back_populates="finding", cascade="all, delete-orphan"
+    )
+    validation_notes: Mapped[list[ValidationNote]] = relationship(
+        back_populates="finding", cascade="all, delete-orphan",
+        order_by="ValidationNote.created_at.desc()",
     )
 
     __table_args__ = (
@@ -272,6 +279,33 @@ class FindingAttachment(Base):
     )
 
     finding: Mapped[Finding] = relationship(back_populates="attachments")
+
+
+class ValidationNote(Base):
+    """An immutable validation note attached to a finding.
+
+    Each call to validate_finding creates a new note. Notes are never
+    edited or deleted — they form an append-only evidence log.
+    """
+
+    __tablename__ = "validation_note"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    finding_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("finding.id", ondelete="CASCADE")
+    )
+    thread_id: Mapped[str] = mapped_column(
+        String(64), default="", server_default="", index=True
+    )
+    tool_call_id: Mapped[str] = mapped_column(
+        String(128), default="", server_default=""
+    )
+    evidence: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    finding: Mapped[Finding] = relationship(back_populates="validation_notes")
 
     def __str__(self) -> str:
         return self.filename

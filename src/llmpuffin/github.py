@@ -142,6 +142,49 @@ class GitHubClient:
         issue = r.create_issue(title=title, body=body, labels=labels or [])
         return issue.html_url
 
+    def create_draft_advisory(
+        self,
+        repo: str,
+        summary: str,
+        description: str,
+        severity: str = "medium",
+        cwe_ids: list[str] | None = None,
+    ) -> str:
+        """Create a draft security advisory and return its HTML URL.
+
+        Uses the REST API directly since PyGithub doesn't support advisories.
+        """
+        import json
+
+        token = self._install_token()
+        # Map our severity to GHSA severity (critical/high/medium/low)
+        ghsa_severity = severity.lower()
+        if ghsa_severity not in ("critical", "high", "medium", "low"):
+            ghsa_severity = "medium"
+
+        payload: dict = {
+            "summary": summary,
+            "description": description,
+            "severity": ghsa_severity,
+            "vulnerabilities": [],
+        }
+        if cwe_ids:
+            payload["cwe_ids"] = cwe_ids
+
+        req = Request(
+            f"https://api.github.com/repos/{repo}/security-advisories",
+            method="POST",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+            },
+        )
+        with urlopen(req) as resp:
+            data = json.loads(resp.read())
+        return data["html_url"]
+
     def update_issue(self, repo: str, issue_number: int, title: str, body: str) -> str:
         """Update a GitHub issue and return its HTML URL."""
         r = self._gh().get_repo(repo)

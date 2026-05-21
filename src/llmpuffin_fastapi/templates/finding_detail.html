@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_composer.html" import composer %}
 {% block title %}{{ finding.rule_id }}{% endblock %}
 {% block content %}
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run #{{ finding.audit_run_id }}</a></p>
@@ -24,29 +23,29 @@
   <div class="gh-issue-info">
     {{ gh_icon() }}
     <div class="col" style="gap: 0.125rem; min-width: 0;">
-      <div class="text-xs text-muted">GitHub issue</div>
+      <div class="text-xs text-muted">Reported to GitHub</div>
       <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener" class="gh-issue-link mono text-xs">
         {{ finding.github_issue_url }}
       </a>
     </div>
   </div>
   {% if github_configured %}
-  <form hx-post="/findings/{{ finding.id }}/issue/"
-        hx-confirm="Update the GitHub issue title and body?"
+  <form hx-post="/findings/{{ finding.id }}/report/"
+        hx-confirm="Update the GitHub issue/advisory?"
         hx-disabled-elt="find button"
         class="inline">
-    <button type="submit" class="btn ghost">Update issue</button>
+    <button type="submit" class="btn ghost">Update</button>
   </form>
   {% endif %}
 </div>
 {% elif github_configured %}
-<form hx-post="/findings/{{ finding.id }}/issue/"
-      hx-confirm="Create a GitHub issue for this finding?"
+<form hx-post="/findings/{{ finding.id }}/report/"
+      hx-confirm="Report this finding to GitHub?"
       hx-disabled-elt="find button"
       class="inline mt-4">
   <button type="submit" class="btn gh-btn">
     {{ gh_icon() }}
-    <span>Create GitHub issue</span>
+    <span>Report to GitHub</span>
   </button>
 </form>
 {% endif %}
@@ -54,38 +53,61 @@
 <div class="card mt-4" style="padding: 0;">
 <table>
 <tr><th>Scenario</th><td>{{ finding.scenario_id }}</td></tr>
-<tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/" class="mono text-xs">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
+<tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/{% if finding.tool_call_id %}#tc-{{ finding.tool_call_id }}{% endif %}" class="mono text-xs">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
 <tr><th>Severity</th><td>{{ finding.severity }}</td></tr>
 <tr><th>Difficulty</th><td>{{ finding.difficulty }}</td></tr>
 <tr><th>Validated</th><td>{% if finding.validated %}yes{% else %}no{% endif %}</td></tr>
 <tr><th>Created</th><td>{{ finding.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
+{% if finding.tool_call_id %}<tr><th>Tool call</th><td class="mono text-xs">{{ finding.tool_call_id }}</td></tr>{% endif %}
 {% if finding.fork_thread_id %}
 <tr><th>Fork</th><td><a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id }}</a></td></tr>
 {% endif %}
 </table>
 </div>
 
-{% if finding.fork_thread_id %}
-<h2>Fork</h2>
-<div class="card">
-  <div class="row gap-2">
-    <span class="badge success"><span class="dot"></span>forked</span>
-    <a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id }}</a>
-  </div>
-</div>
-{% elif finding.thread_id %}
-<h2>Fork conversation</h2>
-{{ composer(
-  action="/findings/" ~ finding.id ~ "/fork/",
-  placeholder="Optional instructions for the fork...",
-  required=false,
-  clear_on_send=false,
-) }}
+{% if finding.thread_id %}
+  {% include "_finding_fork.html" %}
 {% endif %}
 
-{% if finding.validated_evidence %}
+{% macro note_header(note) -%}
+  <div class="note-card-header">
+    {{ note.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}
+    {% if note.thread_id %}
+      <a href="/checkpoints/{{ note.thread_id }}/{% if note.tool_call_id %}#tc-{{ note.tool_call_id }}{% endif %}" class="mono text-xs" style="margin-left: 0.5rem;">{{ note.thread_id }}</a>
+    {% endif %}
+    {% if note.tool_call_id %}
+      <span class="mono text-xs text-muted" style="margin-left: 0.25rem;">{{ note.tool_call_id }}</span>
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+{% if finding.validation_notes %}
+<h2>Validation notes <span class="text-muted text-sm" style="font-weight: 400;">({{ finding.validation_notes|length }})</span></h2>
+{% for note in finding.validation_notes %}
+  {% if loop.first %}
+  <div class="note-card">
+    {{ note_header(note) }}
+    <div class="markdown">{{ note.evidence | md }}</div>
+  </div>
+  {% else %}
+    {% if loop.index == 2 %}
+    <details class="mt-2">
+      <summary class="text-sm text-muted" style="cursor: pointer;">{{ finding.validation_notes|length - 1 }} earlier note{{ "s" if finding.validation_notes|length > 2 else "" }}</summary>
+    {% endif %}
+    <div class="note-card mt-2" style="opacity: 0.8;">
+      {{ note_header(note) }}
+      <div class="markdown">{{ note.evidence | md }}</div>
+    </div>
+    {% if loop.last %}
+    </details>
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% elif finding.validated_evidence %}
+{# Fallback for legacy data not yet migrated to validation_notes #}
+<h2>Validation note</h2>
 <div class="note-card">
-  <div class="note-card-header">validation note — added after the finding was created</div>
+  <div class="note-card-header">legacy validation note</div>
   <div class="markdown">{{ finding.validated_evidence | md }}</div>
 </div>
 {% endif %}
@@ -94,13 +116,14 @@
 <h2>Attachments</h2>
 <div class="card" style="padding: 0;">
 <table>
-<thead><tr><th>File</th><th>Size</th><th>Description</th><th></th></tr></thead>
+<thead><tr><th>File</th><th>Size</th><th>Description</th><th>Created</th><th></th></tr></thead>
 <tbody>
 {% for att in finding.attachments %}
 <tr>
   <td class="mono text-xs">{{ att.filename }}</td>
   <td class="text-xs text-muted">{{ att.size | filesizeformat }}</td>
   <td class="text-xs text-muted">{{ att.description or "—" }}</td>
+  <td class="text-xs text-muted">{{ att.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
   <td><a href="/findings/{{ finding.id }}/attachments/{{ att.id }}/" class="btn text-xs" style="padding: 0.25rem 0.5rem;">download</a></td>
 </tr>
 {% endfor %}

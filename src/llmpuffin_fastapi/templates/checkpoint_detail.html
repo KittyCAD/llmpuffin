@@ -60,7 +60,14 @@
               </div>
               <div class="checkpoint-finding-title">{{ f.title or f.rule_id or "(untitled)" }}</div>
               {% if is_highlighted %}
-                <div class="text-xs" style="margin-top: 0.125rem; color: hsl(var(--warning));">investigating in this thread</div>
+                <div class="text-xs" style="margin-top: 0.25rem; color: hsl(var(--warning)); font-weight: 600;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                       style="vertical-align: -1px; margin-right: 2px;">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  Investigating in this thread
+                </div>
               {% elif f.thread_id == session.thread_id %}
                 <div class="text-xs text-muted" style="margin-top: 0.125rem;">from this thread</div>
               {% endif %}

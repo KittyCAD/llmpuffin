@@ -50,6 +50,11 @@ from langgraph.store.postgres.aio import AsyncPostgresStore
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
+from anthropic.types.beta import (
+    BetaWebFetchTool20250910Param,
+    BetaWebSearchTool20250305Param,
+)
+
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import async_session, get_postgres_url
 from llmpuffin.github import GitHubClient
@@ -177,12 +182,20 @@ def _build_agent(
         report,
         threat_model,
         audit_run_id=audit_run_id,
-        thread_id=thread_id,
         repo_path=repo_path,
         github_client=github_client,
         container_backend=container_backend,
     )
-    main_tools = [tools[name] for name in MAIN_AGENT_TOOLS]
+    main_tools: list = [tools[name] for name in MAIN_AGENT_TOOLS]
+
+    # Anthropic server-side tools — executed by Claude, no local handler needed.
+    main_tools.append(BetaWebSearchTool20250305Param(
+        name="web_search", type="web_search_20250305", max_uses=5,
+    ))
+    main_tools.append(BetaWebFetchTool20250910Param(
+        name="web_fetch", type="web_fetch_20250910", max_uses=5,
+    ))
+
     subagents = build_subagents(tools)
 
     middleware = [CodeInterpreterMiddleware()]

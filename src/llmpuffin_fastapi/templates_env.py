@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import time
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
@@ -10,7 +12,16 @@ from markupsafe import Markup, escape
 from llmpuffin.markdown import render_markdown
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+
+
+def _static_hash() -> str:
+    """Hash of app.css content — changes on every file edit."""
+    css = STATIC_DIR / "app.css"
+    if css.exists():
+        return hashlib.md5(css.read_bytes()).hexdigest()[:8]
+    return str(int(time.time()))
 
 
 def _md(text: str) -> Markup:
@@ -61,3 +72,4 @@ templates.env.filters["truncatechars"] = _truncatechars
 templates.env.filters["datetimefmt"] = _datetimefmt
 templates.env.filters["pluralize"] = _pluralize
 templates.env.globals["location_link"] = location_link
+templates.env.globals["static_hash"] = _static_hash

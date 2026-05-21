@@ -1,4 +1,4 @@
-{# Reusable LLM composer: textarea + circular send button (⌘/Ctrl+Enter).
+{# Reusable LLM composer: textarea + circular send button (Enter to send, Shift+Enter for newline).
 
    Usage:
      {% from "_composer.html" import composer %}
@@ -12,12 +12,15 @@
      rows          – textarea rows
      required      – whether the field is required
      clear_on_send – clear textarea after successful submit
-     on_success    – Alpine expression to run after a successful request (e.g. "forked = true")
+     on_success    – Alpine expression to run after a successful request
+     target        – htmx target selector (default: none; set to e.g. "#fork-section" to swap a container)
+     swap          – htmx swap strategy (default: "innerHTML")
 #}
-{% macro composer(action, placeholder="Send a message...", disabled=false, name="message", rows=3, required=true, clear_on_send=true, on_success="") -%}
+{% macro composer(action, placeholder="Send a message...", disabled=false, name="message", rows=3, required=true, clear_on_send=true, on_success="", target="", swap="innerHTML") -%}
 <form
   hx-post="{{ action }}"
   hx-disabled-elt="find textarea, find button"
+  {% if target %}hx-target="{{ target }}" hx-swap="{{ swap }}"{% endif %}
   hx-on::after-request="if (event.detail.successful) { {% if clear_on_send %}this.querySelector('textarea').value = '';{% endif %}{% if on_success %} {{ on_success }};{% endif %} var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); }"
   class="composer"
 >
@@ -29,7 +32,7 @@
     {% if disabled %}disabled{% endif %}
     onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"
   ></textarea>
-  <button type="submit" class="primary composer-send" title="Send (⌘/Ctrl+Enter)" aria-label="Send" {% if disabled %}disabled{% endif %}>
+  <button type="submit" class="primary composer-send" title="Send (Enter)" aria-label="Send" {% if disabled %}disabled{% endif %}>
     <svg class="composer-send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/>

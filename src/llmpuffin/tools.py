@@ -8,7 +8,10 @@ ls, execute) are provided by the ContainerBackend via deepagents.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Callable, Literal
+
+from langgraph.prebuilt.tool_node import ToolRuntime
+from pydantic import BaseModel, Field
 
 from sqlalchemy import func, select, text
 from sqlalchemy import update as sa_update
@@ -16,11 +19,42 @@ from sqlalchemy import update as sa_update
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import sync_session
 from llmpuffin.github import GitHubClient
-from llmpuffin.models import Finding, FindingAttachment, FindingLocation
+from llmpuffin.models import Finding, FindingAttachment, FindingLocation, ValidationNote
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
 log = logging.getLogger("llmpuffin")
+
+
+class LocationInput(BaseModel):
+    """A source code location."""
+
+    file: str = Field(description="File path relative to the repo root (e.g. 'src/main.py')")
+    line: int = Field(default=0, description="Line number (0 if unknown)")
+
+
+class ReportFindingInput(BaseModel):
+    """Input schema for report_finding."""
+
+    scenario_id: str = Field(description="The threat scenario ID this finding relates to (e.g. 'sqli')")
+    title: str = Field(description="Short one-line summary (e.g. 'SQL injection in login endpoint')")
+    severity: Literal["high", "medium", "low", "informational"] = Field(description="How severe the issue is")
+    difficulty: Literal["high", "medium", "low"] = Field(description="How hard it is to exploit")
+    description: str = Field(description="What the vulnerability is and where it occurs. Include code evidence.")
+    impact: str = Field(description="What an attacker could achieve by exploiting this")
+    recommendations: str = Field(description="Concrete steps to fix or mitigate the issue")
+    locations: list[LocationInput] | None = Field(default=None, description="Source code locations")
+
+
+class UpdateFindingInput(BaseModel):
+    """Input schema for update_finding."""
+
+    finding_id: int = Field(description="The finding_id returned by report_finding (0-indexed)")
+    severity: Literal["high", "medium", "low", "informational"] | None = Field(default=None, description="New severity")
+    difficulty: Literal["high", "medium", "low"] | None = Field(default=None, description="New difficulty")
+    description: str | None = Field(default=None, description="New description")
+    impact: str | None = Field(default=None, description="New impact")
+    recommendations: str | None = Field(default=None, description="New recommendations")
 
 
 def _format_threat_model_view(view: ThreatModelView) -> str:
@@ -72,6 +106,7 @@ def _persist_finding_to_db(
     impact: str,
     recommendations: str,
     locations: list[dict] | None,
+    tool_call_id: str = "",
 ) -> tuple[int, int, str]:
     """Allocate local_id in SQL and insert a finding in one transaction.
 
@@ -108,6 +143,7 @@ def _persist_finding_to_db(
                 description=description,
                 impact=impact,
                 recommendations=recommendations,
+                tool_call_id=tool_call_id,
             )
             s.add(finding)
             s.flush()
@@ -135,7 +171,6 @@ def make_tools(
     report: SarifReport,
     threat_model: ThreatModel,
     audit_run_id: int,
-    thread_id: str = "",
     repo_path: str = "",
     github_client: GitHubClient | None = None,
     container_backend: ContainerBackend | None = None,
@@ -217,36 +252,34 @@ Existing mitigations to verify:
     def report_finding(
         scenario_id: str,
         title: str,
-        severity: str,
-        difficulty: str,
+        severity: Literal["high", "medium", "low", "informational"],
+        difficulty: Literal["high", "medium", "low"],
         description: str,
         impact: str,
         recommendations: str,
-        locations: list[dict] | None = None,
+        locations: list[LocationInput] | None = None,
+        runtime: ToolRuntime = None,
     ) -> str:
         """Record a security finding. Call this for each vulnerability you discover.
 
         Returns the finding_id (integer, starting from 0) which you must use
         to reference this finding in update_finding, delete_finding, and
         validate_finding.
-
-        Args:
-            scenario_id: The threat scenario ID this finding relates to (e.g. "sqli")
-            title: Short one-line summary of the finding (e.g. "SQL injection in login endpoint")
-            severity: How severe the issue is: "high", "medium", "low", or "informational"
-            difficulty: How hard it is to exploit: "high", "medium", or "low"
-            description: What the vulnerability is and where it occurs. Include code evidence.
-            impact: What an attacker could achieve by exploiting this.
-            recommendations: Concrete steps to fix or mitigate the issue.
-            locations: Optional list of locations, each a dict with "file" (str) and "line" (int).
-                       Example: [{"file": "src/main.py", "line": 42}]
         """
+        if not runtime:
+            raise RuntimeError("report_finding requires ToolRuntime")
+        rt_tool_call_id = runtime.tool_call_id or ""
+        rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
+
+        # Convert LocationInput models to dicts for the DB layer.
+        loc_dicts = [{"file": loc.file, "line": loc.line} for loc in locations] if locations else None
+
         # Persist first so we get the authoritative, race-safe local_id +
         # rule_id from the DB. The SARIF entry uses the same values to keep
         # the two stores consistent.
         _, local_id, rule_id = _persist_finding_to_db(
             audit_run_id,
-            thread_id,
+            rt_thread_id,
             scenario_id,
             title,
             severity,
@@ -254,7 +287,8 @@ Existing mitigations to verify:
             description,
             impact,
             recommendations,
-            locations,
+            loc_dicts,
+            tool_call_id=rt_tool_call_id,
         )
 
         sarif_locations = []
@@ -262,8 +296,8 @@ Existing mitigations to verify:
             for loc in locations:
                 sarif_locations.append(
                     SarifLocation(
-                        file_path=loc["file"],
-                        start_line=loc.get("line", 0),
+                        file_path=loc.file,
+                        start_line=loc.line,
                     )
                 )
         finding = SarifFinding(
@@ -383,6 +417,7 @@ Existing mitigations to verify:
     def validate_finding(
         finding_id: int,
         evidence: str,
+        runtime: ToolRuntime = None,
     ) -> str:
         """Mark a finding as validated with exploit evidence.
 
@@ -390,10 +425,18 @@ Existing mitigations to verify:
         from attacker input to impact, or (b) run a live exploit/test that proves
         the vulnerability.
 
+        Each call creates a new immutable validation note. You can call this
+        multiple times to add additional evidence.
+
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
             evidence: The validation evidence — exploit chain trace or test output
         """
+        if not runtime:
+            raise RuntimeError("validate_finding requires ToolRuntime")
+        rt_tool_call_id = runtime.tool_call_id or ""
+        rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
+
         db_finding = _resolve_finding(audit_run_id, finding_id)
         if not db_finding:
             return f"Finding {finding_id} not found"
@@ -406,16 +449,22 @@ Existing mitigations to verify:
             sarif_finding.properties["validated"] = True
             sarif_finding.properties["validated_evidence"] = evidence
 
-        # Update DB
+        # Create immutable validation note + mark finding as validated.
         try:
             with sync_session() as s:
+                s.add(ValidationNote(
+                    finding_id=db_finding.id,
+                    thread_id=rt_thread_id,
+                    tool_call_id=rt_tool_call_id or "",
+                    evidence=evidence,
+                ))
                 s.execute(
                     sa_update(Finding)
                     .where(
                         Finding.id == db_finding.id,
                         Finding.audit_run_id == audit_run_id,
                     )
-                    .values(validated=True, validated_evidence=evidence)
+                    .values(validated=True)
                 )
                 s.commit()
         except Exception as exc:
@@ -533,12 +582,11 @@ Existing mitigations to verify:
                 f"Error: file too large (max {MAX_EXPORT_FILE_SIZE // 1024 // 1024} MB)"
             )
 
-        filename = file_path.rsplit("/", 1)[-1] if "/" in file_path else file_path
         try:
             with sync_session() as s:
                 att = FindingAttachment(
                     finding_id=db_finding.id,
-                    filename=filename,
+                    filename=file_path,
                     description=description,
                     content=raw,
                     size=len(raw),
@@ -550,7 +598,7 @@ Existing mitigations to verify:
             return f"Error saving file: {exc}"
 
         return (
-            f"Exported {filename} ({len(raw)} bytes) attached to finding {finding_id}"
+            f"Exported {file_path} ({len(raw)} bytes) attached to finding {finding_id}"
         )
 
     def finding_list_attached_files(finding_id: int) -> str:

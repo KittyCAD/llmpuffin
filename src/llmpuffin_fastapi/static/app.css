@@ -463,14 +463,10 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
   box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-  opacity: 0;
-  transform: translateY(0.5rem);
-  transition: opacity 0.18s ease, transform 0.18s ease;
   display: flex;
   gap: 0.625rem;
   align-items: flex-start;
 }
-.toast.show { opacity: 1; transform: translateY(0); }
 .toast.success { border-left-color: hsl(142 71% 45%); }
 .toast.error   { border-left-color: hsl(var(--destructive)); }
 .toast.info    { border-left-color: hsl(var(--primary)); }
@@ -581,8 +577,13 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
 }
 .checkpoint-finding.highlighted {
   border-color: hsl(var(--warning));
-  border-width: 2px;
-  background: hsl(var(--warning) / 0.08);
+  border-left: 4px solid hsl(var(--warning));
+  background: hsl(var(--warning) / 0.12);
+  box-shadow: 0 0 0 1px hsl(var(--warning) / 0.25), 0 2px 8px hsl(var(--warning) / 0.1);
+}
+.checkpoint-finding.highlighted:hover {
+  background: hsl(var(--warning) / 0.18);
+  border-color: hsl(var(--warning));
 }
 .checkpoint-finding-title {
   font-size: 0.85rem;

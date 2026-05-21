@@ -32,6 +32,7 @@ llmpuffin = "llmpuffin.__main__:main"
 llmpuffin-run = "llmpuffin_dev.run:main"
 llmpuffin-check = "llmpuffin_dev.check:main"
 llmpuffin-pg = "llmpuffin_dev.postgres:main"
+llmpuffin-oidc = "llmpuffin_dev.oidc_server:main"
 llmpuffin-fastapi = "llmpuffin_fastapi.main:main"
 
 [tool.ruff]
