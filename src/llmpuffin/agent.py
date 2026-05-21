@@ -76,6 +76,7 @@ class AuditResult:
     status: AuditStatus
     error: str | None = None
     thread_id: str | None = None
+    audit_run_id: int | None = None
 
 
 SYSTEM_PROMPT = """\
@@ -179,6 +180,7 @@ def _build_agent(
         thread_id=thread_id,
         repo_path=repo_path,
         github_client=github_client,
+        container_backend=container_backend,
     )
     main_tools = [tools[name] for name in MAIN_AGENT_TOOLS]
     subagents = build_subagents(tools)
@@ -365,11 +367,10 @@ async def _fork_audit_inner(
         len(report.findings),
         status,
     )
-    report.write(p.output)
 
     await _finalize_audit_run(new_tid, status, error)
 
-    return AuditResult(report=report, status=status, error=error, thread_id=new_tid)
+    return AuditResult(report=report, status=status, error=error, thread_id=new_tid, audit_run_id=audit_run_id)
 
 
 async def run_audit(
@@ -484,11 +485,10 @@ async def _run_audit_inner(
         len(report.findings),
         status,
     )
-    report.write(p.output)
 
     await _finalize_audit_run(tid, status, error)
 
-    return AuditResult(report=report, status=status, error=error, thread_id=tid)
+    return AuditResult(report=report, status=status, error=error, thread_id=tid, audit_run_id=audit_run_id)
 
 
 async def _get_container_id(tid: str) -> str | None:

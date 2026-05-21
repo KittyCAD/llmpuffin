@@ -90,6 +90,25 @@
 </div>
 {% endif %}
 
+{% if finding.attachments %}
+<h2>Attachments</h2>
+<div class="card" style="padding: 0;">
+<table>
+<thead><tr><th>File</th><th>Size</th><th>Description</th><th></th></tr></thead>
+<tbody>
+{% for att in finding.attachments %}
+<tr>
+  <td class="mono text-xs">{{ att.filename }}</td>
+  <td class="text-xs text-muted">{{ att.size | filesizeformat }}</td>
+  <td class="text-xs text-muted">{{ att.description or "—" }}</td>
+  <td><a href="/findings/{{ finding.id }}/attachments/{{ att.id }}/" class="btn text-xs" style="padding: 0.25rem 0.5rem;">download</a></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+
 {% if locations %}
 <h2>Locations</h2>
 <div class="card" style="padding: 0;">

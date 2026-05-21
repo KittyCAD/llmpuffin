@@ -6,7 +6,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +16,7 @@ from llmpuffin.config import Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
+from llmpuffin.sarif import export_sarif_for_run
 
 from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
@@ -132,6 +133,26 @@ async def run_delete(
 
 def _toml_for_run(run: AuditRun) -> str:
     return run.profile_toml or (run.profile.profile_toml if run.profile else "")
+
+
+@router.get("/runs/{run_id}/sarif/")
+async def run_sarif_export(
+    run_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    run = (
+        await db.execute(select(AuditRun).where(AuditRun.id == run_id))
+    ).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status_code=404)
+    sarif_json = export_sarif_for_run(run_id)
+    return Response(
+        content=sarif_json,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="llmpuffin-run-{run_id}.sarif.json"'
+        },
+    )
 
 
 @router.post("/runs/{run_id}/resume/{thread_id}/")

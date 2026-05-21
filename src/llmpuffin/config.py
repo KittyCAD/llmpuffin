@@ -152,7 +152,6 @@ class Profile:
     image: str
     threat_model_dir: Path
     code_dir: str = "/src"
-    output: Path = Path("results.sarif")
     agent: ProfileAgent = field(default_factory=ProfileAgent)
 
     @classmethod
@@ -178,7 +177,6 @@ class Profile:
             image=audit["image"],
             threat_model_dir=Path(audit["threat_model_dir"]),
             code_dir=audit.get("code_dir", "/src"),
-            output=Path(audit.get("output", "results.sarif")),
             agent=ProfileAgent(
                 model=agent_data.get("model", "claude-sonnet-4-20250514"),
                 max_iterations=agent_data.get("max_iterations", 200),

@@ -22,6 +22,7 @@
     {% else %}
       <span class="badge outline">{{ run.status }}</span>
     {% endif %}
+    <a href="/runs/{{ run.id }}/sarif/" class="btn">Export SARIF</a>
     {% if run.status != "running" %}
       <form hx-post="/runs/{{ run.id }}/delete/" hx-confirm="Delete this run and all its findings?" hx-disabled-elt="find button" class="inline">
         <button type="submit" class="destructive">delete</button>

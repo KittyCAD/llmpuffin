@@ -62,8 +62,9 @@ async def checkpoint_detail(
         )
     audit_thread = await _get_audit_thread(db, thread_id)
     findings: list[Finding] = []
+    highlighted_ids: set[int] = set()
     if audit_thread is not None:
-        findings = list(
+        all_findings = list(
             (
                 await db.execute(
                     select(Finding)
@@ -71,12 +72,17 @@ async def checkpoint_detail(
                         Finding.audit_run_id == audit_thread.audit_run_id,
                         Finding.deleted.is_(False),
                     )
-                    .order_by(Finding.created_at.desc())
+                    .order_by(Finding.local_id.desc())
                 )
             )
             .scalars()
             .all()
         )
+        # Findings whose fork_thread_id points to this thread go first.
+        highlighted = [f for f in all_findings if f.fork_thread_id == thread_id]
+        rest = [f for f in all_findings if f.fork_thread_id != thread_id]
+        findings = highlighted + rest
+        highlighted_ids = {f.id for f in highlighted}
     return templates.TemplateResponse(
         request,
         "checkpoint_detail.html",
@@ -84,6 +90,7 @@ async def checkpoint_detail(
             "session": session,
             "audit_thread": audit_thread,
             "findings": findings,
+            "highlighted_finding_ids": highlighted_ids,
         },
     )
 

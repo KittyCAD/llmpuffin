@@ -52,13 +52,16 @@
       <ul class="checkpoint-findings">
         {% for f in findings %}
           <li>
-            <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if f.thread_id == session.thread_id %}current{% endif %}">
+            {% set is_highlighted = f.id in highlighted_finding_ids %}
+            <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if is_highlighted %}highlighted{% elif f.thread_id == session.thread_id %}current{% endif %}">
               <div class="row gap-2" style="align-items: center; min-width: 0;">
                 <span class="badge sev-{{ f.severity|lower }} text-xs"><span class="dot"></span>{{ f.severity or "?" }}</span>
                 <span class="text-xs text-muted">#{{ f.local_id }}</span>
               </div>
               <div class="checkpoint-finding-title">{{ f.title or f.rule_id or "(untitled)" }}</div>
-              {% if f.thread_id == session.thread_id %}
+              {% if is_highlighted %}
+                <div class="text-xs" style="margin-top: 0.125rem; color: hsl(var(--warning));">investigating in this thread</div>
+              {% elif f.thread_id == session.thread_id %}
                 <div class="text-xs text-muted" style="margin-top: 0.125rem;">from this thread</div>
               {% endif %}
             </a>

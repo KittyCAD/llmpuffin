@@ -12,4 +12,6 @@ MAIN_AGENT_TOOLS = (
     "validate_finding",
     "update_finding",
     "delete_finding",
+    "finding_attach_file",
+    "finding_list_attached_files",
 )

@@ -13,9 +13,10 @@ from typing import Callable
 from sqlalchemy import func, select, text
 from sqlalchemy import update as sa_update
 
+from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import sync_session
 from llmpuffin.github import GitHubClient
-from llmpuffin.models import Finding, FindingLocation
+from llmpuffin.models import Finding, FindingAttachment, FindingLocation
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
@@ -127,6 +128,9 @@ def _persist_finding_to_db(
         ) from exc
 
 
+MAX_EXPORT_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
+
+
 def make_tools(
     report: SarifReport,
     threat_model: ThreatModel,
@@ -134,6 +138,7 @@ def make_tools(
     thread_id: str = "",
     repo_path: str = "",
     github_client: GitHubClient | None = None,
+    container_backend: ContainerBackend | None = None,
 ) -> dict[str, Callable]:
     """Create threat model and finding tools."""
 
@@ -489,6 +494,93 @@ Existing mitigations to verify:
             log.warning("Failed to fetch commit %s@%s: %s", repo, sha, exc)
             return f"Error fetching commit: {exc}"
 
+    def finding_attach_file(finding_id: int, file_path: str, description: str = "") -> str:
+        """Export a file from the container and attach it to a finding.
+
+        Use this to save evidence files (exploit scripts, test output, screenshots,
+        config files, etc.) that support a finding's validation.
+
+        The file is read from the running container and stored in the database.
+        Maximum file size is 2 MB.
+
+        Args:
+            finding_id: The finding_id returned by report_finding (0-indexed)
+            file_path: Absolute path to the file inside the container
+            description: Short description of what this file is (e.g. "exploit script", "test output")
+        """
+        if not container_backend:
+            return "Error: no container available"
+        db_finding = _resolve_finding(audit_run_id, finding_id)
+        if not db_finding:
+            return f"Finding {finding_id} not found"
+
+        # Read file raw via base64 to handle binary content safely.
+        import base64
+
+        exit_code, stdout, stderr = container_backend._run(
+            ["base64", file_path]
+        )
+        if exit_code != 0:
+            return f"Error reading file: {stderr.strip() or 'file not found'}"
+
+        try:
+            raw = base64.b64decode(stdout)
+        except Exception as exc:
+            return f"Error decoding file: {exc}"
+
+        if len(raw) > MAX_EXPORT_FILE_SIZE:
+            return f"Error: file too large (max {MAX_EXPORT_FILE_SIZE // 1024 // 1024} MB)"
+
+        filename = file_path.rsplit("/", 1)[-1] if "/" in file_path else file_path
+        try:
+            with sync_session() as s:
+                att = FindingAttachment(
+                    finding_id=db_finding.id,
+                    filename=filename,
+                    description=description,
+                    content=raw,
+                    size=len(raw),
+                )
+                s.add(att)
+                s.commit()
+        except Exception as exc:
+            log.warning("Failed to export file: %s", exc)
+            return f"Error saving file: {exc}"
+
+        return f"Exported {filename} ({len(raw)} bytes) attached to finding {finding_id}"
+
+    def finding_list_attached_files(finding_id: int) -> str:
+        """List files that have been exported and attached to a finding.
+
+        Args:
+            finding_id: The finding_id returned by report_finding (0-indexed)
+        """
+        db_finding = _resolve_finding(audit_run_id, finding_id)
+        if not db_finding:
+            return f"Finding {finding_id} not found"
+
+        try:
+            with sync_session() as s:
+                attachments = (
+                    s.execute(
+                        select(FindingAttachment)
+                        .where(FindingAttachment.finding_id == db_finding.id)
+                        .order_by(FindingAttachment.created_at)
+                    )
+                    .scalars()
+                    .all()
+                )
+            if not attachments:
+                return "No files exported for this finding."
+            lines = []
+            for a in attachments:
+                desc = f" — {a.description}" if a.description else ""
+                lines.append(f"- {a.filename} ({a.size} bytes){desc}")
+            return "\n".join(lines)
+        except Exception as exc:
+            log.warning("Failed to list exported files: %s", exc)
+            return "Error listing files."
+
     return {
         "get_threat_model": get_threat_model,
         "get_threat_scenario": get_threat_scenario,
@@ -499,4 +591,6 @@ Existing mitigations to verify:
         "validate_finding": validate_finding,
         "get_pull_request": get_pull_request,
         "get_commit": get_commit,
+        "finding_attach_file": finding_attach_file,
+        "finding_list_attached_files": finding_list_attached_files,
     }

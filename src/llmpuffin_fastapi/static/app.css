@@ -579,6 +579,11 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
   border-color: hsl(var(--primary) / 0.6);
   background: hsl(var(--primary) / 0.06);
 }
+.checkpoint-finding.highlighted {
+  border-color: hsl(var(--warning));
+  border-width: 2px;
+  background: hsl(var(--warning) / 0.08);
+}
 .checkpoint-finding-title {
   font-size: 0.85rem;
   margin-top: 0.25rem;

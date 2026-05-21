@@ -48,9 +48,6 @@ def _build_for_profile(profile_path: Path) -> None:
     per_profile_dockerfile = profile_path.parent / "Dockerfile"
     if per_profile_dockerfile.exists():
         _build_image(profile.image, per_profile_dockerfile)
-    else:
-        print(f"No Dockerfile found for {profile.name}", file=sys.stderr)
-        sys.exit(1)
 
 
 def _discover_profiles() -> list[Path]:

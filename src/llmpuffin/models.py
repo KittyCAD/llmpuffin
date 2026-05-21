@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -216,6 +217,9 @@ class Finding(Base):
     locations: Mapped[list[FindingLocation]] = relationship(
         back_populates="finding", cascade="all, delete-orphan"
     )
+    attachments: Mapped[list[FindingAttachment]] = relationship(
+        back_populates="finding", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -248,3 +252,26 @@ class FindingLocation(Base):
 
     def __str__(self) -> str:
         return f"{self.file_path}:{self.start_line}"
+
+
+class FindingAttachment(Base):
+    """A file exported from the container and attached to a finding."""
+
+    __tablename__ = "finding_attachment"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    finding_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("finding.id", ondelete="CASCADE")
+    )
+    filename: Mapped[str] = mapped_column(String(1024))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    size: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    finding: Mapped[Finding] = relationship(back_populates="attachments")
+
+    def __str__(self) -> str:
+        return self.filename

@@ -7,7 +7,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import distinct, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,7 +17,7 @@ from llmpuffin.config import Profile
 from llmpuffin.db import async_session
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding, FindingAttachment
 
 from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
@@ -142,6 +142,7 @@ async def _get_finding(db: AsyncSession, finding_id: int) -> Finding | None:
             .options(
                 selectinload(Finding.audit_run).selectinload(AuditRun.profile),
                 selectinload(Finding.locations),
+                selectinload(Finding.attachments),
             )
             .where(Finding.id == finding_id)
         )
@@ -315,6 +316,15 @@ async def finding_fork(
             redirect_to=redirect,
         )
 
+    if finding.fork_thread_id:
+        return toast(
+            request,
+            "error",
+            "Finding already has a fork",
+            redirect_to=f"/checkpoints/{finding.fork_thread_id}/",
+            refresh=True,
+        )
+
     source_thread = (
         await db.execute(
             select(AuditThread).where(AuditThread.thread_id == finding.thread_id)
@@ -376,4 +386,33 @@ async def finding_fork(
         "Fork started",
         redirect_to=f"/checkpoints/{new_thread_id}/",
         refresh=True,
+    )
+
+
+@router.get("/findings/{finding_id}/attachments/{attachment_id}/")
+async def finding_attachment_download(
+    finding_id: int,
+    attachment_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    att = (
+        await db.execute(
+            select(FindingAttachment).where(
+                FindingAttachment.id == attachment_id,
+                FindingAttachment.finding_id == finding_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if att is None:
+        raise HTTPException(status_code=404)
+
+    import mimetypes
+
+    mime, _ = mimetypes.guess_type(att.filename)
+    return Response(
+        content=att.content,
+        media_type=mime or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{att.filename}"',
+        },
     )

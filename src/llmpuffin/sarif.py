@@ -139,3 +139,67 @@ class SarifReport:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             json.dump(self.to_sarif(), f, indent=2)
+
+    def to_json(self, indent: int = 2) -> str:
+        return json.dumps(self.to_sarif(), indent=indent)
+
+
+def export_sarif_for_run(audit_run_id: int) -> str:
+    """Generate SARIF JSON for an audit run from DB findings.
+
+    Returns the SARIF JSON string. This is the canonical export path —
+    it reads findings from the database rather than relying on in-memory state.
+    """
+    from llmpuffin.db import sync_session
+    from llmpuffin.models import Finding, FindingLocation
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    with sync_session() as s:
+        findings = (
+            s.execute(
+                select(Finding)
+                .options(selectinload(Finding.locations))
+                .where(
+                    Finding.audit_run_id == audit_run_id,
+                    Finding.deleted.is_(False),
+                )
+                .order_by(Finding.local_id)
+            )
+            .scalars()
+            .all()
+        )
+
+    report = SarifReport()
+    for f in findings:
+        locations = [
+            SarifLocation(
+                file_path=loc.file_path,
+                start_line=loc.start_line,
+                end_line=loc.end_line,
+            )
+            for loc in f.locations
+        ]
+        props: dict[str, Any] = {}
+        if f.validated:
+            props["validated"] = True
+        if f.validated_evidence:
+            props["validated_evidence"] = f.validated_evidence
+
+        report.add_finding(
+            SarifFinding(
+                rule_id=f.rule_id,
+                title=f.title,
+                description=f.description,
+                impact=f.impact,
+                recommendations=f.recommendations,
+                severity=f.severity,
+                difficulty=f.difficulty,
+                locations=locations,
+                threat_scenario_ids=[f.scenario_id] if f.scenario_id else [],
+                properties=props,
+            )
+        )
+
+    return report.to_json()
