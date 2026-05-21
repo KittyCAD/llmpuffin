@@ -9,7 +9,12 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from llmpuffin_fastapi.deps import toast
-from llmpuffin_fastapi.store import delete_item, list_items, list_namespaces, update_item
+from llmpuffin_fastapi.store import (
+    delete_item,
+    list_items,
+    list_namespaces,
+    update_item,
+)
 from llmpuffin_fastapi.templates_env import templates
 
 router = APIRouter()
@@ -48,9 +53,7 @@ async def store_item_edit(
             request, "error", "Value must be a JSON object", redirect_to=redirect
         )
     await update_item(prefix, key, value)
-    return toast(
-        request, "success", f"Saved {key}", redirect_to=redirect, refresh=True
-    )
+    return toast(request, "success", f"Saved {key}", redirect_to=redirect, refresh=True)
 
 
 @router.post("/store/{prefix:path}/delete/")

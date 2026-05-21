@@ -185,7 +185,9 @@ async def run_resume(
         raise HTTPException(status_code=404)
     redirect = f"/runs/{run_id}/"
     if thread.status == "running":
-        return toast(request, "error", "Thread is already running", redirect_to=redirect)
+        return toast(
+            request, "error", "Thread is already running", redirect_to=redirect
+        )
 
     toml_str = _toml_for_run(run)
     if not toml_str:
@@ -242,7 +244,10 @@ async def run_fork(
     redirect = f"/runs/{run_id}/"
     if thread.status == "running":
         return toast(
-            request, "error", "Thread is still running, cannot fork", redirect_to=redirect
+            request,
+            "error",
+            "Thread is still running, cannot fork",
+            redirect_to=redirect,
         )
     msg = message.strip()
     if not msg:

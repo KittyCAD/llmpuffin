@@ -494,7 +494,9 @@ Existing mitigations to verify:
             log.warning("Failed to fetch commit %s@%s: %s", repo, sha, exc)
             return f"Error fetching commit: {exc}"
 
-    def finding_attach_file(finding_id: int, file_path: str, description: str = "") -> str:
+    def finding_attach_file(
+        finding_id: int, file_path: str, description: str = ""
+    ) -> str:
         """Export a file from the container and attach it to a finding.
 
         Use this to save evidence files (exploit scripts, test output, screenshots,
@@ -517,9 +519,7 @@ Existing mitigations to verify:
         # Read file raw via base64 to handle binary content safely.
         import base64
 
-        exit_code, stdout, stderr = container_backend._run(
-            ["base64", file_path]
-        )
+        exit_code, stdout, stderr = container_backend._run(["base64", file_path])
         if exit_code != 0:
             return f"Error reading file: {stderr.strip() or 'file not found'}"
 
@@ -529,7 +529,9 @@ Existing mitigations to verify:
             return f"Error decoding file: {exc}"
 
         if len(raw) > MAX_EXPORT_FILE_SIZE:
-            return f"Error: file too large (max {MAX_EXPORT_FILE_SIZE // 1024 // 1024} MB)"
+            return (
+                f"Error: file too large (max {MAX_EXPORT_FILE_SIZE // 1024 // 1024} MB)"
+            )
 
         filename = file_path.rsplit("/", 1)[-1] if "/" in file_path else file_path
         try:
@@ -547,7 +549,9 @@ Existing mitigations to verify:
             log.warning("Failed to export file: %s", exc)
             return f"Error saving file: {exc}"
 
-        return f"Exported {filename} ({len(raw)} bytes) attached to finding {finding_id}"
+        return (
+            f"Exported {filename} ({len(raw)} bytes) attached to finding {finding_id}"
+        )
 
     def finding_list_attached_files(finding_id: int) -> str:
         """List files that have been exported and attached to a finding.

@@ -21,7 +21,6 @@ from github import Auth, Github, GithubIntegration
 log = logging.getLogger("llmpuffin")
 
 
-
 @dataclass
 class PullRequestInfo:
     """Structured result from fetching a GitHub PR."""
@@ -143,9 +142,7 @@ class GitHubClient:
         issue = r.create_issue(title=title, body=body, labels=labels or [])
         return issue.html_url
 
-    def update_issue(
-        self, repo: str, issue_number: int, title: str, body: str
-    ) -> str:
+    def update_issue(self, repo: str, issue_number: int, title: str, body: str) -> str:
         """Update a GitHub issue and return its HTML URL."""
         r = self._gh().get_repo(repo)
         issue = r.get_issue(issue_number)
@@ -162,9 +159,7 @@ class GitHubClient:
             comments.append(f"**{c.user.login}** ({c.created_at}):\n{c.body}")
         for c in pr.get_comments():
             path = f" (`{c.path}:{c.position}`)" if c.path else ""
-            comments.append(
-                f"**{c.user.login}**{path} ({c.created_at}):\n{c.body}"
-            )
+            comments.append(f"**{c.user.login}**{path} ({c.created_at}):\n{c.body}")
 
         diff = self._fetch_diff(pr.diff_url)
 

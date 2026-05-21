@@ -10,6 +10,7 @@ from __future__ import annotations
 import tomllib
 from datetime import datetime
 
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -25,7 +26,6 @@ from sqlalchemy import (
 )
 
 SEVERITY_LEVELS = ("low", "medium", "high", "informational")
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):

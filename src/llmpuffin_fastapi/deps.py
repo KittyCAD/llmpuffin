@@ -64,6 +64,7 @@ def toast(
         f"{redirect_to}{sep}{level}={quote(message)}", status_code=303
     )
 
+
 # Strong references to in-flight audit tasks so they aren't GC'd.
 _tasks: set[asyncio.Task] = set()
 

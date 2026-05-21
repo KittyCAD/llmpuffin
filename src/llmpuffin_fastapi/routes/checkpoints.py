@@ -125,7 +125,9 @@ async def checkpoint_resume(
         raise HTTPException(status_code=404)
     redirect = f"/checkpoints/{thread_id}/"
     if audit_thread.status == "running":
-        return toast(request, "error", "Thread is already running", redirect_to=redirect)
+        return toast(
+            request, "error", "Thread is already running", redirect_to=redirect
+        )
 
     run = audit_thread.audit_run
     toml_str = run.profile_toml or (run.profile.profile_toml if run.profile else "")
@@ -138,5 +140,9 @@ async def checkpoint_resume(
 
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    spawn_audit(run_audit(harness_config, thread_id=thread_id, user_message=msg, github_client=gh))
+    spawn_audit(
+        run_audit(
+            harness_config, thread_id=thread_id, user_message=msg, github_client=gh
+        )
+    )
     return toast(request, "success", "Resumed", redirect_to=redirect)

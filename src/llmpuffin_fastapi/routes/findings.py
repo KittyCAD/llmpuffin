@@ -14,10 +14,15 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit
 from llmpuffin.config import Profile
-from llmpuffin.db import async_session
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding, FindingAttachment
+from llmpuffin.models import (
+    AuditProfile,
+    AuditRun,
+    AuditThread,
+    Finding,
+    FindingAttachment,
+)
 
 from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
@@ -165,8 +170,9 @@ async def finding_detail(
         {
             "finding": finding,
             "audit_run": finding.audit_run,
-            "github_configured": bool(gh and gh.configured
-            and finding.audit_run.github_repo_url),
+            "github_configured": bool(
+                gh and gh.configured and finding.audit_run.github_repo_url
+            ),
             "locations": finding.locations,
         },
     )

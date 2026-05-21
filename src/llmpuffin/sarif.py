@@ -151,7 +151,7 @@ def export_sarif_for_run(audit_run_id: int) -> str:
     it reads findings from the database rather than relying on in-memory state.
     """
     from llmpuffin.db import sync_session
-    from llmpuffin.models import Finding, FindingLocation
+    from llmpuffin.models import Finding
 
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload

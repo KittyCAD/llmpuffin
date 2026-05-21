@@ -52,10 +52,10 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import async_session, get_postgres_url
-from llmpuffin.github import GitHubClient, client_from_config
+from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.log import log
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread
 from llmpuffin.sarif import SarifReport
 from llmpuffin.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.threat_model import ThreatModel
@@ -370,7 +370,13 @@ async def _fork_audit_inner(
 
     await _finalize_audit_run(new_tid, status, error)
 
-    return AuditResult(report=report, status=status, error=error, thread_id=new_tid, audit_run_id=audit_run_id)
+    return AuditResult(
+        report=report,
+        status=status,
+        error=error,
+        thread_id=new_tid,
+        audit_run_id=audit_run_id,
+    )
 
 
 async def run_audit(
@@ -488,7 +494,13 @@ async def _run_audit_inner(
 
     await _finalize_audit_run(tid, status, error)
 
-    return AuditResult(report=report, status=status, error=error, thread_id=tid, audit_run_id=audit_run_id)
+    return AuditResult(
+        report=report,
+        status=status,
+        error=error,
+        thread_id=tid,
+        audit_run_id=audit_run_id,
+    )
 
 
 async def _get_container_id(tid: str) -> str | None:

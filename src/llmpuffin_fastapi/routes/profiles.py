@@ -66,9 +66,7 @@ async def profile_create(
     try:
         tomllib.loads(profile_toml)
     except Exception as exc:
-        return toast(
-            request, "error", f"Invalid TOML: {exc}", redirect_to="/profiles/"
-        )
+        return toast(request, "error", f"Invalid TOML: {exc}", redirect_to="/profiles/")
     db.add(AuditProfile(name=name, profile_toml=profile_toml, jit=False))
     await db.commit()
     return toast(
@@ -146,9 +144,7 @@ async def profile_run(
     try:
         parsed = Profile.from_toml_string(profile.profile_toml)
     except Exception as exc:
-        return toast(
-            request, "error", f"Invalid config: {exc}", redirect_to=redirect
-        )
+        return toast(request, "error", f"Invalid config: {exc}", redirect_to=redirect)
     harness_config = HarnessConfig(profile=parsed, profile_toml=profile.profile_toml)
     spawn_audit(run_audit(harness_config, github_client=gh))
     return toast(
