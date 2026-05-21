@@ -16,7 +16,8 @@ from llmpuffin.config import Config
 from llmpuffin.db import setup_db
 from llmpuffin.log import setup as setup_logging
 
-from llmpuffin_fastapi.deps import _tasks
+from llmpuffin.github import client_from_config
+from llmpuffin_fastapi.deps import _tasks, set_github_client
 from llmpuffin_fastapi.routes import about, checkpoints, findings, profiles, runs
 from llmpuffin_fastapi.routes import store as store_routes
 
@@ -34,6 +35,7 @@ async def _lifespan(app: FastAPI):
     setup_logging(level=config.logging.level)
     log.info("llmpuffin starting on port %s", config.web.port)
     await setup_db()
+    set_github_client(client_from_config())
 
     try:
         yield

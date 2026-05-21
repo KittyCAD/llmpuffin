@@ -197,6 +197,15 @@ class ContainerBackend(SandboxBackendProtocol):
                     )
                 )
 
+        # Optimization to make this tool call better.
+        if not matches and glob and "*" not in glob:
+            hint = (
+                f"No matches found. Note: the glob parameter ({glob!r}) is a "
+                f"filename pattern (e.g. '*.js'), not a file path. "
+                f"To search a specific file, pass it as the path parameter instead."
+            )
+            return GrepResult(error=hint)
+
         return GrepResult(matches=matches)
 
     def glob(self, pattern: str, path: str = "/") -> GlobResult:

@@ -11,13 +11,15 @@ from pathlib import Path
 from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.db import setup_db
+from llmpuffin.github import client_from_config
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
 
 
 async def _async_main(harness_config: HarnessConfig):
     await setup_db()
-    return await run_audit(harness_config)
+    gh = client_from_config()
+    return await run_audit(harness_config, github_client=gh)
 
 
 def main() -> None:

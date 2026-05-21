@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -12,13 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit
-from llmpuffin.config import Config, Profile
+from llmpuffin.config import Profile
 from llmpuffin.db import async_session
+from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 
-from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
-from llmpuffin_fastapi.github import create_issue, update_issue
+from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -152,8 +153,8 @@ async def finding_detail(
     finding_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
 ):
-    gh_config = Config.load().github
     finding = await _get_finding(db, finding_id)
     if finding is None:
         raise HTTPException(status_code=404)
@@ -163,8 +164,8 @@ async def finding_detail(
         {
             "finding": finding,
             "audit_run": finding.audit_run,
-            "github_configured": gh_config.configured
-            and bool(finding.audit_run.github_repo_url),
+            "github_configured": bool(gh and gh.configured
+            and finding.audit_run.github_repo_url),
             "locations": finding.locations,
         },
     )
@@ -175,15 +176,15 @@ async def finding_create_issue(
     finding_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
 ):
     finding = await _get_finding(db, finding_id)
     if finding is None:
         raise HTTPException(status_code=404)
     audit_run = finding.audit_run
-    gh_config = Config.load().github
     redirect = f"/findings/{finding_id}/"
 
-    if not gh_config.configured or not audit_run.github_repo_url:
+    if not gh or not gh.configured or not audit_run.github_repo_url:
         return toast(
             request, "error", "GitHub App not configured", redirect_to=redirect
         )
@@ -197,6 +198,23 @@ async def finding_create_issue(
         )
 
     repo = audit_run.github_repo_url.rstrip("/").removeprefix("https://github.com/")
+
+    repo_info = gh.check_repo_access(repo)
+    if repo_info is None:
+        return toast(
+            request,
+            "error",
+            "Cannot access repo — is the GitHub App installed?",
+            redirect_to=redirect,
+        )
+    if not repo_info.get("private", False):
+        return toast(
+            request,
+            "error",
+            "Refusing to create issues in a public repo (would leak vulnerability details)",
+            redirect_to=redirect,
+        )
+
     title = f"{finding.title}"
     body = f"**Severity:** {finding.severity} \n **Difficulty:** {finding.difficulty}\n"
     body += f"**Scenario:** {finding.scenario_id}\n\n"
@@ -226,14 +244,11 @@ async def finding_create_issue(
                 redirect_to=redirect,
             )
         try:
-            issue_url = update_issue(
+            issue_url = gh.update_issue(
                 repo=repo,
                 issue_number=issue_number,
                 title=title,
                 body=body,
-                app_id=gh_config.app_id,
-                private_key=gh_config.private_key,
-                installation_id=gh_config.installation_id,
             )
             return toast(
                 request,
@@ -252,13 +267,10 @@ async def finding_create_issue(
             )
 
     try:
-        issue_url = create_issue(
+        issue_url = gh.create_issue(
             repo=repo,
             title=title,
             body=body,
-            app_id=gh_config.app_id,
-            private_key=gh_config.private_key,
-            installation_id=gh_config.installation_id,
             labels=["vulnerability"],
         )
         await db.execute(
@@ -286,6 +298,7 @@ async def finding_fork(
     finding_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
     finding = await _get_finding(db, finding_id)
@@ -333,28 +346,34 @@ async def finding_fork(
         user_input or "Investigate this finding further. Try to validate or refute it."
     )
 
+    # Pre-generate thread ID so we can link it immediately and navigate to it.
+    new_thread_id = uuid.uuid4().hex[:12]
+    await db.execute(
+        sa_update(Finding)
+        .where(Finding.id == finding_id)
+        .values(fork_thread_id=new_thread_id)
+    )
+    await db.commit()
+
     async def _do_fork():
         profile = Profile.from_toml_string(toml_str)
         harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
         try:
-            result = await fork_audit(
+            await fork_audit(
                 harness_config,
                 source_thread_id=finding.thread_id,
                 user_message=user_message,
+                thread_id=new_thread_id,
+                github_client=gh,
             )
         except Exception:
             log.exception("Background finding fork failed")
-            return
-        if result.thread_id:
-            async with async_session() as s:
-                await s.execute(
-                    sa_update(Finding)
-                    .where(Finding.id == finding_id)
-                    .values(fork_thread_id=result.thread_id)
-                )
-                await s.commit()
 
     spawn_audit(_do_fork())
     return toast(
-        request, "success", "Fork started", redirect_to=redirect, refresh=True
+        request,
+        "success",
+        "Fork started",
+        redirect_to=f"/checkpoints/{new_thread_id}/",
+        refresh=True,
     )

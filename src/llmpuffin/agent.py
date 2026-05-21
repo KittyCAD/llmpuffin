@@ -52,9 +52,10 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import async_session, get_postgres_url
+from llmpuffin.github import GitHubClient, client_from_config
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.log import log
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 from llmpuffin.sarif import SarifReport
 from llmpuffin.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.threat_model import ThreatModel
@@ -127,6 +128,7 @@ def _build_agent(
     repo_path: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
+    github_client: GitHubClient | None = None,
 ):
     """Build the deep agent with all backends, tools, and middleware."""
     p = config.profile
@@ -176,6 +178,7 @@ def _build_agent(
         audit_run_id=audit_run_id,
         thread_id=thread_id,
         repo_path=repo_path,
+        github_client=github_client,
     )
     main_tools = [tools[name] for name in MAIN_AGENT_TOOLS]
     subagents = build_subagents(tools)
@@ -259,6 +262,8 @@ async def fork_audit(
     config: HarnessConfig,
     source_thread_id: str,
     user_message: str,
+    thread_id: str | None = None,
+    github_client: GitHubClient | None = None,
 ) -> AuditResult:
     """Fork from an existing thread and continue with a new message."""
     harness = Harness(config)
@@ -281,6 +286,8 @@ async def fork_audit(
             user_message,
             checkpointer,
             store,
+            thread_id=thread_id,
+            github_client=github_client,
         )
 
 
@@ -293,9 +300,11 @@ async def _fork_audit_inner(
     user_message: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
+    thread_id: str | None = None,
+    github_client: GitHubClient | None = None,
 ) -> AuditResult:
     p = config.profile
-    new_tid = uuid.uuid4().hex[:12]
+    new_tid = thread_id or uuid.uuid4().hex[:12]
     log.info("Forking thread %s → %s", source_thread_id, new_tid)
 
     audit_run_id = await _create_audit_run(
@@ -321,6 +330,7 @@ async def _fork_audit_inner(
                 repo_path,
                 checkpointer,
                 store,
+                github_client=github_client,
             )
 
             source_config: dict[str, Any] = {
@@ -366,6 +376,7 @@ async def run_audit(
     config: HarnessConfig,
     thread_id: str | None = None,
     user_message: str | None = None,
+    github_client: GitHubClient | None = None,
 ) -> AuditResult:
     """Run a full security audit driven by the threat model."""
     harness = Harness(config)
@@ -394,6 +405,7 @@ async def run_audit(
             checkpointer,
             store,
             user_message,
+            github_client=github_client,
         )
 
 
@@ -406,6 +418,7 @@ async def _run_audit_inner(
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
     user_message: str | None = None,
+    github_client: GitHubClient | None = None,
 ) -> AuditResult:
     p = config.profile
     tid = thread_id or uuid.uuid4().hex[:12]
@@ -435,6 +448,7 @@ async def _run_audit_inner(
                 repo_path,
                 checkpointer,
                 store,
+                github_client=github_client,
             )
 
             run_config: dict = {"recursion_limit": p.agent.max_iterations}

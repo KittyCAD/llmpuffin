@@ -12,7 +12,6 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "jinja2>=3",
-    "python-multipart>=0.0.9",
     "sqlalchemy[asyncio]>=2",
     "asyncpg>=0.29",
     "alembic>=1.13",
@@ -22,8 +21,10 @@ dependencies = [
     "podman",
     "psycopg[binary]>=3",
     "pydantic>=2",
-    "PyJWT[crypto]",
     "sarif-om>=1.0",
+    "nh3>=0.3.5",
+    "pygithub>=2.9.1",
+    "python-multipart>=0.0.29",
 ]
 
 [project.scripts]

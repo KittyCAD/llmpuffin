@@ -14,10 +14,11 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import run_audit
 from llmpuffin.config import Profile
+from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun
 
-from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
+from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -134,6 +135,7 @@ async def profile_run(
     profile_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
 ):
     profile = (
         await db.execute(select(AuditProfile).where(AuditProfile.id == profile_id))
@@ -148,7 +150,7 @@ async def profile_run(
             request, "error", f"Invalid config: {exc}", redirect_to=redirect
         )
     harness_config = HarnessConfig(profile=parsed, profile_toml=profile.profile_toml)
-    spawn_audit(run_audit(harness_config))
+    spawn_audit(run_audit(harness_config, github_client=gh))
     return toast(
         request, "success", "Audit started", redirect_to=redirect, refresh=True
     )

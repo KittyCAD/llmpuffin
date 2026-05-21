@@ -13,8 +13,21 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llmpuffin.db import async_session
+from llmpuffin.github import GitHubClient
 
 log = logging.getLogger("llmpuffin")
+
+# Initialized once during app lifespan, used via get_github_client dependency.
+_github_client: GitHubClient | None = None
+
+
+def set_github_client(client: GitHubClient) -> None:
+    global _github_client
+    _github_client = client
+
+
+def get_github_client() -> GitHubClient | None:
+    return _github_client
 
 
 def is_htmx(request: Request) -> bool:

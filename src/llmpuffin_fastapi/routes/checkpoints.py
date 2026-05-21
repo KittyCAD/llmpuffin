@@ -13,11 +13,12 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import run_audit
 from llmpuffin.config import Profile
+from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
 from llmpuffin_fastapi.checkpoint import get_session, list_sessions
-from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
+from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -109,6 +110,7 @@ async def checkpoint_resume(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
     audit_thread = await _get_audit_thread(db, thread_id)
@@ -129,5 +131,5 @@ async def checkpoint_resume(
 
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    spawn_audit(run_audit(harness_config, thread_id=thread_id, user_message=msg))
+    spawn_audit(run_audit(harness_config, thread_id=thread_id, user_message=msg, github_client=gh))
     return toast(request, "success", "Resumed", redirect_to=redirect)

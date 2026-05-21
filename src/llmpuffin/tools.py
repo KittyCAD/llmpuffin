@@ -14,6 +14,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy import update as sa_update
 
 from llmpuffin.db import sync_session
+from llmpuffin.github import GitHubClient
 from llmpuffin.models import Finding, FindingLocation
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
@@ -132,6 +133,7 @@ def make_tools(
     audit_run_id: int,
     thread_id: str = "",
     repo_path: str = "",
+    github_client: GitHubClient | None = None,
 ) -> dict[str, Callable]:
     """Create threat model and finding tools."""
 
@@ -453,6 +455,40 @@ Existing mitigations to verify:
             log.warning("Failed to list findings: %s", exc)
             return "Error listing findings."
 
+    def get_pull_request(repo: str, number: int) -> str:
+        """Fetch a GitHub pull request or issue with its title, description, comments, and diff.
+
+        Requires the GitHub App to be configured and installed on the target repo.
+
+        Args:
+            repo: The GitHub repo in "owner/name" format (e.g. "octocat/hello-world")
+            number: The PR or issue number
+        """
+        if not github_client or not github_client.configured:
+            return "Error: GitHub App is not configured"
+        try:
+            return github_client.fetch_pull_request(repo, number).format()
+        except Exception as exc:
+            log.warning("Failed to fetch PR %s#%d: %s", repo, number, exc)
+            return f"Error fetching PR: {exc}"
+
+    def get_commit(repo: str, sha: str) -> str:
+        """Fetch a GitHub commit with its message, changed files, and diff.
+
+        Requires the GitHub App to be configured and installed on the target repo.
+
+        Args:
+            repo: The GitHub repo in "owner/name" format (e.g. "octocat/hello-world")
+            sha: The commit SHA (full or abbreviated)
+        """
+        if not github_client or not github_client.configured:
+            return "Error: GitHub App is not configured"
+        try:
+            return github_client.fetch_commit(repo, sha).format()
+        except Exception as exc:
+            log.warning("Failed to fetch commit %s@%s: %s", repo, sha, exc)
+            return f"Error fetching commit: {exc}"
+
     return {
         "get_threat_model": get_threat_model,
         "get_threat_scenario": get_threat_scenario,
@@ -461,4 +497,6 @@ Existing mitigations to verify:
         "update_finding": update_finding,
         "delete_finding": delete_finding,
         "validate_finding": validate_finding,
+        "get_pull_request": get_pull_request,
+        "get_commit": get_commit,
     }

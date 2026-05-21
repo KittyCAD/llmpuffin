@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}run {{ run.id }}{% endblock %}
 {% block content %}
-{% set tab = request.query_params.get('tab') or 'threads' %}
+{% set tab = request.query_params.get('tab') or 'findings' %}
 
 <p><a href="/runs/">← all runs</a></p>
 
@@ -32,11 +32,11 @@
 
 {# ─── Tabs ─── #}
 <div class="tabs mt-4">
-  <a class="tab {% if tab == 'threads' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=threads">
-    Threads <span class="tab-count">{{ threads|length }}</span>
-  </a>
   <a class="tab {% if tab == 'findings' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=findings">
     Findings <span class="tab-count">{{ findings|length }}</span>
+  </a>
+  <a class="tab {% if tab == 'threads' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=threads">
+    Threads <span class="tab-count">{{ threads|length }}</span>
   </a>
   <a class="tab {% if tab == 'config' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=config">
     Config

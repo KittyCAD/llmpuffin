@@ -3,13 +3,21 @@
 - Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
 
 
+- make validation notes an array. We want to allow for multiple rounds of validation, and we don't want to lose the previous notes. Maybe we can also add a timestamp to each note?
+
+- resolving links in locations is broken if the LLM links to a finding outside of /src/target 
+- We maybe need a better heuristic to match links. Maybe we configure only an org and then analyze the link if its a known repo.
+
 Bugs:
-- duplicate ids in fidnings
+- deduplicate findings in one thread at least
+- 
+
 
 Prompt:
 - avoid duplicating risks like, yes hoops could be vulnerable
 - explain other repos are available
 - improve memory instructions, it mostly created audit_notes.md
+- explain that users can not access container contents (you need to show examples)
 
 Validation:
 - building and setting the project up
@@ -21,6 +29,7 @@ TM:
 - thread model editing in forked chats
 
 Tools:
+
 - searching through security issues on github
   - Deduplicating with existing findings in GH and the database
 

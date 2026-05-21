@@ -5,19 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import quote
 
-import markdown as _markdown
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
+
+from llmpuffin.markdown import render_markdown
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 
 def _md(text: str) -> Markup:
-    if not text:
-        return Markup("")
-    html = _markdown.markdown(text, extensions=["fenced_code", "tables", "nl2br"])
-    return Markup(html)
+    return Markup(render_markdown(text))
 
 
 def _truncatechars(text: str | None, n: int) -> str:

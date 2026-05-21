@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_composer.html" import composer %}
 {% block title %}{{ finding.rule_id }}{% endblock %}
 {% block content %}
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run #{{ finding.audit_run_id }}</a></p>
@@ -12,18 +13,41 @@
   </div>
 </div>
 
+{% macro gh_icon() -%}
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2.1c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.9 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/>
+  </svg>
+{%- endmacro %}
+
 {% if finding.github_issue_url %}
-<p class="mt-2">
-  GitHub issue: <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener">{{ finding.github_issue_url }}</a>
+<div class="gh-issue-card mt-4">
+  <div class="gh-issue-info">
+    {{ gh_icon() }}
+    <div class="col" style="gap: 0.125rem; min-width: 0;">
+      <div class="text-xs text-muted">GitHub issue</div>
+      <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener" class="gh-issue-link mono text-xs">
+        {{ finding.github_issue_url }}
+      </a>
+    </div>
+  </div>
   {% if github_configured %}
-  <form hx-post="/findings/{{ finding.id }}/issue/" hx-confirm="Update the GitHub issue title and body?" hx-disabled-elt="find button" class="inline" style="margin-left:0.5em">
-    <button type="submit">update issue</button>
+  <form hx-post="/findings/{{ finding.id }}/issue/"
+        hx-confirm="Update the GitHub issue title and body?"
+        hx-disabled-elt="find button"
+        class="inline">
+    <button type="submit" class="btn ghost">Update issue</button>
   </form>
   {% endif %}
-</p>
+</div>
 {% elif github_configured %}
-<form hx-post="/findings/{{ finding.id }}/issue/" hx-confirm="Create a GitHub issue for this finding?" hx-disabled-elt="find button" class="inline mt-2">
-  <button type="submit" class="primary">create GitHub issue</button>
+<form hx-post="/findings/{{ finding.id }}/issue/"
+      hx-confirm="Create a GitHub issue for this finding?"
+      hx-disabled-elt="find button"
+      class="inline mt-4">
+  <button type="submit" class="btn gh-btn">
+    {{ gh_icon() }}
+    <span>Create GitHub issue</span>
+  </button>
 </form>
 {% endif %}
 
@@ -41,11 +65,22 @@
 </table>
 </div>
 
-{% if finding.thread_id and not finding.fork_thread_id %}
-<form hx-post="/findings/{{ finding.id }}/fork/" hx-disabled-elt="find button, find input" class="row gap-2 mt-4">
-  <input type="text" name="message" placeholder="optional instructions for the fork" style="max-width: 24rem;">
-  <button type="submit">fork conversation</button>
-</form>
+{% if finding.fork_thread_id %}
+<h2>Fork</h2>
+<div class="card">
+  <div class="row gap-2">
+    <span class="badge success"><span class="dot"></span>forked</span>
+    <a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id }}</a>
+  </div>
+</div>
+{% elif finding.thread_id %}
+<h2>Fork conversation</h2>
+{{ composer(
+  action="/findings/" ~ finding.id ~ "/fork/",
+  placeholder="Optional instructions for the fork...",
+  required=false,
+  clear_on_send=false,
+) }}
 {% endif %}
 
 {% if finding.validated_evidence %}

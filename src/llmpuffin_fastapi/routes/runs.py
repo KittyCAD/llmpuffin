@@ -13,10 +13,11 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit, run_audit
 from llmpuffin.config import Profile
+from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
-from llmpuffin_fastapi.deps import get_db, spawn_audit, toast
+from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -139,6 +140,7 @@ async def run_resume(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
     run = (
@@ -177,6 +179,7 @@ async def run_resume(
             harness_config,
             thread_id=thread_id,
             user_message=message.strip() or None,
+            github_client=gh,
         )
     )
     return toast(

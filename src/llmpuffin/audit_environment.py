@@ -151,24 +151,6 @@ class AuditExecution:
             stderr=stderr,
         )
 
-    def read_file(self, path: str) -> str:
-        """Read a file from the container."""
-        result = self.exec(["cat", path])
-        if result.exit_code != 0:
-            return f"Error: {result.stderr.strip() or 'file not found: ' + path}"
-        return result.stdout
-
-    def grep(self, pattern: str, path: str = ".", recursive: bool = True) -> str:
-        """Search for a pattern in the codebase."""
-        cmd = ["grep", "-rn" if recursive else "-n", pattern, path]
-        result = self.exec(cmd)
-        return result.stdout
-
-    def list_files(self, path: str = ".", pattern: str = "*") -> list[str]:
-        """List files matching a pattern."""
-        result = self.exec(["find", path, "-name", pattern, "-type", "f"])
-        return result.stdout.strip().split("\n") if result.stdout.strip() else []
-
     def stop(self, timeout: int = 30, remove: bool = False) -> None:
         """Stop the container (preserving it for later restart).
 
