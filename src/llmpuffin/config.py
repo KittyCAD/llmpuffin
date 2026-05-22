@@ -71,6 +71,23 @@ class GitHubConfig:
 
 
 @dataclass
+class AuthConfig:
+    enabled: bool = False
+    provider_url: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    # OIDC claim containing group names
+    groups_claim: str = "groups"
+    # Map llmpuffin roles → OIDC group names
+    admin_group: str = "llmpuffin-admin"
+    auditor_group: str = "llmpuffin-auditor"
+
+    @property
+    def configured(self) -> bool:
+        return self.enabled and bool(self.provider_url and self.client_id and self.client_secret)
+
+
+@dataclass
 class LoggingConfig:
     level: str = "INFO"
 
@@ -82,6 +99,7 @@ class Config:
     postgres: PostgresConfig = field(default_factory=PostgresConfig)
     web: WebConfig = field(default_factory=WebConfig)
     github: GitHubConfig = field(default_factory=GitHubConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
@@ -99,6 +117,7 @@ class Config:
         pg = data.get("postgres", {})
         web = data.get("web", {})
         gh = data.get("github", {})
+        auth = data.get("auth", {})
         log = data.get("logging", {})
         return cls(
             postgres=PostgresConfig(
@@ -114,6 +133,15 @@ class Config:
                 app_id=str(gh.get("app_id", "")),
                 private_key=os.environ.get("GH_LLMPUFFIN_KEY", ""),
                 installation_id=str(gh.get("installation_id", "")),
+            ),
+            auth=AuthConfig(
+                enabled=auth.get("enabled", False),
+                provider_url=auth.get("provider_url", ""),
+                client_id=auth.get("client_id", ""),
+                client_secret=auth.get("client_secret", ""),
+                groups_claim=auth.get("groups_claim", "groups"),
+                admin_group=auth.get("admin_group", "llmpuffin-admin"),
+                auditor_group=auth.get("auditor_group", "llmpuffin-auditor"),
             ),
             logging=LoggingConfig(
                 level=log.get("level", "INFO"),

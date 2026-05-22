@@ -173,10 +173,12 @@ class ContainerBackend(SandboxBackendProtocol):
         path: str | None = None,
         glob: str | None = None,
     ) -> GrepResult:
+        search_path = path or "."
         cmd = ["grep", "-rn", pattern]
         if glob:
             cmd.extend(["--include", glob])
-        cmd.append(path or ".")
+        # Use -H to always print filename, even for single-file searches.
+        cmd.extend(["-H", search_path])
 
         exit_code, stdout, stderr = self._run(cmd)
         if exit_code == 2:
@@ -186,7 +188,7 @@ class ContainerBackend(SandboxBackendProtocol):
         for line in stdout.strip().split("\n"):
             if not line:
                 continue
-            # grep -rn output: file:line:text
+            # grep -Hrn output: file:line:text
             m = re.match(r"^(.+?):(\d+):(.*)$", line)
             if m:
                 matches.append(

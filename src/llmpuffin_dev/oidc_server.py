@@ -13,21 +13,26 @@ Discovery: http://localhost:9090/.well-known/openid-configuration
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import time
 import uuid
-from base64 import urlsafe_b64encode
-from urllib.parse import urlencode, parse_qs, urlparse
+from urllib.parse import urlencode
 
 import uvicorn
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from joserfc import jwt
+from joserfc.jwk import RSAKey
 
 PORT = 9090
 ISSUER = f"http://localhost:{PORT}"
-SECRET = "dev-oidc-secret-not-for-production"
+
+# Generate an RSA key pair at startup for signing JWTs.
+_rsa_private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_rsa_key = RSAKey.import_key(_rsa_private)
+_kid = "dev-key-1"
 
 # Hardcoded users: username → {password, claims}
 USERS = {
@@ -59,17 +64,10 @@ _codes: dict[str, dict] = {}  # code → {user, client_id, redirect_uri, nonce}
 _tokens: dict[str, dict] = {}  # access_token → user claims
 
 
-def _make_jwt(claims: dict) -> str:
-    """Create a minimal unsigned JWT (HS256 with our dev secret)."""
-    header = urlsafe_b64encode(
-        json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-    ).rstrip(b"=")
-    payload = urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=")
-    signing_input = header + b"." + payload
-    sig = urlsafe_b64encode(
-        hmac.new(SECRET.encode(), signing_input, hashlib.sha256).digest()
-    ).rstrip(b"=")
-    return (signing_input + b"." + sig).decode()
+def _make_id_token(claims: dict) -> str:
+    """Create an RS256-signed JWT."""
+    header = {"alg": "RS256", "kid": _kid}
+    return jwt.encode(header, claims, _rsa_key)
 
 
 app = FastAPI(title="llmpuffin dev OIDC")
@@ -85,27 +83,31 @@ def discovery():
         "jwks_uri": f"{ISSUER}/jwks",
         "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
-        "id_token_signing_alg_values_supported": ["HS256"],
+        "id_token_signing_alg_values_supported": ["RS256"],
         "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic"],
+        "token_endpoint_auth_methods_supported": [
+            "client_secret_post",
+            "client_secret_basic",
+        ],
         "claims_supported": ["sub", "name", "email", "groups"],
     }
 
 
 @app.get("/jwks")
 def jwks():
-    # HS256 doesn't publish keys — return empty. Clients using HS256 verify with client_secret.
-    return {"keys": []}
+    pub = _rsa_key.as_dict(is_private=False)
+    pub["kid"] = _kid
+    pub["use"] = "sig"
+    pub["alg"] = "RS256"
+    return {"keys": [pub]}
 
 
 @app.get("/authorize", response_class=HTMLResponse)
 def authorize(request: Request):
     """Show a simple login form."""
     params = dict(request.query_params)
-    # Preserve all OAuth params in the form as hidden fields.
     hidden = "".join(
-        f'<input type="hidden" name="{k}" value="{v}">'
-        for k, v in params.items()
+        f'<input type="hidden" name="{k}" value="{v}">' for k, v in params.items()
     )
     return f"""<!DOCTYPE html>
 <html><head><title>Dev OIDC Login</title>
@@ -160,12 +162,13 @@ def authorize_post(
     if state:
         params["state"] = state
     sep = "&" if "?" in redirect_uri else "?"
-    return RedirectResponse(f"{redirect_uri}{sep}{urlencode(params)}", status_code=302)
+    return RedirectResponse(
+        f"{redirect_uri}{sep}{urlencode(params)}", status_code=302
+    )
 
 
 @app.post("/token")
 async def token(request: Request):
-    # Support both form and JSON body.
     content_type = request.headers.get("content-type", "")
     if "json" in content_type:
         data = await request.json()
@@ -195,7 +198,7 @@ async def token(request: Request):
     if code_data.get("nonce"):
         claims["nonce"] = code_data["nonce"]
 
-    id_token = _make_jwt(claims)
+    id_token = _make_id_token(claims)
     access_token = uuid.uuid4().hex
 
     _tokens[access_token] = {
@@ -219,8 +222,8 @@ def userinfo(request: Request):
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
-    token = auth[7:]
-    user_claims = _tokens.get(token)
+    tok = auth[7:]
+    user_claims = _tokens.get(tok)
     if not user_claims:
         return JSONResponse({"error": "invalid_token"}, status_code=401)
     return user_claims

@@ -326,11 +326,9 @@ async def finding_fork(
     redirect = f"/findings/{finding_id}/"
 
     def _fork_error(message: str):
-        """Return the fork partial unchanged + a toast error."""
-        return templates.TemplateResponse(
-            request,
-            "_finding_fork.html",
-            {"finding": finding},
+        """Return 204 + toast error — don't replace the form."""
+        return Response(
+            status_code=204,
             headers={"HX-Trigger": json.dumps({"toast": {"level": "error", "message": message}})},
         )
 

@@ -105,3 +105,15 @@ class TestGrep:
         assert result.error is not None
         assert "filename pattern" in result.error
         assert "path parameter" in result.error
+
+    def test_grep_single_file_path(self, tmp_path):
+        """Grep with path pointing to a single file returns matches with filename."""
+        target = tmp_path / "app.js"
+        target.write_text("const x = document.body;\nlet y = 42;\n")
+        backend = _make_backend(str(tmp_path))
+        result = backend.grep("document", path=str(target))
+        assert len(result.matches) == 1
+        assert "document" in result.matches[0]["text"]
+        assert result.matches[0]["line"] == 1
+        # -H flag ensures filename is present even for single file
+        assert result.matches[0]["path"] == str(target)

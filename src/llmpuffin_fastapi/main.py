@@ -5,32 +5,33 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-
-from pathlib import Path
 
 from llmpuffin.config import Config
 from llmpuffin.db import setup_db
+from llmpuffin.github import client_from_config
 from llmpuffin.log import setup as setup_logging
 
-from llmpuffin.github import client_from_config
+from llmpuffin_fastapi.auth import get_current_user, setup_auth
 from llmpuffin_fastapi.deps import _tasks, set_github_client
 from llmpuffin_fastapi.routes import about, checkpoints, findings, profiles, runs
 from llmpuffin_fastapi.routes import store as store_routes
 
 log = logging.getLogger("llmpuffin")
 
-# Max seconds to wait for in-flight audits to cancel + finalize on shutdown.
 _SHUTDOWN_TIMEOUT = 30.0
+
+# Paths that don't require authentication.
+_PUBLIC_PATHS = frozenset({"/auth/login", "/auth/callback", "/auth/logout"})
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    # Configure logging here (after uvicorn has installed its own handlers)
-    # so the `llmpuffin` logger isn't masked by uvicorn's dictConfig.
     config = Config.load()
     setup_logging(level=config.logging.level)
     log.info("llmpuffin starting on port %s", config.web.port)
@@ -58,6 +59,7 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    config = Config.load()
     app = FastAPI(title="llmpuffin", lifespan=_lifespan)
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -67,6 +69,25 @@ def create_app() -> FastAPI:
     app.include_router(findings.router)
     app.include_router(store_routes.router)
     app.include_router(about.router)
+
+    # Auth middleware checks session — must be added BEFORE SessionMiddleware
+    # (Starlette middleware is LIFO: last added = outermost).
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/static") or path in _PUBLIC_PATHS:
+            return await call_next(request)
+
+        user = get_current_user(request)
+        if user is None:
+            return RedirectResponse("/auth/login")
+
+        request.state.user = user
+        return await call_next(request)
+
+    # setup_auth adds SessionMiddleware (outermost) + registers OIDC routes.
+    setup_auth(app, config.auth, secret_key=config.web.secret_key)
+
     return app
 
 

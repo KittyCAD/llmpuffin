@@ -11,5 +11,11 @@ allowed_hosts = ["*"]
 app_id = "3779149"
 installation_id = "133980810"
 
+[auth]
+enabled = true
+provider_url = "http://localhost:9090"
+client_id = "llmpuffin"
+client_secret = "dev-oidc-secret-not-for-production"
+
 [logging]
 level = "DEBUG"
