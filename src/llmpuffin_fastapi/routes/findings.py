@@ -166,6 +166,19 @@ async def finding_detail(
     finding = await _get_finding(db, finding_id)
     if finding is None:
         raise HTTPException(status_code=404)
+
+    from llmpuffin_fastapi.checkpoint import get_session
+
+    fork_session = None
+    fork_thread = None
+    if finding.fork_thread_id:
+        fork_session = await get_session(finding.fork_thread_id)
+        fork_thread = (
+            await db.execute(
+                select(AuditThread).where(AuditThread.thread_id == finding.fork_thread_id)
+            )
+        ).scalar_one_or_none()
+
     return templates.TemplateResponse(
         request,
         "finding_detail.html",
@@ -176,6 +189,8 @@ async def finding_detail(
                 gh and gh.configured and finding.audit_run.github_repo_url
             ),
             "locations": finding.locations,
+            "fork_session": fork_session,
+            "fork_thread": fork_thread,
         },
     )
 
@@ -224,7 +239,7 @@ async def finding_report_to_github(
     body = f"**Severity:** {finding.severity} | **Difficulty:** {finding.difficulty}\n"
     body += f"**Scenario:** {finding.scenario_id}\n\n"
     body += f"## Description\n\n{finding.description}\n\n"
-    body += f"## Impact\n\n{finding.impact}\n\n"
+    body += f"## Exploit Scenario\n\n{finding.exploit_scenario}\n\n"
     body += f"## Recommendations\n\n{finding.recommendations}\n"
     if finding.locations:
         body += "\n## Locations\n\n"
@@ -389,13 +404,25 @@ async def finding_fork(
 
     spawn_audit(_do_fork())
 
-    # Re-fetch the finding to get the updated fork_thread_id, then return
-    # the fork section partial so htmx swaps the composer for the fork link.
+    # Re-fetch to get updated fork_thread_id, load fork session/thread for the
+    # conversation partial (may be empty — messages div will start polling immediately).
     await db.refresh(finding)
+    from llmpuffin_fastapi.checkpoint import get_session
+    fork_session = await get_session(new_thread_id)
+    fork_thread = (
+        await db.execute(
+            select(AuditThread).where(AuditThread.thread_id == new_thread_id)
+        )
+    ).scalar_one_or_none()
+
     return templates.TemplateResponse(
         request,
         "_finding_fork.html",
-        {"finding": finding},
+        {
+            "finding": finding,
+            "fork_session": fork_session,
+            "fork_thread": fork_thread,
+        },
         headers={"HX-Trigger": json.dumps({"toast": {"level": "success", "message": "Fork started"}})},
     )
 

@@ -1,4 +1,5 @@
-<h1>Thread {{ session.thread_id }} ({{ session.steps }} checkpoints, {{ session.messages|length }} messages){% if audit_thread %} — {{ audit_thread.status }}{% endif %}</h1>
+{% set thread_status = audit_thread.status if audit_thread else "running" %}
+<span id="thread-status" data-status="{{ thread_status }}" style="display:none"></span>
 
 {% set _coll = namespace(n=0) %}
 
@@ -67,4 +68,10 @@
   {% endfor %}
 {%- endmacro %}
 
+{% if session.messages %}
 {{ render_messages(session.messages) }}
+{% else %}
+<div class="text-muted text-sm" style="padding: 1.5rem 0;">
+  Messages will appear here once the thread starts running.
+</div>
+{% endif %}

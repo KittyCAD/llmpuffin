@@ -194,7 +194,7 @@ class Finding(Base):
     severity: Mapped[str] = mapped_column(String(32))
     difficulty: Mapped[str] = mapped_column(String(32))
     description: Mapped[str] = mapped_column(Text)
-    impact: Mapped[str] = mapped_column(Text)
+    exploit_scenario: Mapped[str] = mapped_column(Text)
     recommendations: Mapped[str] = mapped_column(Text)
     validated: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
@@ -274,6 +274,8 @@ class FindingAttachment(Base):
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     content: Mapped[bytes] = mapped_column(LargeBinary)
     size: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    thread_id: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    tool_call_id: Mapped[str] = mapped_column(String(128), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

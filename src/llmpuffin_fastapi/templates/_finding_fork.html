@@ -2,15 +2,12 @@
 
 <div id="fork-section">
 {% if finding.fork_thread_id %}
-<h2>Fork</h2>
-<div class="card">
-  <div class="row gap-2">
-    <span class="badge success"><span class="dot"></span>forked</span>
-    <a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id }}</a>
-  </div>
-</div>
-{% elif finding.thread_id %}
-<h2>Fork conversation</h2>
+{# Fork exists — show full conversation with polling. #}
+{% with conv_thread_id=finding.fork_thread_id, conv_session=fork_session, conv_thread=fork_thread %}
+  {% include "_conversation.html" %}
+{% endwith %}
+{% else %}
+{# No fork yet — show composer to start one. Swaps this whole section on submit. #}
 {{ composer(
   action="/findings/" ~ finding.id ~ "/fork/",
   placeholder="Optional instructions for the fork...",

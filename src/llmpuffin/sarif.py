@@ -41,7 +41,7 @@ class SarifFinding:
     rule_id: str
     title: str
     description: str
-    impact: str
+    exploit_scenario: str
     recommendations: str
     severity: str = "medium"  # high, medium, low, informational
     difficulty: str = "medium"  # high, medium, low
@@ -96,7 +96,7 @@ class SarifReport:
                     }
                 )
 
-            message = f"## Description\n{f.description}\n\n## Impact\n{f.impact}\n\n## Recommendations\n{f.recommendations}"
+            message = f"## Description\n{f.description}\n\n## Exploit Scenario\n{f.exploit_scenario}\n\n## Recommendations\n{f.recommendations}"
 
             result: dict[str, Any] = {
                 "ruleId": f.rule_id,
@@ -200,7 +200,7 @@ def export_sarif_for_run(audit_run_id: int) -> str:
                 rule_id=f.rule_id,
                 title=f.title,
                 description=f.description,
-                impact=f.impact,
+                exploit_scenario=f.exploit_scenario,
                 recommendations=f.recommendations,
                 severity=f.severity,
                 difficulty=f.difficulty,

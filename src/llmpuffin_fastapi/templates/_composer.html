@@ -21,7 +21,7 @@
   hx-post="{{ action }}"
   hx-disabled-elt="find textarea, find button"
   {% if target %}hx-target="{{ target }}" hx-swap="{{ swap }}"{% endif %}
-  hx-on::after-request="if (event.detail.successful &amp;&amp; event.detail.xhr.status !== 204) { {% if clear_on_send %}this.querySelector('textarea').value = '';{% endif %}{% if on_success %} {{ on_success }};{% endif %} var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); }"
+  hx-on::after-request="if (event.detail.successful) { var _h = event.detail.xhr.getResponseHeader('HX-Trigger') || ''; if (_h.indexOf('error') === -1) { {% if clear_on_send %}this.querySelector('textarea').value = '';{% endif %}{% if on_success %} {{ on_success }};{% endif %} var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); } }"
   class="composer"
 >
   <textarea

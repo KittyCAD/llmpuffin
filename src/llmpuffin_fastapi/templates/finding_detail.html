@@ -18,6 +18,7 @@
   </svg>
 {%- endmacro %}
 
+{# ─── GitHub report ─── #}
 {% if finding.github_issue_url %}
 <div class="gh-issue-card mt-4">
   <div class="gh-issue-info">
@@ -50,6 +51,7 @@
 </form>
 {% endif %}
 
+{# ─── Details table ─── #}
 <div class="card mt-4" style="padding: 0;">
 <table>
 <tr><th>Scenario</th><td>{{ finding.scenario_id }}</td></tr>
@@ -65,10 +67,55 @@
 </table>
 </div>
 
-{% if finding.thread_id %}
-  {% include "_finding_fork.html" %}
+{# ─── Description ─── #}
+<h2>Description</h2>
+<div class="card markdown">{{ finding.description | md }}</div>
+
+{# ─── Exploit Scenario ─── #}
+<h2>Exploit Scenario</h2>
+<div class="card markdown">{{ finding.exploit_scenario | md }}</div>
+
+{# ─── Locations ─── #}
+{% if locations %}
+<h2>Locations</h2>
+<div class="card" style="padding: 0;">
+<table>
+<thead><tr><th>Location</th></tr></thead>
+<tbody>
+{% for loc in locations %}
+<tr><td class="mono text-xs">{{ location_link(loc, audit_run) }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
 {% endif %}
 
+{# ─── Recommendations ─── #}
+<h2>Recommendations</h2>
+<div class="card markdown">{{ finding.recommendations | md }}</div>
+
+{# ─── Attachments ─── #}
+{% if finding.attachments %}
+<h2>Attachments</h2>
+<div class="card" style="padding: 0;">
+<table>
+<thead><tr><th>File</th><th>Size</th><th>Description</th><th>Created</th><th></th></tr></thead>
+<tbody>
+{% for att in finding.attachments %}
+<tr>
+  <td class="mono text-xs">{{ att.filename }}</td>
+  <td class="text-xs text-muted">{{ att.size | filesizeformat }}</td>
+  <td class="text-xs text-muted">{{ att.description or "—" }}</td>
+  <td class="text-xs text-muted">{{ att.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
+  <td><a href="/findings/{{ finding.id }}/attachments/{{ att.id }}/" class="btn text-xs" style="padding: 0.25rem 0.5rem;">download</a></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+
+{# ─── Validation notes ─── #}
 {% macro note_header(note) -%}
   <div class="note-card-header">
     {{ note.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}
@@ -104,7 +151,6 @@
   {% endif %}
 {% endfor %}
 {% elif finding.validated_evidence %}
-{# Fallback for legacy data not yet migrated to validation_notes #}
 <h2>Validation note</h2>
 <div class="note-card">
   <div class="note-card-header">legacy validation note</div>
@@ -112,46 +158,9 @@
 </div>
 {% endif %}
 
-{% if finding.attachments %}
-<h2>Attachments</h2>
-<div class="card" style="padding: 0;">
-<table>
-<thead><tr><th>File</th><th>Size</th><th>Description</th><th>Created</th><th></th></tr></thead>
-<tbody>
-{% for att in finding.attachments %}
-<tr>
-  <td class="mono text-xs">{{ att.filename }}</td>
-  <td class="text-xs text-muted">{{ att.size | filesizeformat }}</td>
-  <td class="text-xs text-muted">{{ att.description or "—" }}</td>
-  <td class="text-xs text-muted">{{ att.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
-  <td><a href="/findings/{{ finding.id }}/attachments/{{ att.id }}/" class="btn text-xs" style="padding: 0.25rem 0.5rem;">download</a></td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
+{# ─── Fork conversation ─── #}
+{% if finding.thread_id %}
+<h2>Fork conversation</h2>
+{% include "_finding_fork.html" %}
 {% endif %}
-
-{% if locations %}
-<h2>Locations</h2>
-<div class="card" style="padding: 0;">
-<table>
-<thead><tr><th>Location</th></tr></thead>
-<tbody>
-{% for loc in locations %}
-<tr><td class="mono text-xs">{{ location_link(loc, audit_run) }}</td></tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-{% endif %}
-
-<h2>Description</h2>
-<div class="card markdown">{{ finding.description | md }}</div>
-
-<h2>Impact</h2>
-<div class="card markdown">{{ finding.impact | md }}</div>
-
-<h2>Recommendations</h2>
-<div class="card markdown">{{ finding.recommendations | md }}</div>
 {% endblock %}

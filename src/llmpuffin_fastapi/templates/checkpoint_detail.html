@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_composer.html" import composer %}
 {% block title %}{{ session.thread_id }}{% endblock %}
 {% block content %}
 
@@ -26,22 +25,9 @@
 </div>
 {% endif %}
 
-{% if audit_thread %}
-  {% set is_running = audit_thread.status == "running" %}
-  {{ composer(
-    action="/checkpoints/" ~ session.thread_id ~ "/resume/",
-    placeholder="Thread is running — wait for it to finish before sending." if is_running else "Send a message to resume this thread...",
-    disabled=is_running,
-  ) }}
-{% endif %}
-
-<div id="messages"
-     hx-get="/checkpoints/{{ session.thread_id }}/messages/"
-     hx-trigger="every 3s, refresh"
-     hx-swap="morph:innerHTML focus-scroll:true"
-     hx-ext="morph">
-  {% include "_checkpoint_messages.html" %}
-</div>
+{% with conv_thread_id=session.thread_id, conv_session=session, conv_thread=audit_thread %}
+  {% include "_conversation.html" %}
+{% endwith %}
 
 </div>{# /.checkpoint-main #}
 
@@ -53,10 +39,11 @@
         {% for f in findings %}
           <li>
             {% set is_highlighted = f.id in highlighted_finding_ids %}
-            <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if is_highlighted %}highlighted{% elif f.thread_id == session.thread_id %}current{% endif %}">
+            <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if is_highlighted %}highlighted{% elif f.thread_id == session.thread_id %}current{% endif %}" {% if f.deleted %}style="opacity: 0.5;"{% endif %}>
               <div class="row gap-2" style="align-items: center; min-width: 0;">
                 <span class="badge sev-{{ f.severity|lower }} text-xs"><span class="dot"></span>{{ f.severity or "?" }}</span>
                 <span class="text-xs text-muted">#{{ f.local_id }}</span>
+                {% if f.deleted %}<span class="badge outline text-xs">deleted</span>{% endif %}
               </div>
               <div class="checkpoint-finding-title">{{ f.title or f.rule_id or "(untitled)" }}</div>
               {% if is_highlighted %}

@@ -68,10 +68,7 @@ async def checkpoint_detail(
             (
                 await db.execute(
                     select(Finding)
-                    .where(
-                        Finding.audit_run_id == audit_thread.audit_run_id,
-                        Finding.deleted.is_(False),
-                    )
+                    .where(Finding.audit_run_id == audit_thread.audit_run_id)
                     .order_by(Finding.local_id.desc())
                 )
             )

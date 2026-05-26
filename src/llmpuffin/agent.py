@@ -87,7 +87,7 @@ class AuditResult:
 SYSTEM_PROMPT = """\
 You are a security auditor performing a code review.
 The source code is in the current working directory of a container.
-Do not use /src as starting point, use the `cwd`. You may lookup code in /src.
+Do not use /src as starting point, use the `cwd`. You may lookup or review code in /src if its relevant for the current project.
 
 Start by invoking the skill audit-context-building.
 
@@ -121,6 +121,7 @@ functions, data-flow chains, cryptographic code, or state machines.
 - Provide concrete evidence: file paths, line numbers, code snippets
 - Do NOT call get_threat_model or get_threat_scenario directly — delegate to threat-model-auditor
 - Focus your own analysis on codebase exploration and pattern recognition
+- You can install any packages and execute any code. Typically you can install packages via `apt install <package>`
 """
 
 

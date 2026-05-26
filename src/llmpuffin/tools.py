@@ -41,7 +41,7 @@ class ReportFindingInput(BaseModel):
     severity: Literal["high", "medium", "low", "informational"] = Field(description="How severe the issue is")
     difficulty: Literal["high", "medium", "low"] = Field(description="How hard it is to exploit")
     description: str = Field(description="What the vulnerability is and where it occurs. Include code evidence.")
-    impact: str = Field(description="What an attacker could achieve by exploiting this")
+    exploit_scenario: str = Field(description="Step-by-step exploit scenario showing how an attacker could exploit this")
     recommendations: str = Field(description="Concrete steps to fix or mitigate the issue")
     locations: list[LocationInput] | None = Field(default=None, description="Source code locations")
 
@@ -50,10 +50,11 @@ class UpdateFindingInput(BaseModel):
     """Input schema for update_finding."""
 
     finding_id: int = Field(description="The finding_id returned by report_finding (0-indexed)")
+    title: str | None = Field(default=None, description="New title")
     severity: Literal["high", "medium", "low", "informational"] | None = Field(default=None, description="New severity")
     difficulty: Literal["high", "medium", "low"] | None = Field(default=None, description="New difficulty")
     description: str | None = Field(default=None, description="New description")
-    impact: str | None = Field(default=None, description="New impact")
+    exploit_scenario: str | None = Field(default=None, description="New exploit scenario")
     recommendations: str | None = Field(default=None, description="New recommendations")
 
 
@@ -103,7 +104,7 @@ def _persist_finding_to_db(
     severity: str,
     difficulty: str,
     description: str,
-    impact: str,
+    exploit_scenario: str,
     recommendations: str,
     locations: list[dict] | None,
     tool_call_id: str = "",
@@ -141,7 +142,7 @@ def _persist_finding_to_db(
                 severity=severity,
                 difficulty=difficulty,
                 description=description,
-                impact=impact,
+                exploit_scenario=exploit_scenario,
                 recommendations=recommendations,
                 tool_call_id=tool_call_id,
             )
@@ -255,7 +256,7 @@ Existing mitigations to verify:
         severity: Literal["high", "medium", "low", "informational"],
         difficulty: Literal["high", "medium", "low"],
         description: str,
-        impact: str,
+        exploit_scenario: str,
         recommendations: str,
         locations: list[LocationInput] | None = None,
         runtime: ToolRuntime = None,
@@ -285,7 +286,7 @@ Existing mitigations to verify:
             severity,
             difficulty,
             description,
-            impact,
+            exploit_scenario,
             recommendations,
             loc_dicts,
             tool_call_id=rt_tool_call_id,
@@ -304,7 +305,7 @@ Existing mitigations to verify:
             rule_id=rule_id,
             title=title,
             description=description,
-            impact=impact,
+            exploit_scenario=exploit_scenario,
             recommendations=recommendations,
             severity=severity,
             difficulty=difficulty,
@@ -317,20 +318,22 @@ Existing mitigations to verify:
 
     def update_finding(
         finding_id: int,
+        title: str | None = None,
         severity: str | None = None,
         difficulty: str | None = None,
         description: str | None = None,
-        impact: str | None = None,
+        exploit_scenario: str | None = None,
         recommendations: str | None = None,
     ) -> str:
         """Update an existing finding.
 
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
+            title: New title (optional)
             severity: New severity (optional)
             difficulty: New difficulty (optional)
             description: New description (optional)
-            impact: New impact (optional)
+            exploit_scenario: New exploit scenario (optional)
             recommendations: New recommendations (optional)
         """
         db_finding = _resolve_finding(audit_run_id, finding_id)
@@ -342,14 +345,16 @@ Existing mitigations to verify:
             (f for f in report.findings if f.rule_id == db_finding.rule_id), None
         )
         if sarif_finding:
+            if title is not None:
+                sarif_finding.title = title
             if severity is not None:
                 sarif_finding.severity = severity
             if difficulty is not None:
                 sarif_finding.difficulty = difficulty
             if description is not None:
                 sarif_finding.description = description
-            if impact is not None:
-                sarif_finding.impact = impact
+            if exploit_scenario is not None:
+                sarif_finding.exploit_scenario = exploit_scenario
             if recommendations is not None:
                 sarif_finding.recommendations = recommendations
 
@@ -358,10 +363,11 @@ Existing mitigations to verify:
             values = {
                 k: v
                 for k, v in {
+                    "title": title,
                     "severity": severity,
                     "difficulty": difficulty,
                     "description": description,
-                    "impact": impact,
+                    "exploit_scenario": exploit_scenario,
                     "recommendations": recommendations,
                 }.items()
                 if v is not None
@@ -544,7 +550,7 @@ Existing mitigations to verify:
             return f"Error fetching commit: {exc}"
 
     def finding_attach_file(
-        finding_id: int, file_path: str, description: str = ""
+        finding_id: int, file_path: str, description: str = "", runtime: ToolRuntime = None,
     ) -> str:
         """Export a file from the container and attach it to a finding.
 
@@ -590,6 +596,8 @@ Existing mitigations to verify:
                     description=description,
                     content=raw,
                     size=len(raw),
+                    thread_id=runtime.config.get("configurable", {}).get("thread_id", "") if runtime else "",
+                    tool_call_id=runtime.tool_call_id or "" if runtime else "",
                 )
                 s.add(att)
                 s.commit()
