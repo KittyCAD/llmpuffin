@@ -76,6 +76,16 @@ uv run llmpuffin-run -v -p profiles/modeling-app/profile.toml
 uv run llmpuffin-run -v
 ```
 
+Or use the `llmpuffin` CLI directly:
+
+```
+# Run an audit
+uv run llmpuffin run -p profiles/modeling-app/profile.toml -v
+
+# Abort orphaned threads (cleanup after crashes)
+uv run llmpuffin abort-orphaned-threads
+```
+
 Available profiles in `profiles/`:
 - `modeling-app` — Zoo Design Studio (KittyCAD/modeling-app)
 - `engine` — Geometry Engine (KittyCAD/engine)
@@ -111,7 +121,11 @@ This is the canonical pre-commit gate. See `AGENTS.md` for contributor guideline
 
 - **Subagent messages are not visible in checkpoints.** Subagents (threat-model-auditor, finding-validator, function-analyzer) run in their own internal state via deepagents. Only the final summary is returned to the parent thread's checkpoint. Internal subagent tool calls and reasoning are logged to the server console but do not appear in the checkpoint viewer.
 
-- **Stuck threads after crashes.** If the process is killed (SIGKILL, OOM, etc.) before the lifespan can finalize, the thread may remain in `"running"` status. The FastAPI lifespan marks orphaned threads as `"aborted"` on startup; if a thread is still stuck, update its row directly in PostgreSQL.
+- **Stuck threads after crashes.** If the process is killed (SIGKILL, OOM, etc.) before the lifespan can finalize, the thread may remain in `"running"` status. The FastAPI lifespan marks orphaned threads as `"aborted"` on startup. You can also clean them up manually:
+
+  ```
+  uv run llmpuffin abort-orphaned-threads
+  ```
 
 ## Architecture
 

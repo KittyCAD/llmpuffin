@@ -88,30 +88,8 @@
 
 {# ─── Findings tab ─── #}
 {% if tab == 'findings' %}
-  {% if findings %}
-  <div class="card" style="padding: 0;">
-  <table>
-  <thead>
-    <tr><th>#</th><th>Title</th><th>Scenario</th><th>Severity</th><th>Difficulty</th><th>Validated</th><th>Thread</th></tr>
-  </thead>
-  <tbody>
-  {% for f in findings %}
-  <tr{% if f.deleted %} style="opacity:0.5"{% endif %}>
-    <td><a href="/findings/{{ f.id }}/">{{ f.local_id }}</a></td>
-    <td><a href="/findings/{{ f.id }}/">{{ (f.title or f.description) | truncatechars(80) }}</a></td>
-    <td class="text-xs text-muted">{{ f.scenario_id }}</td>
-    <td><span class="badge sev-{{ f.severity|lower }}">{{ f.severity }}</span></td>
-    <td>{{ f.difficulty }}</td>
-    <td>{% if f.validated %}<span class="badge success">yes</span>{% else %}<span class="badge outline">no</span>{% endif %}</td>
-    <td>{% if f.thread_id %}<a href="/checkpoints/{{ f.thread_id }}/" class="mono text-xs">{{ f.thread_id | truncatechars(12) }}</a>{% else %}—{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-  </table>
-  </div>
-  {% else %}
-  <p class="text-muted">No findings yet.</p>
-  {% endif %}
+  {% set show_thread = true %}
+  {% include "_findings_table.html" with context %}
 {% endif %}
 
 {# ─── Config tab ─── #}

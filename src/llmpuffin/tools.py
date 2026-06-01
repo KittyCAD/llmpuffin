@@ -19,7 +19,7 @@ from sqlalchemy import update as sa_update
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import sync_session
 from llmpuffin.github import GitHubClient
-from llmpuffin.models import Finding, FindingAttachment, FindingLocation, ValidationNote
+from llmpuffin.models import Finding, FindingAttachment, FindingLocation, GitInfo, ValidationNote
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
@@ -96,6 +96,47 @@ def _resolve_finding(audit_run_id: int, local_id: int):
         return None
 
 
+def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
+    """Query the container for git info (origin remote + HEAD) for a file path.
+
+    Resolves the file to its git repo root, then gets the origin remote URL
+    and HEAD commit. Returns an empty GitInfo on any failure.
+    """
+    try:
+        # Resolve to absolute path.
+        ec, abs_path, _ = backend._run(["sh", "-c", f"realpath {file_path}"])
+        if ec != 0:
+            return GitInfo()
+        abs_path = abs_path.strip()
+        parent = abs_path.rsplit("/", 1)[0]
+
+        # Find git repo root.
+        ec, repo_root, _ = backend._run(
+            ["git", "-C", parent, "rev-parse", "--show-toplevel"]
+        )
+        if ec != 0:
+            return GitInfo()
+        repo_root = repo_root.strip()
+
+        # Origin remote URL.
+        ec, remote, _ = backend._run(
+            ["git", "-C", repo_root, "remote", "get-url", "origin"]
+        )
+        if ec != 0:
+            return GitInfo()
+
+        # HEAD commit.
+        ec, head, _ = backend._run(
+            ["git", "-C", repo_root, "rev-parse", "HEAD"]
+        )
+        if ec != 0:
+            return GitInfo()
+
+        return GitInfo(origin_remote=remote.strip(), head=head.strip())
+    except Exception:
+        return GitInfo()
+
+
 def _persist_finding_to_db(
     audit_run_id: int,
     thread_id: str,
@@ -155,6 +196,8 @@ def _persist_finding_to_db(
                         finding_id=finding.id,
                         file_path=loc["file"],
                         start_line=loc.get("line", 0),
+                        origin_remote=loc.get("origin_remote", ""),
+                        head=loc.get("head", ""),
                     )
                 )
             return finding.id, finding.local_id, finding.rule_id
@@ -272,8 +315,18 @@ Existing mitigations to verify:
         rt_tool_call_id = runtime.tool_call_id or ""
         rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
 
-        # Convert LocationInput models to dicts for the DB layer.
-        loc_dicts = [{"file": loc.file, "line": loc.line} for loc in locations] if locations else None
+        # Convert LocationInput models to dicts for the DB layer,
+        # enriching each with git info from the container.
+        loc_dicts = None
+        if locations:
+            loc_dicts = []
+            for loc in locations:
+                d: dict = {"file": loc.file, "line": loc.line}
+                if container_backend:
+                    gi = _query_git_info(container_backend, loc.file)
+                    d["origin_remote"] = gi.origin_remote
+                    d["head"] = gi.head
+                loc_dicts.append(d)
 
         # Persist first so we get the authoritative, race-safe local_id +
         # rule_id from the DB. The SARIF entry uses the same values to keep

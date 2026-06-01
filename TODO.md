@@ -5,12 +5,43 @@
 
 - make validation notes an array. We want to allow for multiple rounds of validation, and we don't want to lose the previous notes. Maybe we can also add a timestamp to each note?
 
-- resolving links in locations is broken if the LLM links to a finding outside of /src/target 
+- resolving links in locations is broken if the LLM links to a finding outside of /src/target, src/modeling-app/src/components/CommandBar/CommandBarSelectionInput.tsx:196
 - We maybe need a better heuristic to match links. Maybe we configure only an org and then analyze the link if its a known repo.
+
+- use git blame
+- never attach readble documents as findings, those typicalls go into notes
+
+- fresh containers per thread? e.g. when forking you get a new one
+
+- confirmation about the action that will be performed when releasing on github
+
+- We want that we can publish code to private forks. Like the github advisory private fork.
+
+- add justificatiosn for severity and difficulty
+
+- systematic creation of Semgrep rules
+
+- CodeQL available as tool
+
+- types for threads (main, finding)
+
+- allow comments on findings
+
+- dialog when opening github issues/advisories
+
+- allow stopping conversations
+
+- support editing severity as well as other fields
+
+- get rid of szenario_id it confusing
+
+- support effort https://reference.langchain.com/python/langchain-anthropic/chat_models/ChatAnthropic/effort
+
+- build docker images dynamically or via UI
 
 Bugs:
 - deduplicate findings in one thread at least
-- 
+- the composer does not update when starting a thread from a finding
 
 
 Prompt:
@@ -18,6 +49,7 @@ Prompt:
 - explain other repos are available
 - improve memory instructions, it mostly created audit_notes.md
 - explain that users can not access container contents (you need to show examples)
+- make clear that we are zoo/kittycad. Data exfiltrated is only relevant if it crosses a threat zone
 
 Validation:
 - building and setting the project up

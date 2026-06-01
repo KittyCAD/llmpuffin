@@ -89,6 +89,7 @@ async def run_detail(
                 selectinload(AuditRun.profile),
                 selectinload(AuditRun.threads),
                 selectinload(AuditRun.findings).selectinload(Finding.locations),
+                selectinload(AuditRun.findings).selectinload(Finding.github_link),
             )
             .where(AuditRun.id == run_id)
         )

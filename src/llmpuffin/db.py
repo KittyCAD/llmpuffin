@@ -98,7 +98,7 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 async def _abort_orphaned_threads() -> None:
-    """Mark any 'running' threads as 'aborted' on startup.
+    """Mark any 'running' threads as 'aborted'.
 
     When the process is killed (SIGKILL, OOM) the finalizer never runs and
     the thread stays running forever.
@@ -112,7 +112,7 @@ async def _abort_orphaned_threads() -> None:
         await s.commit()
         if result.rowcount:
             log.info(
-                "Marked %d orphaned running thread(s) as aborted on startup",
+                "Marked %d orphaned running thread(s) as aborted",
                 result.rowcount,
             )
 
@@ -136,5 +136,4 @@ async def setup_db() -> None:
     before starting the app for the first time.
     """
     get_async_engine()
-    # await _abort_orphaned_threads()
     await _setup_langgraph_tables()

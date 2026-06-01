@@ -56,14 +56,13 @@ def _pluralize(value, suffix: str = "s") -> str:
     return "" if n == 1 else suffix
 
 
-def location_link(loc, audit_run=None) -> Markup:
+def location_link(loc) -> Markup:
     display = f"{loc.file_path}:{loc.start_line}"
-    if audit_run and audit_run.github_repo_url:
-        url = audit_run.github_file_url(loc.file_path, loc.start_line)
-        if url:
-            return Markup(
-                f'<a href="{escape(url)}" target="_blank">{escape(display)}</a>'
-            )
+    url = loc.github_url()
+    if url:
+        return Markup(
+            f'<a href="{escape(url)}" target="_blank">{escape(display)}</a>'
+        )
     return Markup(escape(display))
 
 

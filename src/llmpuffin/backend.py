@@ -174,11 +174,12 @@ class ContainerBackend(SandboxBackendProtocol):
         glob: str | None = None,
     ) -> GrepResult:
         search_path = path or "."
-        cmd = ["grep", "-rn", pattern]
+        cmd = ["grep", "-rn", "-H"]
         if glob:
             cmd.extend(["--include", glob])
-        # Use -H to always print filename, even for single-file searches.
-        cmd.extend(["-H", search_path])
+        # Use -e to pass the pattern explicitly — prevents patterns starting
+        # with '-' (e.g. "->foo") from being interpreted as options.
+        cmd.extend(["-e", pattern, search_path])
 
         exit_code, stdout, stderr = self._run(cmd)
         if exit_code == 2:

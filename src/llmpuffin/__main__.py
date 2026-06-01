@@ -10,11 +10,16 @@ from pathlib import Path
 
 from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
-from llmpuffin.db import setup_db
+from llmpuffin.db import _abort_orphaned_threads, setup_db
 from llmpuffin.github import client_from_config
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
 from llmpuffin.sarif import export_sarif_for_run
+
+
+async def _async_abort_orphaned():
+    await setup_db()
+    await _abort_orphaned_threads()
 
 
 async def _async_main(harness_config: HarnessConfig):
@@ -28,27 +33,50 @@ def main() -> None:
         prog="llmpuffin",
         description="Agentic codebase security review driven by structured threat models.",
     )
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # --- run ---
+    run_parser = subparsers.add_parser("run", help="Run an audit")
+    run_parser.add_argument(
         "-c",
         "--config",
         type=Path,
         default=None,
         help="Global config file (default: ./llmpuffin.toml if present)",
     )
-    parser.add_argument(
+    run_parser.add_argument(
         "-p",
         "--profile",
         type=Path,
         required=True,
         help="Audit profile TOML file",
     )
-    parser.add_argument(
+    run_parser.add_argument(
         "--sarif",
         type=Path,
         default=None,
         help="Export SARIF report to this path after the audit completes",
     )
-    parser.add_argument(
+    run_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show debug output (tool results, etc.)",
+    )
+
+    # --- abort-orphaned-threads ---
+    abort_parser = subparsers.add_parser(
+        "abort-orphaned-threads",
+        help="Mark any 'running' threads as 'aborted' (cleanup after crashes)",
+    )
+    abort_parser.add_argument(
+        "-c",
+        "--config",
+        type=Path,
+        default=None,
+        help="Global config file (default: ./llmpuffin.toml if present)",
+    )
+    abort_parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -61,6 +89,11 @@ def main() -> None:
     os.environ.setdefault("LLMPUFFIN_POSTGRES", global_config.postgres.url)
     setup_logging(verbose=args.verbose, level=global_config.logging.level)
 
+    if args.command == "abort-orphaned-threads":
+        asyncio.run(_async_abort_orphaned())
+        return
+
+    # --- run ---
     profile_text = args.profile.read_text()
     profile = Profile.from_toml_string(profile_text)
 

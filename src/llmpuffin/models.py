@@ -7,10 +7,11 @@ setup()) live alongside these in the same PostgreSQL database.
 
 from __future__ import annotations
 
+import dataclasses
 import tomllib
 from datetime import datetime
 
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, composite, mapped_column, relationship
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -26,6 +27,27 @@ from sqlalchemy import (
 )
 
 SEVERITY_LEVELS = ("low", "medium", "high", "informational")
+
+
+@dataclasses.dataclass
+class GitInfo:
+    """Origin remote URL and HEAD commit for a file location."""
+
+    origin_remote: str = ""
+    head: str = ""
+
+    def github_url(self, file_path: str, line: int = 0) -> str | None:
+        """Build a GitHub blob URL, or None if not a GitHub HTTPS remote."""
+        if not self.origin_remote:
+            return None
+        remote = self.origin_remote.removesuffix(".git")
+        if not remote.startswith("https://github.com/"):
+            return None
+        ref = self.head[:7] if self.head else "main"
+        url = f"{remote}/blob/{ref}/{file_path.lstrip('/')}"
+        if line:
+            url += f"#L{line}"
+        return url
 
 
 class Base(DeclarativeBase):
@@ -127,22 +149,6 @@ class AuditRun(Base):
         threads = ", ".join(t.thread_id for t in self.threads[:3])
         return f"Run {self.id} [{threads}] ({self.status})"
 
-    def github_file_url(
-        self, file_path: str, line: int | None = None, end_line: int | None = None
-    ) -> str | None:
-        base = self.github_repo_url.rstrip("/")
-        if not base:
-            return None
-        ref = self.git_commit or "main"
-        clean_path = file_path.lstrip("/")
-        if clean_path.startswith("src/"):
-            clean_path = clean_path[4:]
-        url = f"{base}/blob/{ref}/{clean_path}"
-        if line and end_line:
-            url += f"#L{line}-L{end_line}"
-        elif line:
-            url += f"#L{line}"
-        return url
 
 
 class AuditThread(Base):
@@ -209,9 +215,6 @@ class Finding(Base):
     tool_call_id: Mapped[str] = mapped_column(
         String(128), default="", server_default=""
     )
-    github_issue_url: Mapped[str] = mapped_column(
-        String(512), default="", server_default=""
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -226,6 +229,9 @@ class Finding(Base):
     validation_notes: Mapped[list[ValidationNote]] = relationship(
         back_populates="finding", cascade="all, delete-orphan",
         order_by="ValidationNote.created_at.desc()",
+    )
+    github_link: Mapped[GitHubLink | None] = relationship(
+        back_populates="finding", cascade="all, delete-orphan", uselist=False,
     )
 
     __table_args__ = (
@@ -254,8 +260,19 @@ class FindingLocation(Base):
     file_path: Mapped[str] = mapped_column(String(1024))
     start_line: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     end_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    origin_remote: Mapped[str] = mapped_column(
+        String(512), default="", server_default=""
+    )
+    head: Mapped[str] = mapped_column(String(64), default="", server_default="")
+
+    git_info: Mapped[GitInfo] = composite(
+        GitInfo, "origin_remote", "head"
+    )
 
     finding: Mapped[Finding] = relationship(back_populates="locations")
+
+    def github_url(self) -> str | None:
+        return self.git_info.github_url(self.file_path, self.start_line)
 
     def __str__(self) -> str:
         return f"{self.file_path}:{self.start_line}"
@@ -311,3 +328,22 @@ class ValidationNote(Base):
 
     def __str__(self) -> str:
         return self.filename
+
+
+class GitHubLink(Base):
+    """A GitHub issue or security advisory linked to a finding."""
+
+    __tablename__ = "github_link"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    finding_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("finding.id", ondelete="CASCADE"), unique=True,
+    )
+    github_type: Mapped[str] = mapped_column(String(32))  # "issue" or "advisory"
+    github_id: Mapped[str] = mapped_column(String(128))  # issue number or GHSA-* id
+    github_url: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    finding: Mapped[Finding] = relationship(back_populates="github_link")

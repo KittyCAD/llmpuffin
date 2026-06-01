@@ -19,24 +19,27 @@
 {%- endmacro %}
 
 {# ─── GitHub report ─── #}
-{% if finding.github_issue_url %}
+{% if finding.github_link %}
+{% set gl = finding.github_link %}
 <div class="gh-issue-card mt-4">
   <div class="gh-issue-info">
     {{ gh_icon() }}
     <div class="col" style="gap: 0.125rem; min-width: 0;">
-      <div class="text-xs text-muted">Reported to GitHub</div>
-      <a href="{{ finding.github_issue_url }}" target="_blank" rel="noopener" class="gh-issue-link mono text-xs">
-        {{ finding.github_issue_url }}
+      <div class="text-xs text-muted">Reported to GitHub ({{ gl.github_type }})</div>
+      <a href="{{ gl.github_url }}" target="_blank" rel="noopener" class="gh-issue-link mono text-xs">
+        {% if gl.github_type == "advisory" %}{{ gl.github_id }}{% else %}#{{ gl.github_id }}{% endif %} — {{ gl.github_url }}
       </a>
     </div>
   </div>
   {% if github_configured %}
   <form hx-post="/findings/{{ finding.id }}/report/"
-        hx-confirm="Update the GitHub issue/advisory?"
+        hx-confirm="Update the GitHub {{ gl.github_type }}?"
         hx-disabled-elt="find button"
         class="inline">
     <button type="submit" class="btn ghost">Update</button>
   </form>
+  {% else %}
+  <div class="text-xs text-muted">Configure GitHub integration to update the {{ gl.github_type }} from here.</div>
   {% endif %}
 </div>
 {% elif github_configured %}
@@ -49,6 +52,8 @@
     <span>Report to GitHub</span>
   </button>
 </form>
+{% else %}
+<div class="text-xs text-muted">Configure GitHub integration to update the issue/advisory from here.</div>
 {% endif %}
 
 {# ─── Details table ─── #}
@@ -83,7 +88,7 @@
 <thead><tr><th>Location</th></tr></thead>
 <tbody>
 {% for loc in locations %}
-<tr><td class="mono text-xs">{{ location_link(loc, audit_run) }}</td></tr>
+<tr><td class="mono text-xs">{{ location_link(loc) }}</td></tr>
 {% endfor %}
 </tbody>
 </table>

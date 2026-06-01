@@ -3,6 +3,17 @@
 
 {% set _coll = namespace(n=0) %}
 
+{% macro copy_btn() -%}
+  <button class="msg-copy ghost" x-data="{ copied: false }"
+    @click="
+      const msg = $el.closest('.msg');
+      const text = msg.innerText.replace(/^(llm|human|tool|copy|copied)\s*/i, '').trim();
+      navigator.clipboard.writeText(text).then(() => { copied = true; setTimeout(() => copied = false, 1500); });
+    "
+    :title="copied ? 'Copied' : 'Copy'"
+    x-text="copied ? 'copied' : 'copy'">copy</button>
+{%- endmacro %}
+
 {% macro render_tool_output(text, css_class="tool-result") -%}
   {%- set lines = (text or "").splitlines() -%}
   {%- if lines|length > 3 -%}
@@ -47,23 +58,23 @@
   {% for msg in messages | reverse %}
     {% if msg.role == "ai" and msg.tool_calls %}
       <div class="msg llm tool-call">
-        <span class="role">llm</span>
+        <span class="role">llm</span>{{ copy_btn() }}
         {% if msg.content %}<div class="markdown">{{ msg.content | md }}</div>{% endif %}
         {% for tc in msg.tool_calls %}
           {{ render_tool_call(tc) }}
         {% endfor %}
       </div>
     {% elif msg.role == "ai" %}
-      <div class="msg llm"><span class="role">llm</span><div class="markdown">{{ msg.content | md }}</div></div>
+      <div class="msg llm"><span class="role">llm</span>{{ copy_btn() }}<div class="markdown">{{ msg.content | md }}</div></div>
     {% elif msg.role == "tool" %}
       {# Skip ToolMessages that were already paired into an AIMessage above. #}
       {% if msg.tool_call_id is none %}
-        <div class="msg tool"><span class="role">tool</span>{{ render_tool_output(msg.content) }}</div>
+        <div class="msg tool"><span class="role">tool</span>{{ copy_btn() }}{{ render_tool_output(msg.content) }}</div>
       {% endif %}
     {% elif msg.role == "human" %}
-      <div class="msg human"><span class="role">human</span><pre>{{ msg.content }}</pre></div>
+      <div class="msg human"><span class="role">human</span>{{ copy_btn() }}<pre>{{ msg.content }}</pre></div>
     {% else %}
-      <div class="msg"><span class="role">{{ msg.role }}</span><pre>{{ msg.content }}</pre></div>
+      <div class="msg"><span class="role">{{ msg.role }}</span>{{ copy_btn() }}<pre>{{ msg.content }}</pre></div>
     {% endif %}
   {% endfor %}
 {%- endmacro %}

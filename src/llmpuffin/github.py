@@ -185,6 +185,41 @@ class GitHubClient:
             data = json.loads(resp.read())
         return data["html_url"]
 
+    def update_advisory(
+        self,
+        repo: str,
+        ghsa_id: str,
+        summary: str,
+        description: str,
+        severity: str = "medium",
+    ) -> str:
+        """Update a draft security advisory and return its HTML URL."""
+        import json
+
+        token = self._install_token()
+        ghsa_severity = severity.lower()
+        if ghsa_severity not in ("critical", "high", "medium", "low"):
+            ghsa_severity = "medium"
+
+        payload: dict = {
+            "summary": summary,
+            "description": description,
+            "severity": ghsa_severity,
+        }
+        req = Request(
+            f"https://api.github.com/repos/{repo}/security-advisories/{ghsa_id}",
+            method="PATCH",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+            },
+        )
+        with urlopen(req) as resp:
+            data = json.loads(resp.read())
+        return data["html_url"]
+
     def update_issue(self, repo: str, issue_number: int, title: str, body: str) -> str:
         """Update a GitHub issue and return its HTML URL."""
         r = self._gh().get_repo(repo)

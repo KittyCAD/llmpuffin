@@ -321,8 +321,15 @@ p.error, p.success {
 }
 
 /* ───────── Misc preserved styles ───────── */
-.msg { margin: 0.5em 0; padding: 0.5em 1em; border-left: 3px solid hsl(var(--border)); }
+.msg { margin: 0.5em 0; padding: 0.5em 1em; border-left: 3px solid hsl(var(--border)); position: relative; }
 .msg pre { margin: 0.3em 0 0 0; }
+.msg-copy {
+  float: right; padding: 0.125rem 0.5rem; font-size: 0.675rem;
+  border: none; background: transparent; color: hsl(var(--muted-foreground));
+  opacity: 0; transition: opacity 0.15s;
+}
+.msg:hover .msg-copy { opacity: 1; }
+.msg-copy:hover { color: hsl(var(--foreground)); background: hsl(var(--muted)); }
 .msg.llm { border-left-color: hsl(var(--primary)); }
 .msg.llm.tool-call { border-left-color: hsl(var(--warning)); }
 .msg.tool { border-left-color: hsl(var(--muted-foreground)); }
@@ -445,7 +452,7 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
 /* ───────── Toast container ───────── */
 #toasts {
   position: fixed;
-  bottom: 1.25rem;
+  top: 1.25rem;
   right: 1.25rem;
   z-index: 9999;
   display: flex;
@@ -458,6 +465,7 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
   pointer-events: auto;
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
+  box-shadow: 0 4px 12px hsl(0 0% 0% / 0.15);
   border-left-width: 3px;
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
@@ -467,9 +475,9 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
   gap: 0.625rem;
   align-items: flex-start;
 }
-.toast.success { border-left-color: hsl(142 71% 45%); }
-.toast.error   { border-left-color: hsl(var(--destructive)); }
-.toast.info    { border-left-color: hsl(var(--primary)); }
+.toast.success { border-left: 4px solid hsl(142 71% 45%); background: hsl(142 71% 45% / 0.08); }
+.toast.error   { border-left: 4px solid hsl(var(--destructive)); background: hsl(var(--destructive) / 0.08); }
+.toast.info    { border-left: 4px solid hsl(var(--primary)); background: hsl(var(--primary) / 0.08); }
 .toast .toast-msg { flex: 1; white-space: pre-wrap; word-break: break-word; }
 .toast .toast-close {
   background: transparent;

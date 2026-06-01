@@ -59,7 +59,7 @@ def _discover_profiles() -> list[Path]:
 
 def _run_profile(profile_path: Path, verbose: bool) -> int:
     """Run a single profile. Returns the exit code."""
-    cmd = ["uv", "run", "llmpuffin", "-p", str(profile_path.resolve())]
+    cmd = ["uv", "run", "llmpuffin", "run", "-p", str(profile_path.resolve())]
     if verbose:
         cmd.append("-v")
     return subprocess.run(cmd).returncode

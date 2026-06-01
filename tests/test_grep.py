@@ -99,6 +99,14 @@ class TestGrep:
             f"Should not match 'documentName': {texts}"
         )
 
+    def test_pattern_starting_with_dash(self, backend):
+        """Patterns starting with '-' (e.g. '->foo') must not be parsed as grep options."""
+        result = backend.grep("->getElementById", ".")
+        # Should not error — grep should treat it as a literal pattern
+        assert result.error is None or "invalid option" not in (result.error or "")
+        # The fixture has no '->' patterns so matches will be empty, but no crash
+        assert result.matches is not None
+
     def test_glob_without_wildcard_hints_on_no_match(self, backend):
         """When glob has no wildcard and yields no results, return a hint."""
         result = backend.grep("document", glob="/src/viewer/main.ts")
