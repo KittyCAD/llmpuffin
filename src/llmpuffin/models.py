@@ -11,7 +11,13 @@ import dataclasses
 import tomllib
 from datetime import datetime
 
-from sqlalchemy.orm import DeclarativeBase, Mapped, composite, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    composite,
+    mapped_column,
+    relationship,
+)
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -150,7 +156,6 @@ class AuditRun(Base):
         return f"Run {self.id} [{threads}] ({self.status})"
 
 
-
 class AuditThread(Base):
     """A checkpoint thread belonging to an audit run.
 
@@ -227,11 +232,14 @@ class Finding(Base):
         back_populates="finding", cascade="all, delete-orphan"
     )
     validation_notes: Mapped[list[ValidationNote]] = relationship(
-        back_populates="finding", cascade="all, delete-orphan",
+        back_populates="finding",
+        cascade="all, delete-orphan",
         order_by="ValidationNote.created_at.desc()",
     )
     github_link: Mapped[GitHubLink | None] = relationship(
-        back_populates="finding", cascade="all, delete-orphan", uselist=False,
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
     __table_args__ = (
@@ -265,9 +273,7 @@ class FindingLocation(Base):
     )
     head: Mapped[str] = mapped_column(String(64), default="", server_default="")
 
-    git_info: Mapped[GitInfo] = composite(
-        GitInfo, "origin_remote", "head"
-    )
+    git_info: Mapped[GitInfo] = composite(GitInfo, "origin_remote", "head")
 
     finding: Mapped[Finding] = relationship(back_populates="locations")
 
@@ -292,7 +298,9 @@ class FindingAttachment(Base):
     content: Mapped[bytes] = mapped_column(LargeBinary)
     size: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     thread_id: Mapped[str] = mapped_column(String(64), default="", server_default="")
-    tool_call_id: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    tool_call_id: Mapped[str] = mapped_column(
+        String(128), default="", server_default=""
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -337,7 +345,9 @@ class GitHubLink(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     finding_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("finding.id", ondelete="CASCADE"), unique=True,
+        BigInteger,
+        ForeignKey("finding.id", ondelete="CASCADE"),
+        unique=True,
     )
     github_type: Mapped[str] = mapped_column(String(32))  # "issue" or "advisory"
     github_id: Mapped[str] = mapped_column(String(128))  # issue number or GHSA-* id

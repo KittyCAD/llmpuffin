@@ -45,9 +45,16 @@ def _get_podman_socket() -> str | None:
     # macOS: podman machine exposes a local forwarded socket
     try:
         result = subprocess.run(
-            ["podman", "machine", "inspect",
-             "--format", "{{.ConnectionInfo.PodmanSocket.Path}}"],
-            capture_output=True, text=True, timeout=5,
+            [
+                "podman",
+                "machine",
+                "inspect",
+                "--format",
+                "{{.ConnectionInfo.PodmanSocket.Path}}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         sock = result.stdout.strip()
         if result.returncode == 0 and sock and Path(sock).exists():

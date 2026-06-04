@@ -19,7 +19,13 @@ from sqlalchemy import update as sa_update
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import sync_session
 from llmpuffin.github import GitHubClient
-from llmpuffin.models import Finding, FindingAttachment, FindingLocation, GitInfo, ValidationNote
+from llmpuffin.models import (
+    Finding,
+    FindingAttachment,
+    FindingLocation,
+    GitInfo,
+    ValidationNote,
+)
 from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
@@ -29,32 +35,58 @@ log = logging.getLogger("llmpuffin")
 class LocationInput(BaseModel):
     """A source code location."""
 
-    file: str = Field(description="File path relative to the repo root (e.g. 'src/main.py')")
+    file: str = Field(
+        description="File path relative to the repo root (e.g. 'src/main.py')"
+    )
     line: int = Field(default=0, description="Line number (0 if unknown)")
 
 
 class ReportFindingInput(BaseModel):
     """Input schema for report_finding."""
 
-    scenario_id: str = Field(description="The threat scenario ID this finding relates to (e.g. 'sqli')")
-    title: str = Field(description="Short one-line summary (e.g. 'SQL injection in login endpoint')")
-    severity: Literal["high", "medium", "low", "informational"] = Field(description="How severe the issue is")
-    difficulty: Literal["high", "medium", "low"] = Field(description="How hard it is to exploit")
-    description: str = Field(description="What the vulnerability is and where it occurs. Include code evidence.")
-    exploit_scenario: str = Field(description="Step-by-step exploit scenario showing how an attacker could exploit this")
-    recommendations: str = Field(description="Concrete steps to fix or mitigate the issue")
-    locations: list[LocationInput] | None = Field(default=None, description="Source code locations")
+    scenario_id: str = Field(
+        description="The threat scenario ID this finding relates to (e.g. 'sqli')"
+    )
+    title: str = Field(
+        description="Short one-line summary (e.g. 'SQL injection in login endpoint')"
+    )
+    severity: Literal["high", "medium", "low", "informational"] = Field(
+        description="How severe the issue is"
+    )
+    difficulty: Literal["high", "medium", "low"] = Field(
+        description="How hard it is to exploit"
+    )
+    description: str = Field(
+        description="What the vulnerability is and where it occurs. Include code evidence."
+    )
+    exploit_scenario: str = Field(
+        description="Step-by-step exploit scenario showing how an attacker could exploit this"
+    )
+    recommendations: str = Field(
+        description="Concrete steps to fix or mitigate the issue"
+    )
+    locations: list[LocationInput] | None = Field(
+        default=None, description="Source code locations"
+    )
 
 
 class UpdateFindingInput(BaseModel):
     """Input schema for update_finding."""
 
-    finding_id: int = Field(description="The finding_id returned by report_finding (0-indexed)")
+    finding_id: int = Field(
+        description="The finding_id returned by report_finding (0-indexed)"
+    )
     title: str | None = Field(default=None, description="New title")
-    severity: Literal["high", "medium", "low", "informational"] | None = Field(default=None, description="New severity")
-    difficulty: Literal["high", "medium", "low"] | None = Field(default=None, description="New difficulty")
+    severity: Literal["high", "medium", "low", "informational"] | None = Field(
+        default=None, description="New severity"
+    )
+    difficulty: Literal["high", "medium", "low"] | None = Field(
+        default=None, description="New difficulty"
+    )
     description: str | None = Field(default=None, description="New description")
-    exploit_scenario: str | None = Field(default=None, description="New exploit scenario")
+    exploit_scenario: str | None = Field(
+        default=None, description="New exploit scenario"
+    )
     recommendations: str | None = Field(default=None, description="New recommendations")
 
 
@@ -126,9 +158,7 @@ def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
             return GitInfo()
 
         # HEAD commit.
-        ec, head, _ = backend._run(
-            ["git", "-C", repo_root, "rev-parse", "HEAD"]
-        )
+        ec, head, _ = backend._run(["git", "-C", repo_root, "rev-parse", "HEAD"])
         if ec != 0:
             return GitInfo()
 
@@ -511,12 +541,14 @@ Existing mitigations to verify:
         # Create immutable validation note + mark finding as validated.
         try:
             with sync_session() as s:
-                s.add(ValidationNote(
-                    finding_id=db_finding.id,
-                    thread_id=rt_thread_id,
-                    tool_call_id=rt_tool_call_id or "",
-                    evidence=evidence,
-                ))
+                s.add(
+                    ValidationNote(
+                        finding_id=db_finding.id,
+                        thread_id=rt_thread_id,
+                        tool_call_id=rt_tool_call_id or "",
+                        evidence=evidence,
+                    )
+                )
                 s.execute(
                     sa_update(Finding)
                     .where(
@@ -603,7 +635,10 @@ Existing mitigations to verify:
             return f"Error fetching commit: {exc}"
 
     def finding_attach_file(
-        finding_id: int, file_path: str, description: str = "", runtime: ToolRuntime = None,
+        finding_id: int,
+        file_path: str,
+        description: str = "",
+        runtime: ToolRuntime = None,
     ) -> str:
         """Export a file from the container and attach it to a finding.
 
@@ -649,7 +684,11 @@ Existing mitigations to verify:
                     description=description,
                     content=raw,
                     size=len(raw),
-                    thread_id=runtime.config.get("configurable", {}).get("thread_id", "") if runtime else "",
+                    thread_id=runtime.config.get("configurable", {}).get(
+                        "thread_id", ""
+                    )
+                    if runtime
+                    else "",
                     tool_call_id=runtime.tool_call_id or "" if runtime else "",
                 )
                 s.add(att)

@@ -13,13 +13,11 @@ Discovery: http://localhost:9090/.well-known/openid-configuration
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from urllib.parse import urlencode
 
 import uvicorn
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -162,9 +160,7 @@ def authorize_post(
     if state:
         params["state"] = state
     sep = "&" if "?" in redirect_uri else "?"
-    return RedirectResponse(
-        f"{redirect_uri}{sep}{urlencode(params)}", status_code=302
-    )
+    return RedirectResponse(f"{redirect_uri}{sep}{urlencode(params)}", status_code=302)
 
 
 @app.post("/token")

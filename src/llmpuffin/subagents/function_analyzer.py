@@ -3,7 +3,6 @@
 from typing import Callable
 
 from llmpuffin.subagents._constants import MAIN_AGENT_TOOLS
-from llmpuffin.subagents._utils import load_agent_md
 
 TOOLS = MAIN_AGENT_TOOLS
 

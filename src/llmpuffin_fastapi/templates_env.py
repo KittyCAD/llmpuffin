@@ -60,9 +60,7 @@ def location_link(loc) -> Markup:
     display = f"{loc.file_path}:{loc.start_line}"
     url = loc.github_url()
     if url:
-        return Markup(
-            f'<a href="{escape(url)}" target="_blank">{escape(display)}</a>'
-        )
+        return Markup(f'<a href="{escape(url)}" target="_blank">{escape(display)}</a>')
     return Markup(escape(display))
 
 

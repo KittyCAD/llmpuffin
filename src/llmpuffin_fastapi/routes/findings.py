@@ -183,7 +183,9 @@ async def finding_detail(
         fork_session = await get_session(finding.fork_thread_id)
         fork_thread = (
             await db.execute(
-                select(AuditThread).where(AuditThread.thread_id == finding.fork_thread_id)
+                select(AuditThread).where(
+                    AuditThread.thread_id == finding.fork_thread_id
+                )
             )
         ).scalar_one_or_none()
 
@@ -226,9 +228,7 @@ async def finding_report_to_github(
             request, "error", "GitHub App not configured", redirect_to=redirect
         )
     if not finding.title:
-        return toast(
-            request, "error", "Title is required", redirect_to=redirect
-        )
+        return toast(request, "error", "Title is required", redirect_to=redirect)
 
     repo = audit_run.github_repo_url.rstrip("/").removeprefix("https://github.com/")
     repo_info = gh.check_repo_access(repo)
@@ -268,30 +268,42 @@ async def finding_report_to_github(
                     repo=repo, issue_number=int(link.github_id), title=title, body=body
                 )
                 return toast(
-                    request, "success", "Issue updated",
-                    redirect_to=redirect, refresh=True,
+                    request,
+                    "success",
+                    "Issue updated",
+                    redirect_to=redirect,
+                    refresh=True,
                 )
             except Exception as exc:
                 log.exception("Failed to update GitHub issue")
                 return toast(
-                    request, "error", f"Failed to update: {exc}",
+                    request,
+                    "error",
+                    f"Failed to update: {exc}",
                     redirect_to=redirect,
                 )
         else:
             try:
                 gh.update_advisory(
-                    repo=repo, ghsa_id=link.github_id,
-                    summary=title, description=body,
+                    repo=repo,
+                    ghsa_id=link.github_id,
+                    summary=title,
+                    description=body,
                     severity=finding.severity,
                 )
                 return toast(
-                    request, "success", "Advisory updated",
-                    redirect_to=redirect, refresh=True,
+                    request,
+                    "success",
+                    "Advisory updated",
+                    redirect_to=redirect,
+                    refresh=True,
                 )
             except Exception as exc:
                 log.exception("Failed to update GitHub advisory")
                 return toast(
-                    request, "error", f"Failed to update: {exc}",
+                    request,
+                    "error",
+                    f"Failed to update: {exc}",
                     redirect_to=redirect,
                 )
 
@@ -306,45 +318,62 @@ async def finding_report_to_github(
             )
             # Extract GHSA-* id from URL.
             ghsa_id = advisory_url.rstrip("/").rsplit("/", 1)[-1]
-            db.add(GitHubLink(
-                finding_id=finding_id,
-                github_type="advisory",
-                github_id=ghsa_id,
-                github_url=advisory_url,
-            ))
+            db.add(
+                GitHubLink(
+                    finding_id=finding_id,
+                    github_type="advisory",
+                    github_id=ghsa_id,
+                    github_url=advisory_url,
+                )
+            )
             await db.commit()
             return toast(
-                request, "success", "Draft security advisory created",
-                redirect_to=redirect, refresh=True,
+                request,
+                "success",
+                "Draft security advisory created",
+                redirect_to=redirect,
+                refresh=True,
             )
         except Exception as exc:
             log.exception("Failed to create advisory")
             return toast(
-                request, "error", f"Failed to create advisory: {exc}",
+                request,
+                "error",
+                f"Failed to create advisory: {exc}",
                 redirect_to=redirect,
             )
 
     # Private repo → GitHub issue.
     try:
         issue_url = gh.create_issue(
-            repo=repo, title=title, body=body, labels=["vulnerability"],
+            repo=repo,
+            title=title,
+            body=body,
+            labels=["vulnerability"],
         )
         issue_number = issue_url.rstrip("/").rsplit("/", 1)[-1]
-        db.add(GitHubLink(
-            finding_id=finding_id,
-            github_type="issue",
-            github_id=issue_number,
-            github_url=issue_url,
-        ))
+        db.add(
+            GitHubLink(
+                finding_id=finding_id,
+                github_type="issue",
+                github_id=issue_number,
+                github_url=issue_url,
+            )
+        )
         await db.commit()
         return toast(
-            request, "success", "Issue created",
-            redirect_to=redirect, refresh=True,
+            request,
+            "success",
+            "Issue created",
+            redirect_to=redirect,
+            refresh=True,
         )
     except Exception as exc:
         log.exception("Failed to create GitHub issue")
         return toast(
-            request, "error", f"Failed to create issue: {exc}",
+            request,
+            "error",
+            f"Failed to create issue: {exc}",
             redirect_to=redirect,
         )
 
@@ -361,13 +390,16 @@ async def finding_fork(
     if finding is None:
         raise HTTPException(status_code=404)
     run = finding.audit_run
-    redirect = f"/findings/{finding_id}/"
 
     def _fork_error(message: str):
         """Return 204 + toast error — don't replace the form."""
         return Response(
             status_code=204,
-            headers={"HX-Trigger": json.dumps({"toast": {"level": "error", "message": message}})},
+            headers={
+                "HX-Trigger": json.dumps(
+                    {"toast": {"level": "error", "message": message}}
+                )
+            },
         )
 
     if not finding.thread_id:
@@ -431,6 +463,7 @@ async def finding_fork(
     # conversation partial (may be empty — messages div will start polling immediately).
     await db.refresh(finding)
     from llmpuffin_fastapi.checkpoint import get_session
+
     fork_session = await get_session(new_thread_id)
     fork_thread = (
         await db.execute(
@@ -446,7 +479,11 @@ async def finding_fork(
             "fork_session": fork_session,
             "fork_thread": fork_thread,
         },
-        headers={"HX-Trigger": json.dumps({"toast": {"level": "success", "message": "Fork started"}})},
+        headers={
+            "HX-Trigger": json.dumps(
+                {"toast": {"level": "success", "message": "Fork started"}}
+            )
+        },
     )
 
 

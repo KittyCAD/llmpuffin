@@ -84,7 +84,9 @@ class AuthConfig:
 
     @property
     def configured(self) -> bool:
-        return self.enabled and bool(self.provider_url and self.client_id and self.client_secret)
+        return self.enabled and bool(
+            self.provider_url and self.client_id and self.client_secret
+        )
 
 
 @dataclass

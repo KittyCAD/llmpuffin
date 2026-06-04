@@ -190,12 +190,20 @@ def _build_agent(
     main_tools: list = [tools[name] for name in MAIN_AGENT_TOOLS]
 
     # Anthropic server-side tools — executed by Claude, no local handler needed.
-    main_tools.append(BetaWebSearchTool20250305Param(
-        name="web_search", type="web_search_20250305", max_uses=5,
-    ))
-    main_tools.append(BetaWebFetchTool20250910Param(
-        name="web_fetch", type="web_fetch_20250910", max_uses=5,
-    ))
+    main_tools.append(
+        BetaWebSearchTool20250305Param(
+            name="web_search",
+            type="web_search_20250305",
+            max_uses=5,
+        )
+    )
+    main_tools.append(
+        BetaWebFetchTool20250910Param(
+            name="web_fetch",
+            type="web_fetch_20250910",
+            max_uses=5,
+        )
+    )
 
     subagents = build_subagents(tools)
 

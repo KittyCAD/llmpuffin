@@ -151,7 +151,7 @@ def export_sarif_for_run(audit_run_id: int) -> str:
     it reads findings from the database rather than relying on in-memory state.
     """
     from llmpuffin.db import sync_session
-    from llmpuffin.models import Finding, ValidationNote
+    from llmpuffin.models import Finding
 
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
@@ -189,7 +189,11 @@ def export_sarif_for_run(audit_run_id: int) -> str:
             props["validated"] = True
         if f.validation_notes:
             props["validation_notes"] = [
-                {"evidence": n.evidence, "thread_id": n.thread_id, "created_at": str(n.created_at)}
+                {
+                    "evidence": n.evidence,
+                    "thread_id": n.thread_id,
+                    "created_at": str(n.created_at),
+                }
                 for n in f.validation_notes
             ]
         elif f.validated_evidence:

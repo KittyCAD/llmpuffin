@@ -19,8 +19,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("finding_attachment", sa.Column("thread_id", sa.String(64), server_default="", nullable=False))
-    op.add_column("finding_attachment", sa.Column("tool_call_id", sa.String(128), server_default="", nullable=False))
+    op.add_column(
+        "finding_attachment",
+        sa.Column("thread_id", sa.String(64), server_default="", nullable=False),
+    )
+    op.add_column(
+        "finding_attachment",
+        sa.Column("tool_call_id", sa.String(128), server_default="", nullable=False),
+    )
 
 
 def downgrade() -> None:
