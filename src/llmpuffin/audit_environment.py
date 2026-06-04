@@ -10,21 +10,52 @@ This is the **tool integration layer** of the harness (parallel.ai):
 the model never touches the host; all side effects happen inside the
 container.  This provides both security isolation and reproducibility.
 
-We use Podman (rootless containers) via its Python SDK, so no daemon
-is required.
+We talk to the Podman daemon via its Docker-compatible API using the
+docker-py library.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
+from pathlib import Path
 from types import TracebackType
 
-from podman import PodmanClient
-from podman.domain.containers import Container
+import docker
+from docker.models.containers import Container
 
 log = logging.getLogger("llmpuffin")
+
+
+def _get_podman_socket() -> str | None:
+    """Discover the Podman API socket path.
+
+    Checks DOCKER_HOST first, then falls back to ``podman machine inspect``
+    to find the local forwarded API socket (macOS with podman machine),
+    then XDG_RUNTIME_DIR (Linux rootless).
+    """
+    import subprocess
+
+    env_host = os.environ.get("DOCKER_HOST")
+    if env_host:
+        return env_host
+
+    # macOS: podman machine exposes a local forwarded socket
+    try:
+        result = subprocess.run(
+            ["podman", "machine", "inspect",
+             "--format", "{{.ConnectionInfo.PodmanSocket.Path}}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        sock = result.stdout.strip()
+        if result.returncode == 0 and sock and Path(sock).exists():
+            return f"unix://{sock}"
+    except Exception:
+        pass
+
+    return None
 
 
 @dataclass
@@ -40,8 +71,8 @@ class AuditEnvironment:
     image: str
     # Where the source code lives inside the container
     code_dir: str = "/src"
-    # Podman connection URI (None = default rootless socket)
-    podman_uri: str | None = None
+    # Docker/Podman connection URI (None = default socket)
+    base_url: str | None = None
 
     def start(self, container_id: str | None = None) -> AuditExecution:
         """Start a container from this environment's image, or resume an existing one.
@@ -52,10 +83,12 @@ class AuditEnvironment:
 
         Returns an AuditExecution context manager.
         """
-        kwargs = {}
-        if self.podman_uri:
-            kwargs["base_url"] = self.podman_uri
-        client = PodmanClient(**kwargs, timeout=3000)
+        base_url = self.base_url or _get_podman_socket()
+        if not base_url:
+            raise RuntimeError(
+                "Could not discover Podman socket. Set DOCKER_HOST or start a Podman machine."
+            )
+        client = docker.DockerClient(base_url=base_url, timeout=3000)
 
         # Try to resume an existing container by ID
         if container_id:
@@ -72,11 +105,12 @@ class AuditEnvironment:
                     return AuditExecution(
                         container=existing, client=client, code_dir=self.code_dir
                     )
-            except Exception:
+            except Exception as e:
+                log.warn(e)
                 log.info("Container %s not found, creating new one", container_id[:12])
 
         # Create a new container
-        container: Container = client.containers.run(  # type: ignore[assignment]
+        container: Container = client.containers.run(
             self.image,
             detach=True,
             command=["sleep", "infinity"],
@@ -102,7 +136,7 @@ class AuditExecution:
     """
 
     container: Container
-    client: PodmanClient
+    client: docker.DockerClient
     code_dir: str
 
     def __enter__(self) -> AuditExecution:
@@ -164,7 +198,7 @@ class AuditExecution:
             log.debug("kill() failed (container may already be dead): %s", exc)
 
         try:
-            self.container.wait(condition="stopped", timeout=timeout)
+            self.container.wait(timeout=timeout)
         except Exception as exc:
             raise TimeoutError(
                 f"Container {self.container.id} did not stop within {timeout}s"

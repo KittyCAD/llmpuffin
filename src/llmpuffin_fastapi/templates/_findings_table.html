@@ -121,7 +121,7 @@
 <tbody>
 {% for finding in findings %}
   <tr{% if finding.deleted %} style="opacity:0.5"{% endif %}>
-    <td><a href="/findings/{{ finding.id }}/">{{ finding.local_id or finding.id }}</a></td>
+    <td><a href="/findings/{{ finding.id }}/">{{ finding.local_id if finding.local_id is not none else finding.id }}</a></td>
     <td>
       <a href="/findings/{{ finding.id }}/">{{ (finding.title or finding.rule_id or finding.description) | truncatechars(80) }}</a>
       {% if finding.scenario_id %}

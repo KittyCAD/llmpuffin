@@ -6,7 +6,7 @@ LLM-based security audits of codebases using structured threat models.
 
 Architecture:
   - Threat model (TOML) → declarative task specification
-  - AuditEnvironment (Podman) → containerized tool execution
+  - AuditEnvironment (container) → containerized tool execution
   - Agent (deepagents) → orchestration / reasoning loop
   - SARIF output → structured, interoperable findings
 

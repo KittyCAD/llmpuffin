@@ -1,4 +1,4 @@
-"""Container backend for deepagents — runs all operations inside a Podman container.
+"""Container backend for deepagents — runs all operations inside a container.
 
 This backend implements `SandboxBackendProtocol` by delegating every
 file and shell operation to a running `AuditExecution` container.
@@ -31,7 +31,7 @@ DEFAULT_EXECUTE_TIMEOUT = 120
 
 
 class ContainerBackend(SandboxBackendProtocol):
-    """Deepagents backend that executes everything inside a Podman container.
+    """Deepagents backend that executes everything inside a container.
 
     All file and shell operations are delegated to the container via
     `AuditExecution.exec()`. The host filesystem is never accessed.
@@ -280,4 +280,4 @@ class ContainerBackend(SandboxBackendProtocol):
         if exit_code != 0:
             return EditResult(error=f"Error: {stderr.strip()}")
 
-        return EditResult(path=file_path, files_update=None, occurrences=count)
+        return EditResult(path=file_path, occurrences=count)

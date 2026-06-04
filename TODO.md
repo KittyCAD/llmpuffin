@@ -39,10 +39,16 @@
 
 - build docker images dynamically or via UI
 
+- ingegrate this knowledge: https://github.com/KittyCAD/wiki/blob/fb9734660deb02b01f28bea291a40690289564d4/eng/full-stack-local-development.md?plain=1#L4
+
+- add post audit step that checks if findings were validated, PoC exists. Add a stage that can ask quesitosn back automatically, or propose the user options.
+
+- feature: validation of external findings
+
 Bugs:
 - deduplicate findings in one thread at least
 - the composer does not update when starting a thread from a finding
-
+- memory handling must be more conservative. If we give the memory to the next run, it is likely going to ignore bugs as they were deemed irrelevant
 
 Prompt:
 - avoid duplicating risks like, yes hoops could be vulnerable

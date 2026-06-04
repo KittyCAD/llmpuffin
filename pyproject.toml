@@ -18,7 +18,7 @@ dependencies = [
     "markdown",
     "langchain-anthropic>=0.3",
     "langgraph-checkpoint-postgres",
-    "podman",
+    "docker>=7",
     "psycopg[binary]>=3",
     "pydantic>=2",
     "sarif-om>=1.0",
@@ -41,8 +41,6 @@ llmpuffin-fastapi = "llmpuffin_fastapi.main:main"
 [tool.ruff]
 src = ["src"]
 
-[tool.uv.sources]
-podman = { path = "../podman-py", editable = true }
 
 [dependency-groups]
 dev = ["pytest", "ruff"]
