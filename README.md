@@ -32,7 +32,7 @@ Data lives in `.postgres/pgdata/`, port 5434.
 Apply database migrations after starting PostgreSQL:
 
 ```
-uv run alembic -c src/llmpuffin_fastapi/alembic.ini upgrade head
+uv run alembic -c src/llmpuffin/alembic.ini upgrade head
 ```
 
 ## Configuration

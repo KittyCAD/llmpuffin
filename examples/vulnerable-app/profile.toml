@@ -6,6 +6,6 @@ code_dir = "/src"
 output = "examples/vulnerable-app/results.sarif"
 
 [agent]
-model = "claude-sonnet-4-20250514"
+model = "anthropic:claude-sonnet-4-20250514"
 max_iterations = 200
 skills_dir = "vendor/trailofbits-skills/plugins"

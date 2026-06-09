@@ -7,7 +7,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from llmpuffin.db import get_postgres_url, _to_sync_url
+from llmpuffin.db import _get_postgres_url, _to_sync_url
 from llmpuffin.models import Base
 
 config = context.config
@@ -16,7 +16,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Override sqlalchemy.url with the runtime config (env var or llmpuffin.toml)
-config.set_main_option("sqlalchemy.url", _to_sync_url(get_postgres_url()))
+config.set_main_option("sqlalchemy.url", _to_sync_url(_get_postgres_url()))
 
 target_metadata = Base.metadata
 

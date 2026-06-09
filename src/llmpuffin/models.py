@@ -30,6 +30,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    select,
 )
 
 SEVERITY_LEVELS = ("low", "medium", "high", "informational")
@@ -91,6 +92,27 @@ class AuditProfile(Base):
 
     def parsed_config(self) -> dict:
         return tomllib.loads(self.profile_toml)
+
+    @staticmethod
+    async def get_or_create(session, *, name: str, profile_toml: str) -> AuditProfile:
+        """Get or create an AuditProfile by name. CLI runs get jit=True."""
+        profile = (
+            await session.execute(
+                select(AuditProfile).where(AuditProfile.name == name)
+            )
+        ).scalar_one_or_none()
+        if profile is None:
+            profile = AuditProfile(
+                name=name,
+                profile_toml=profile_toml,
+                jit=True,
+            )
+            session.add(profile)
+            await session.flush()
+        elif profile.profile_toml != profile_toml:
+            profile.profile_toml = profile_toml
+            await session.flush()
+        return profile
 
 
 class AuditRun(Base):

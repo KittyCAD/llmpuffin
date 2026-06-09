@@ -114,6 +114,7 @@
     {% if show_run %}<th>Run</th>{% endif %}
     <th>Validated</th>
     <th>Issue</th>
+    <th>Fork</th>
     {% if show_thread %}<th>Thread</th>{% endif %}
     <th>Created</th>
   </tr>
@@ -156,6 +157,11 @@
             #{{ finding.github_link.github_id }}
           {%- endif -%}
         </a>
+      {% else %}—{% endif %}
+    </td>
+    <td>
+      {% if finding.fork_thread_id %}
+        <a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id | truncatechars(12) }}</a>
       {% else %}—{% endif %}
     </td>
     {% if show_thread %}

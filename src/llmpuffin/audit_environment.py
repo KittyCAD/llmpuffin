@@ -192,6 +192,39 @@ class AuditExecution:
             stderr=stderr,
         )
 
+    def capture_git_info(self) -> GitInfo:
+        """Extract git remote URL and HEAD commit from the container.
+
+        Returns a GitInfo with repo_path (e.g. "KittyCAD/engine"),
+        the full GitHub URL, and the HEAD commit hash.
+        Raises RuntimeError if git info cannot be retrieved or the remote
+        is not a https://github.com URL.
+        """
+        from urllib.parse import urlparse
+
+        remote_result = self.exec(["git", "remote", "get-url", "origin"], timeout=5)
+        if not remote_result.ok:
+            raise RuntimeError(f"Failed to get git remote: {remote_result.stderr.strip()}")
+        git_remote = remote_result.stdout.strip()
+
+        parsed = urlparse(git_remote)
+        if parsed.scheme != "https" or parsed.hostname != "github.com":
+            raise RuntimeError(
+                f"Git remote must be a https://github.com URL, got: {git_remote}"
+            )
+
+        repo_path = parsed.path.removesuffix(".git").strip("/")
+
+        head_result = self.exec(["git", "rev-parse", "HEAD"], timeout=5)
+        if not head_result.ok:
+            raise RuntimeError(f"Failed to get git HEAD: {head_result.stderr.strip()}")
+
+        return GitInfo(
+            repo_path=repo_path,
+            repo_url=f"https://github.com/{repo_path}",
+            commit=head_result.stdout.strip(),
+        )
+
     def stop(self, timeout: int = 30, remove: bool = False) -> None:
         """Stop the container (preserving it for later restart).
 
@@ -227,3 +260,12 @@ class ExecResult:
     @property
     def ok(self) -> bool:
         return self.exit_code == 0
+
+
+@dataclass
+class GitInfo:
+    """Git repository information extracted from a container."""
+
+    repo_path: str
+    repo_url: str
+    commit: str

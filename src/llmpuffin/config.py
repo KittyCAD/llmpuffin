@@ -29,10 +29,11 @@ Example profile.toml:
     output = "results.sarif"
 
     [agent]
-    model = "claude-sonnet-4-20250514"
+    model = "anthropic:claude-sonnet-4-20250514"
     max_iterations = 200
     skills_dir = "vendor/trailofbits-skills/plugins"
     # interrupt_on = ["execute", "write_file"]
+    # system_prompt = "Custom system prompt (overrides default)"
 """
 
 from __future__ import annotations
@@ -41,6 +42,8 @@ import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from llmpuffin.system_prompt import DEFAULT_SYSTEM_PROMPT
 
 
 # -- Global config (llmpuffin.toml) --
@@ -168,10 +171,11 @@ class Config:
 class ProfileAgent:
     """Agent-level configuration."""
 
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "anthropic:claude-sonnet-4-20250514"
     max_iterations: int = 200
     interrupt_on: list[str] = field(default_factory=list)
     skills_dir: Path | None = None
+    system_prompt: str = field(default_factory=lambda: DEFAULT_SYSTEM_PROMPT)
 
 
 @dataclass
@@ -208,10 +212,11 @@ class Profile:
             threat_model_dir=Path(audit["threat_model_dir"]),
             code_dir=audit.get("code_dir", "/src"),
             agent=ProfileAgent(
-                model=agent_data.get("model", "claude-sonnet-4-20250514"),
+                model=agent_data.get("model", "anthropic:claude-sonnet-4-20250514"),
                 max_iterations=agent_data.get("max_iterations", 200),
                 interrupt_on=agent_data.get("interrupt_on", []),
                 skills_dir=skills_dir,
+                system_prompt=agent_data.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
             ),
         )
 

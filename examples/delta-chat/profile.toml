@@ -6,6 +6,6 @@ code_dir = "/src"
 output = "examples/delta-chat/results.sarif"
 
 [agent]
-model = "claude-opus-4-7"
+model = "anthropic:claude-opus-4-7"
 max_iterations = 200
 skills_dir = "skills/"

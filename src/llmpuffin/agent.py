@@ -33,8 +33,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
-from urllib.parse import urlparse
-
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
 from deepagents.backends.utils import create_file_data
@@ -45,9 +43,9 @@ from langchain_quickjs import CodeInterpreterMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.errors import GraphRecursionError
-from langgraph.store.memory import InMemoryStore as _InMemoryStore
+from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres.aio import AsyncPostgresStore
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
 from anthropic.types.beta import (
@@ -61,7 +59,6 @@ from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.log import log
 from llmpuffin.models import AuditProfile, AuditRun, AuditThread
-from llmpuffin.sarif import SarifReport
 from llmpuffin.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.threat_model import ThreatModel
 from llmpuffin.tools import make_tools
@@ -77,61 +74,17 @@ class AuditStatus(StrEnum):
 
 @dataclass
 class AuditResult:
-    report: SarifReport
+    finding_count: int
     status: AuditStatus
     error: str | None = None
     thread_id: str | None = None
     audit_run_id: int | None = None
 
-
-SYSTEM_PROMPT = """\
-You are a security auditor performing a code review.
-The source code is in the current working directory of a container.
-Do not use /src as starting point, use the `cwd`. You may lookup or review code in /src if its relevant for the current project.
-
-Start by invoking the skill audit-context-building.
-
-## Subagents
-
-You have specialized subagents — delegate to them instead of doing everything yourself:
-
-- **threat-model-auditor**: Systematically investigates every threat scenario from the \
-threat model. Delegate to this subagent for threat-model-driven analysis. Do NOT call \
-get_threat_model or get_threat_scenario yourself — that is the threat-model-auditor's job.
-- **finding-validator**: Validates a reported finding by constructing a full exploit chain \
-or by actually running the target app and writing an exploit/test. A finding is only \
-confirmed if the validator proves it. Pass the finding_id and description when delegating.
-- **function-analyzer**: Performs ultra-granular per-function deep analysis. Use for dense \
-functions, data-flow chains, cryptographic code, or state machines.
-
-## Your workflow
-1. Start with the audit-context-building skill to understand the codebase structure
-2. Explore the codebase directly: read code, grep for patterns, understand the architecture
-3. Report potential findings with report_finding as you discover them
-4. Delegate to threat-model-auditor to ensure all threat scenarios are covered
-5. For each reported finding, delegate to finding-validator to confirm or reject it
-6. If /memories/ is available, read it for context from prior audits and write notes for future runs
-
-## Findings
-- report_finding returns a finding_id — use this ID for update_finding, delete_finding, validate_finding
-- The finding ID is assigned automatically, do not invent IDs
-- Report findings early — the finding-validator will confirm or reject them
-
-## Guidelines
-- Provide concrete evidence: file paths, line numbers, code snippets
-- Do NOT call get_threat_model or get_threat_scenario directly — delegate to threat-model-auditor
-- Focus your own analysis on codebase exploration and pattern recognition
-- You can install any packages and execute any code. Typically you can install packages via `apt install <package>`
-"""
-
-
 def _build_agent(
     config: HarnessConfig,
     execution,
-    report: SarifReport,
     threat_model: ThreatModel,
     audit_run_id: int,
-    thread_id: str,
     repo_path: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
@@ -141,18 +94,15 @@ def _build_agent(
     p = config.profile
     agent_cfg = p.agent
     container_backend = ContainerBackend(execution)
-    routes: dict = {}
-
-    memory_backend = StoreBackend(
+    routes: dict = {"/memories/": StoreBackend(
         store=store,
         namespace=lambda rt, _n=p.name: ("llmpuffin", _n, "memories"),
-    )
-    routes["/memories/"] = memory_backend
+    )}
 
     # Load skills from disk into an in-memory store
     skills_list: list[str] = []
     if agent_cfg.skills_dir and agent_cfg.skills_dir.is_dir():
-        skills_store = _InMemoryStore()
+        skills_store = InMemoryStore()
         skills_backend = StoreBackend(
             store=skills_store, namespace=lambda rt: ("skills",)
         )
@@ -180,7 +130,6 @@ def _build_agent(
     )
 
     tools = make_tools(
-        report,
         threat_model,
         audit_run_id=audit_run_id,
         repo_path=repo_path,
@@ -214,7 +163,7 @@ def _build_agent(
         interrupt_on_config = {name: True for name in agent_cfg.interrupt_on}
 
     return create_deep_agent(
-        model=f"anthropic:{agent_cfg.model}",
+        model=f"{agent_cfg.model}",
         tools=main_tools,
         backend=backend,
         store=store,
@@ -223,7 +172,7 @@ def _build_agent(
         interrupt_on=interrupt_on_config,
         skills=skills_list or None,
         subagents=subagents,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=config.profile.agent.system_prompt,
     )
 
 
@@ -292,7 +241,6 @@ async def fork_audit(
     """Fork from an existing thread and continue with a new message."""
     harness = Harness(config)
     threat_model = harness.load_threat_model()
-    report = SarifReport()
 
     postgres_url = get_postgres_url()
     async with (
@@ -305,7 +253,6 @@ async def fork_audit(
             harness,
             config,
             threat_model,
-            report,
             source_thread_id,
             user_message,
             checkpointer,
@@ -319,7 +266,6 @@ async def _fork_audit_inner(
     harness: Harness,
     config: HarnessConfig,
     threat_model: ThreatModel,
-    report: SarifReport,
     source_thread_id: str,
     user_message: str,
     checkpointer: BaseCheckpointSaver,
@@ -342,15 +288,22 @@ async def _fork_audit_inner(
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
             await _save_container_id(new_tid, execution.container.id)
-            repo_path = await _capture_git_info(execution, audit_run_id)
+            git_info = execution.capture_git_info()
+            async with async_session() as s:
+                await s.execute(
+                    update(AuditRun)
+                    .where(AuditRun.id == audit_run_id)
+                    .values(github_repo_url=git_info.repo_url, git_commit=git_info.commit)
+                )
+                await s.commit()
+            log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
+            repo_path = git_info.repo_path
 
             agent = _build_agent(
                 config,
                 execution,
-                report,
                 threat_model,
                 audit_run_id,
-                new_tid,
                 repo_path,
                 checkpointer,
                 store,
@@ -384,16 +337,17 @@ async def _fork_audit_inner(
         error = str(exc)
         log.error("Container startup failed: %s", error)
 
+    finding_count = await _count_findings(audit_run_id)
     log.info(
         "Fork complete. %d finding(s) recorded. Status: %s",
-        len(report.findings),
+        finding_count,
         status,
     )
 
     await _finalize_audit_run(new_tid, status, error)
 
     return AuditResult(
-        report=report,
+        finding_count=finding_count,
         status=status,
         error=error,
         thread_id=new_tid,
@@ -410,7 +364,6 @@ async def run_audit(
     """Run a full security audit driven by the threat model."""
     harness = Harness(config)
     threat_model = harness.load_threat_model()
-    report = SarifReport()
 
     log.info(
         "Loaded threat model: %d components, %d scenarios",
@@ -429,7 +382,6 @@ async def run_audit(
             harness,
             config,
             threat_model,
-            report,
             thread_id,
             checkpointer,
             store,
@@ -442,7 +394,6 @@ async def _run_audit_inner(
     harness: Harness,
     config: HarnessConfig,
     threat_model: ThreatModel,
-    report: SarifReport,
     thread_id: str | None,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
@@ -465,15 +416,22 @@ async def _run_audit_inner(
             log.info("Container cwd: %s", cwd.stdout.strip())
             # Store container ID for future resumes
             await _save_container_id(tid, execution.container.id)
-            repo_path = await _capture_git_info(execution, audit_run_id)
+            git_info = execution.capture_git_info()
+            async with async_session() as s:
+                await s.execute(
+                    update(AuditRun)
+                    .where(AuditRun.id == audit_run_id)
+                    .values(github_repo_url=git_info.repo_url, git_commit=git_info.commit)
+                )
+                await s.commit()
+            log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
+            repo_path = git_info.repo_path
 
             agent = _build_agent(
                 config,
                 execution,
-                report,
                 threat_model,
                 audit_run_id,
-                tid,
                 repo_path,
                 checkpointer,
                 store,
@@ -508,21 +466,35 @@ async def _run_audit_inner(
         error = str(exc)
         log.error("Container startup failed: %s", error)
 
+    finding_count = await _count_findings(audit_run_id)
     log.info(
         "Audit finished. %d finding(s) recorded. Status: %s",
-        len(report.findings),
+        finding_count,
         status,
     )
 
     await _finalize_audit_run(tid, status, error)
 
     return AuditResult(
-        report=report,
+        finding_count=finding_count,
         status=status,
         error=error,
         thread_id=tid,
         audit_run_id=audit_run_id,
     )
+
+
+async def _count_findings(audit_run_id: int) -> int:
+    """Count non-deleted findings for an audit run."""
+    from llmpuffin.models import Finding
+
+    async with async_session() as s:
+        result = await s.execute(
+            select(func.count())
+            .select_from(Finding)
+            .where(Finding.audit_run_id == audit_run_id, Finding.deleted.is_(False))
+        )
+        return result.scalar_one()
 
 
 async def _get_container_id(tid: str) -> str | None:
@@ -553,62 +525,6 @@ async def _save_container_id(tid: str, container_id: str) -> None:
         log.warning("Failed to save container_id: %s", exc)
 
 
-async def _capture_git_info(execution, audit_run_id: int) -> str:
-    """Run git commands in the container and store repo URL + commit on the AuditRun.
-
-    Returns the repo path (e.g. "KittyCAD/engine").
-    Raises RuntimeError if git info cannot be retrieved or the remote
-    is not a https://github.com URL.
-    """
-    remote_result = execution.exec(["git", "remote", "get-url", "origin"], timeout=5)
-    if not remote_result.ok:
-        raise RuntimeError(f"Failed to get git remote: {remote_result.stderr.strip()}")
-    git_remote = remote_result.stdout.strip()
-
-    parsed = urlparse(git_remote)
-    if parsed.scheme != "https" or parsed.hostname != "github.com":
-        raise RuntimeError(
-            f"Git remote must be a https://github.com URL, got: {git_remote}"
-        )
-
-    repo_path = parsed.path.removesuffix(".git").strip("/")
-    github_repo_url = f"https://github.com/{repo_path}"
-
-    head_result = execution.exec(["git", "rev-parse", "HEAD"], timeout=5)
-    if not head_result.ok:
-        raise RuntimeError(f"Failed to get git HEAD: {head_result.stderr.strip()}")
-    git_commit = head_result.stdout.strip()
-
-    async with async_session() as s:
-        await s.execute(
-            update(AuditRun)
-            .where(AuditRun.id == audit_run_id)
-            .values(github_repo_url=github_repo_url, git_commit=git_commit)
-        )
-        await s.commit()
-    log.info("Git info: %s @ %s", github_repo_url, git_commit[:12])
-    return repo_path
-
-
-async def _get_or_create_profile(session, config: HarnessConfig) -> AuditProfile:
-    """Get or create an AuditProfile for this config. CLI runs get jit=True."""
-    profile = (
-        await session.execute(
-            select(AuditProfile).where(AuditProfile.name == config.profile.name)
-        )
-    ).scalar_one_or_none()
-    if profile is None:
-        profile = AuditProfile(
-            name=config.profile.name,
-            profile_toml=config.profile_toml,
-            jit=True,
-        )
-        session.add(profile)
-        await session.flush()
-    elif profile.profile_toml != config.profile_toml:
-        profile.profile_toml = config.profile_toml
-        await session.flush()
-    return profile
 
 
 async def _create_audit_run(
@@ -629,7 +545,7 @@ async def _create_audit_run(
             if old_thread:
                 audit_run = old_thread.audit_run
             else:
-                db_profile = await _get_or_create_profile(s, config)
+                db_profile = await AuditProfile.get_or_create(s, name=config.profile.name, profile_toml=config.profile_toml)
                 audit_run = AuditRun(
                     profile_id=db_profile.id,
                     profile_toml=config.profile_toml,
@@ -639,7 +555,7 @@ async def _create_audit_run(
                 s.add(audit_run)
                 await s.flush()
         else:
-            db_profile = await _get_or_create_profile(s, config)
+            db_profile = await AuditProfile.get_or_create(s, name=config.profile.name, profile_toml=config.profile_toml)
             audit_run = AuditRun(
                 profile_id=db_profile.id,
                 profile_toml=config.profile_toml,

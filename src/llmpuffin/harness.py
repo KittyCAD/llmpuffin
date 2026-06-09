@@ -65,19 +65,12 @@ class HarnessConfig:
 
 @dataclass
 class HarnessState:
-    """Mutable state maintained across the agentic loop.
-
-    The harness manages multi-tiered memory:
-      - Working context: current threat scenario being investigated
-      - Session state: findings accumulated so far, files examined
-      - Artifact persistence: SARIF file written incrementally
+    """
+    Mutable state maintained across the agentic loop.
     """
 
     threat_model: ThreatModel | None = None
-    current_scenario_index: int = 0
     findings: list[dict] = field(default_factory=list)
-    files_examined: set[str] = field(default_factory=set)
-    iteration: int = 0
 
 
 class Harness:

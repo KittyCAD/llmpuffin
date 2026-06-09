@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 from typing import AsyncIterator
@@ -24,7 +25,7 @@ from llmpuffin.models import AuditThread
 log = logging.getLogger("llmpuffin")
 
 
-def get_postgres_url() -> str:
+def _get_postgres_url() -> str:
     """Get the canonical postgresql:// URL from env or config."""
     if url := os.environ.get("LLMPUFFIN_POSTGRES"):
         return url
@@ -49,91 +50,107 @@ def _to_sync_url(url: str) -> str:
     return urlunparse(parts._replace(scheme=scheme))
 
 
-_async_engine: AsyncEngine | None = None
-_async_sessionmaker: async_sessionmaker[AsyncSession] | None = None
-_sync_engine = None
-_sync_sessionmaker: sessionmaker[Session] | None = None
+class DB:
+    """Database connection holder — owns both async and sync engines/sessions."""
 
+    def __init__(self, postgres_url: str | None = None) -> None:
+        self.url = postgres_url or _get_postgres_url()
 
-def get_async_engine() -> AsyncEngine:
-    global _async_engine, _async_sessionmaker
-    if _async_engine is None:
-        url = _to_async_url(get_postgres_url())
-        _async_engine = create_async_engine(url, pool_pre_ping=True)
-        _async_sessionmaker = async_sessionmaker(
-            _async_engine, expire_on_commit=False, class_=AsyncSession
+        async_url = _to_async_url(self.url)
+        self._async_engine: AsyncEngine = create_async_engine(
+            async_url, pool_pre_ping=True
         )
-    return _async_engine
+        self._async_sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
+            self._async_engine, expire_on_commit=False, class_=AsyncSession
+        )
 
+        sync_url = _to_sync_url(self.url)
+        self._sync_engine = create_engine(sync_url, pool_pre_ping=True)
+        self._sync_sessionmaker: sessionmaker[Session] = sessionmaker(
+            self._sync_engine, expire_on_commit=False, class_=Session
+        )
+
+    @property
+    def async_engine(self) -> AsyncEngine:
+        return self._async_engine
+
+    def async_session(self) -> AsyncSession:
+        """Create a new AsyncSession. Use as `async with db.async_session() as s:`."""
+        return self._async_sessionmaker()
+
+    def sync_session(self) -> Session:
+        """Create a new sync Session. Use as `with db.sync_session() as s:`."""
+        return self._sync_sessionmaker()
+
+    async def setup(self) -> None:
+        """One-time DB setup: langgraph table init.
+
+        Schema migrations are managed by Alembic — run `alembic upgrade head`
+        before starting the app for the first time.
+        """
+        await self._setup_langgraph_tables()
+
+    async def abort_orphaned_threads(self) -> None:
+        """Mark any 'running' threads as 'aborted'.
+
+        When the process is killed (SIGKILL, OOM) the finalizer never runs and
+        the thread stays running forever.
+        """
+        async with self.async_session() as s:
+            result = await s.execute(
+                update(AuditThread)
+                .where(AuditThread.status == "running")
+                .values(status="aborted", error="Aborted: process restarted")
+            )
+            await s.commit()
+            if result.rowcount:
+                log.info(
+                    "Marked %d orphaned running thread(s) as aborted",
+                    result.rowcount,
+                )
+
+    async def _setup_langgraph_tables(self) -> None:
+        """Create langgraph checkpoint/store tables if they don't exist."""
+        try:
+            async with AsyncPostgresSaver.from_conn_string(self.url) as cp:
+                await cp.setup()
+            async with AsyncPostgresStore.from_conn_string(self.url) as store:
+                await store.setup()
+        except Exception as exc:
+            log.warning("Could not create langgraph tables: %s", exc)
+
+
+# Context var for the active DB instance.
+_current_db: contextvars.ContextVar[DB] = contextvars.ContextVar("_current_db")
+
+
+def init_db(postgres_url: str | None = None) -> DB:
+    """Create a DB instance and set it as the current context default."""
+    db = DB(postgres_url)
+    _current_db.set(db)
+    return db
+
+
+def get_db() -> DB:
+    """Get the current DB instance from context."""
+    try:
+        return _current_db.get()
+    except LookupError:
+        raise RuntimeError(
+            "No DB instance available. Call init_db() first."
+        ) from None
+
+
+# Convenience accessors — these read from the context var so call sites
+# stay concise (db.async_session() vs get_db().async_session()).
 
 def async_session() -> AsyncSession:
-    """Create a new AsyncSession. Use as `async with async_session() as s:`."""
-    get_async_engine()
-    assert _async_sessionmaker is not None
-    return _async_sessionmaker()
-
-
-def get_sync_engine():
-    global _sync_engine, _sync_sessionmaker
-    if _sync_engine is None:
-        url = _to_sync_url(get_postgres_url())
-        _sync_engine = create_engine(url, pool_pre_ping=True)
-        _sync_sessionmaker = sessionmaker(
-            _sync_engine, expire_on_commit=False, class_=Session
-        )
-    return _sync_engine
+    return get_db().async_session()
 
 
 def sync_session() -> Session:
-    """Create a new sync Session. Use as `with sync_session() as s:`."""
-    get_sync_engine()
-    assert _sync_sessionmaker is not None
-    return _sync_sessionmaker()
+    return get_db().sync_session()
 
 
-async def get_db() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency yielding an AsyncSession."""
-    async with async_session() as s:
-        yield s
-
-
-async def _abort_orphaned_threads() -> None:
-    """Mark any 'running' threads as 'aborted'.
-
-    When the process is killed (SIGKILL, OOM) the finalizer never runs and
-    the thread stays running forever.
-    """
-    async with async_session() as s:
-        result = await s.execute(
-            update(AuditThread)
-            .where(AuditThread.status == "running")
-            .values(status="aborted", error="Aborted: process restarted")
-        )
-        await s.commit()
-        if result.rowcount:
-            log.info(
-                "Marked %d orphaned running thread(s) as aborted",
-                result.rowcount,
-            )
-
-
-async def _setup_langgraph_tables() -> None:
-    """Create langgraph checkpoint/store tables if they don't exist."""
-    url = get_postgres_url()
-    try:
-        async with AsyncPostgresSaver.from_conn_string(url) as cp:
-            await cp.setup()
-        async with AsyncPostgresStore.from_conn_string(url) as store:
-            await store.setup()
-    except Exception as exc:
-        log.warning("Could not create langgraph tables: %s", exc)
-
-
-async def setup_db() -> None:
-    """One-time DB setup: orphan cleanup + langgraph table init.
-
-    Schema migrations are managed by Alembic — run `alembic upgrade head`
-    before starting the app for the first time.
-    """
-    get_async_engine()
-    await _setup_langgraph_tables()
+def get_postgres_url() -> str:
+    return get_db().url

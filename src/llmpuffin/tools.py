@@ -26,7 +26,6 @@ from llmpuffin.models import (
     GitInfo,
     ValidationNote,
 )
-from llmpuffin.sarif import SarifFinding, SarifLocation, SarifReport
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
 log = logging.getLogger("llmpuffin")
@@ -242,7 +241,6 @@ MAX_EXPORT_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
 
 
 def make_tools(
-    report: SarifReport,
     threat_model: ThreatModel,
     audit_run_id: int,
     repo_path: str = "",
@@ -375,28 +373,6 @@ Existing mitigations to verify:
             tool_call_id=rt_tool_call_id,
         )
 
-        sarif_locations = []
-        if locations:
-            for loc in locations:
-                sarif_locations.append(
-                    SarifLocation(
-                        file_path=loc.file,
-                        start_line=loc.line,
-                    )
-                )
-        finding = SarifFinding(
-            rule_id=rule_id,
-            title=title,
-            description=description,
-            exploit_scenario=exploit_scenario,
-            recommendations=recommendations,
-            severity=severity,
-            difficulty=difficulty,
-            locations=sarif_locations,
-            threat_scenario_ids=[scenario_id],
-        )
-        report.add_finding(finding)
-
         return f"Finding recorded. finding_id: {local_id}"
 
     def update_finding(
@@ -422,24 +398,6 @@ Existing mitigations to verify:
         db_finding = _resolve_finding(audit_run_id, finding_id)
         if not db_finding:
             return f"Finding {finding_id} not found"
-
-        # Update SARIF report
-        sarif_finding = next(
-            (f for f in report.findings if f.rule_id == db_finding.rule_id), None
-        )
-        if sarif_finding:
-            if title is not None:
-                sarif_finding.title = title
-            if severity is not None:
-                sarif_finding.severity = severity
-            if difficulty is not None:
-                sarif_finding.difficulty = difficulty
-            if description is not None:
-                sarif_finding.description = description
-            if exploit_scenario is not None:
-                sarif_finding.exploit_scenario = exploit_scenario
-            if recommendations is not None:
-                sarif_finding.recommendations = recommendations
 
         # Update DB
         try:
@@ -480,11 +438,6 @@ Existing mitigations to verify:
         db_finding = _resolve_finding(audit_run_id, finding_id)
         if not db_finding:
             return f"Finding {finding_id} not found"
-
-        # Remove from SARIF report
-        report.findings = [
-            f for f in report.findings if f.rule_id != db_finding.rule_id
-        ]
 
         # Soft-delete in DB
         try:
@@ -529,14 +482,6 @@ Existing mitigations to verify:
         db_finding = _resolve_finding(audit_run_id, finding_id)
         if not db_finding:
             return f"Finding {finding_id} not found"
-
-        # Update SARIF
-        sarif_finding = next(
-            (f for f in report.findings if f.rule_id == db_finding.rule_id), None
-        )
-        if sarif_finding:
-            sarif_finding.properties["validated"] = True
-            sarif_finding.properties["validated_evidence"] = evidence
 
         # Create immutable validation note + mark finding as validated.
         try:

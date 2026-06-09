@@ -35,7 +35,7 @@ The command exits non-zero if any step fails. **Do not declare work done until `
 ## Key conventions
 
 - **Never use the word "AI" in user-facing text.** Use "LLM" instead.
-- **Never wipe the database.** Use incremental Alembic migrations under `src/llmpuffin_fastapi/alembic/versions/`.
+- **Never wipe the database.** Use incremental Alembic migrations under `src/llmpuffin/alembic/versions/`.
 - **Assume the database is present.** Drop fallback branches that paper over missing Postgres.
 - **Tool calls from subagents** are logged to the server console via `_ToolLogHandler` but do not show up in the checkpoint viewer — that is a deepagents architecture constraint.
 - **Finding `local_id` allocation** uses a per-`audit_run_id` Postgres advisory lock (`pg_advisory_xact_lock`) inside the insert transaction. A unique constraint `(audit_run_id, local_id)` enforces correctness; the advisory lock prevents the race.
@@ -47,8 +47,8 @@ The command exits non-zero if any step fails. **Do not declare work done until `
 | -------------------------- | ---------------------------------------------------------------------- |
 | Install deps               | `uv sync`                                                              |
 | Start PostgreSQL           | `uv run llmpuffin-pg start`                                            |
-| Apply migrations           | `uv run alembic -c src/llmpuffin_fastapi/alembic.ini upgrade head`     |
-| Create a migration         | `uv run alembic -c src/llmpuffin_fastapi/alembic.ini revision -m "…"`  |
+| Apply migrations           | `uv run alembic -c src/llmpuffin/alembic.ini upgrade head`     |
+| Create a migration         | `uv run alembic -c src/llmpuffin/alembic.ini revision -m "…"`  |
 | Run an audit               | `uv run llmpuffin-run -v -p profiles/<profile>/profile.toml`           |
 | Run the web UI             | `uv run llmpuffin-fastapi`                                             |
 | **Check (lint+test+compile)** | **`uv run llmpuffin-check`**                                        |
@@ -64,7 +64,7 @@ The command exits non-zero if any step fails. **Do not declare work done until `
 ## When changing the schema
 
 1. Modify `src/llmpuffin/models.py`.
-2. Create an Alembic revision under `src/llmpuffin_fastapi/alembic/versions/` (manually numbered `NNNN_<slug>.py`, following the existing convention).
+2. Create an Alembic revision under `src/llmpuffin/alembic/versions/` (manually numbered `NNNN_<slug>.py`, following the existing convention).
 3. Write both `upgrade()` and `downgrade()`.
-4. Apply with `uv run alembic -c src/llmpuffin_fastapi/alembic.ini upgrade head`.
+4. Apply with `uv run alembic -c src/llmpuffin/alembic.ini upgrade head`.
 5. Run `uv run llmpuffin-check`.
