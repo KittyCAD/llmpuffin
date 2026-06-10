@@ -9,14 +9,14 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "deepagents[quickjs]",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
+    "fastapi>=0.136",
+    "uvicorn[standard]>=0.34",
     "jinja2>=3",
     "sqlalchemy[asyncio]>=2",
     "asyncpg>=0.29",
     "alembic>=1.13",
     "markdown",
-    "langchain-anthropic>=0.3",
+    "langchain-anthropic>=1.4.4",
     "langgraph-checkpoint-postgres",
     "docker>=7",
     "psycopg[binary]>=3",

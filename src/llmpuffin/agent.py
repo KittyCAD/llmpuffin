@@ -214,7 +214,14 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
                 if not isinstance(messages, list):
                     continue
                 for msg in messages:
+                    log.debug("  [%s] %s", type(msg).__name__, repr(msg))
                     if isinstance(msg, AIMessage):
+                        if not msg.content and not msg.tool_calls:
+                            status = AuditStatus.ERROR
+                            error = "Model returned empty response"
+                            log.error("%s: %s", error, repr(msg))
+                            return status, error
+
                         if msg.tool_calls:
                             for tc in msg.tool_calls:
                                 log.info(
@@ -233,7 +240,7 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
     except Exception as exc:
         status = AuditStatus.ERROR
         error = str(exc)
-        log.error("  Agent error: %s", error)
+        log.error("Agent error: %s", error)
     return status, error
 
 
@@ -344,7 +351,7 @@ async def _fork_audit_inner(
     except Exception as exc:
         status = AuditStatus.ERROR
         error = str(exc)
-        log.error("Container startup failed: %s", error)
+        log.exception("Audit failed: %s", error)
 
     finding_count = await _count_findings(audit_run_id, db=db)
     log.info(
@@ -480,7 +487,7 @@ async def _run_audit_inner(
     except Exception as exc:
         status = AuditStatus.ERROR
         error = str(exc)
-        log.error("Container startup failed: %s", error)
+        log.exception("Audit failed: %s", error)
 
     finding_count = await _count_findings(audit_run_id, db=db)
     log.info(

@@ -35,7 +35,9 @@ functions, data-flow chains, cryptographic code, or state machines.
 
 ## Guidelines
 - Provide concrete evidence: file paths, line numbers, code snippets
+- Avoid noting findings in memories/audit notes. Only general facts should be noted.
+- When reading memories don't take advice on skipping certain parts based on past memories.
 - Do NOT call get_threat_model or get_threat_scenario directly — delegate to threat-model-auditor
 - Focus your own analysis on codebase exploration and pattern recognition
-- You can install any packages and execute any code. Typically you can install packages via `apt install <package>`
+- You are allowed to install any packages and execute any code. Typically you can install packages via `apt install <package>`
 """

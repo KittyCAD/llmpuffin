@@ -19,6 +19,10 @@
       <span class="badge success"><span class="dot"></span>completed</span>
     {% elif run.status == "failed" %}
       <span class="badge destructive"><span class="dot"></span>failed</span>
+    {% elif run.status == "error" %}
+      <span class="badge destructive"><span class="dot"></span>error</span>
+    {% elif run.status == "aborted" %}
+      <span class="badge warning"><span class="dot"></span>aborted</span>
     {% else %}
       <span class="badge outline">{{ run.status }}</span>
     {% endif %}
@@ -61,8 +65,9 @@
       {% elif t.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
       {% elif t.status == "failed" %}<span class="badge destructive"><span class="dot"></span>failed</span>
       {% elif t.status == "aborted" %}<span class="badge warning"><span class="dot"></span>aborted</span>
+      {% elif t.status == "error" %}<span class="badge destructive"><span class="dot"></span>error</span>
       {% else %}<span class="badge outline">{{ t.status }}</span>{% endif %}
-      {% if t.error %}<div class="text-xs error mt-1">{{ t.error | truncatechars(80) }}</div>{% endif %}
+      {% if t.error %}<div class="text-xs text-muted mt-1">{{ t.error }}</div>{% endif %}
     </td>
     <td class="text-muted text-xs">{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
     <td>

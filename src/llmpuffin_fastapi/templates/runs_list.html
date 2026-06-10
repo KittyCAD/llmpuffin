@@ -29,6 +29,10 @@
       <span class="badge success"><span class="dot"></span>completed</span>
     {% elif r.status == "failed" %}
       <span class="badge destructive"><span class="dot"></span>failed</span>
+    {% elif r.status == "error" %}
+      <span class="badge destructive"><span class="dot"></span>error</span>
+    {% elif r.status == "aborted" %}
+      <span class="badge warning"><span class="dot"></span>aborted</span>
     {% else %}
       <span class="badge outline">{{ r.status }}</span>
     {% endif %}
