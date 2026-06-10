@@ -18,7 +18,8 @@ from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 from llmpuffin.sarif import export_sarif_for_run
 
-from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
+from llmpuffin.db import DB
+from llmpuffin_fastapi.deps import get_db, get_github_client, get_llmpuffin_db, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -140,13 +141,14 @@ def _toml_for_run(run: AuditRun) -> str:
 async def run_sarif_export(
     run_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
     run = (
         await db.execute(select(AuditRun).where(AuditRun.id == run_id))
     ).scalar_one_or_none()
     if run is None:
         raise HTTPException(status_code=404)
-    sarif_json = export_sarif_for_run(run_id)
+    sarif_json = export_sarif_for_run(run_id, db=llmpuffin_db)
     return Response(
         content=sarif_json,
         media_type="application/json",
@@ -162,6 +164,7 @@ async def run_resume(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -201,6 +204,7 @@ async def run_resume(
     spawn_audit(
         run_audit(
             harness_config,
+            db=llmpuffin_db,
             thread_id=thread_id,
             user_message=message.strip() or None,
             github_client=gh,
@@ -221,6 +225,7 @@ async def run_fork(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     message: Annotated[str, Form()],
 ):
     run = (
@@ -267,6 +272,7 @@ async def run_fork(
             harness_config,
             source_thread_id=thread_id,
             user_message=msg,
+            db=llmpuffin_db,
         )
     )
     return toast(

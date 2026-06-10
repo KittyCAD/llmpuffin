@@ -17,7 +17,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy import update as sa_update
 
 from llmpuffin.backend import ContainerBackend
-from llmpuffin.db import sync_session
+from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
 from llmpuffin.models import (
     Finding,
@@ -113,10 +113,10 @@ def _format_threat_model_view(view: ThreatModelView) -> str:
     return "\n".join(lines)
 
 
-def _resolve_finding(audit_run_id: int, local_id: int):
+def _resolve_finding(audit_run_id: int, local_id: int, *, db: DB):
     """Look up a Finding by local_id within the audit run. Returns the Finding or None."""
     try:
-        with sync_session() as s:
+        with db.sync_session() as s:
             return s.execute(
                 select(Finding).where(
                     Finding.audit_run_id == audit_run_id,
@@ -178,6 +178,8 @@ def _persist_finding_to_db(
     recommendations: str,
     locations: list[dict] | None,
     tool_call_id: str = "",
+    *,
+    db: DB | None = None,
 ) -> tuple[int, int, str]:
     """Allocate local_id in SQL and insert a finding in one transaction.
 
@@ -198,7 +200,7 @@ def _persist_finding_to_db(
     )
 
     try:
-        with sync_session() as s, s.begin():
+        with db.sync_session() as s, s.begin():
             # Serialize concurrent allocations for this audit_run. The lock
             # is released automatically at COMMIT/ROLLBACK.
             s.execute(select(func.pg_advisory_xact_lock(audit_run_id)))
@@ -246,6 +248,8 @@ def make_tools(
     repo_path: str = "",
     github_client: GitHubClient | None = None,
     container_backend: ContainerBackend | None = None,
+    *,
+    db: DB | None = None,
 ) -> dict[str, Callable]:
     """Create threat model and finding tools."""
 
@@ -371,6 +375,7 @@ Existing mitigations to verify:
             recommendations,
             loc_dicts,
             tool_call_id=rt_tool_call_id,
+            db=db,
         )
 
         return f"Finding recorded. finding_id: {local_id}"
@@ -395,7 +400,7 @@ Existing mitigations to verify:
             exploit_scenario: New exploit scenario (optional)
             recommendations: New recommendations (optional)
         """
-        db_finding = _resolve_finding(audit_run_id, finding_id)
+        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
         if not db_finding:
             return f"Finding {finding_id} not found"
 
@@ -414,7 +419,7 @@ Existing mitigations to verify:
                 if v is not None
             }
             if values:
-                with sync_session() as s:
+                with db.sync_session() as s:
                     s.execute(
                         sa_update(Finding)
                         .where(
@@ -435,13 +440,13 @@ Existing mitigations to verify:
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
         """
-        db_finding = _resolve_finding(audit_run_id, finding_id)
+        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
         if not db_finding:
             return f"Finding {finding_id} not found"
 
         # Soft-delete in DB
         try:
-            with sync_session() as s:
+            with db.sync_session() as s:
                 s.execute(
                     sa_update(Finding)
                     .where(
@@ -479,13 +484,13 @@ Existing mitigations to verify:
         rt_tool_call_id = runtime.tool_call_id or ""
         rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
 
-        db_finding = _resolve_finding(audit_run_id, finding_id)
+        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
         if not db_finding:
             return f"Finding {finding_id} not found"
 
         # Create immutable validation note + mark finding as validated.
         try:
-            with sync_session() as s:
+            with db.sync_session() as s:
                 s.add(
                     ValidationNote(
                         finding_id=db_finding.id,
@@ -515,7 +520,7 @@ Existing mitigations to verify:
         need validation.
         """
         try:
-            with sync_session() as s:
+            with db.sync_session() as s:
                 findings = (
                     s.execute(
                         select(Finding)
@@ -600,7 +605,7 @@ Existing mitigations to verify:
         """
         if not container_backend:
             return "Error: no container available"
-        db_finding = _resolve_finding(audit_run_id, finding_id)
+        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
         if not db_finding:
             return f"Finding {finding_id} not found"
 
@@ -622,7 +627,7 @@ Existing mitigations to verify:
             )
 
         try:
-            with sync_session() as s:
+            with db.sync_session() as s:
                 att = FindingAttachment(
                     finding_id=db_finding.id,
                     filename=file_path,
@@ -652,12 +657,12 @@ Existing mitigations to verify:
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
         """
-        db_finding = _resolve_finding(audit_run_id, finding_id)
+        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
         if not db_finding:
             return f"Finding {finding_id} not found"
 
         try:
-            with sync_session() as s:
+            with db.sync_session() as s:
                 attachments = (
                     s.execute(
                         select(FindingAttachment)

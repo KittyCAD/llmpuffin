@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from llmpuffin.config import Config
-from llmpuffin.db import init_db
+from llmpuffin.db import DB
 from llmpuffin.github import client_from_config
 from llmpuffin.log import setup as setup_logging
 
@@ -35,8 +35,7 @@ async def _lifespan(app: FastAPI):
     config = Config.load()
     setup_logging(level=config.logging.level)
     log.info("llmpuffin starting on port %s", config.web.port)
-    db = init_db()
-    await db.setup()
+    await app.state.db.setup()
     set_github_client(client_from_config())
 
     try:
@@ -62,6 +61,7 @@ async def _lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     config = Config.load()
     app = FastAPI(title="llmpuffin", lifespan=_lifespan)
+    app.state.db = DB()
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(runs.router)

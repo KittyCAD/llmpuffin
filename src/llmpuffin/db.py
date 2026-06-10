@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import contextvars
 import logging
 import os
-from typing import AsyncIterator
 from urllib.parse import urlparse, urlunparse
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -51,7 +49,10 @@ def _to_sync_url(url: str) -> str:
 
 
 class DB:
-    """Database connection holder — owns both async and sync engines/sessions."""
+    """Database connection holder — owns both async and sync engines/sessions.
+
+    Create once at startup, then pass through the app to wherever it's needed.
+    """
 
     def __init__(self, postgres_url: str | None = None) -> None:
         self.url = postgres_url or _get_postgres_url()
@@ -118,39 +119,3 @@ class DB:
                 await store.setup()
         except Exception as exc:
             log.warning("Could not create langgraph tables: %s", exc)
-
-
-# Context var for the active DB instance.
-_current_db: contextvars.ContextVar[DB] = contextvars.ContextVar("_current_db")
-
-
-def init_db(postgres_url: str | None = None) -> DB:
-    """Create a DB instance and set it as the current context default."""
-    db = DB(postgres_url)
-    _current_db.set(db)
-    return db
-
-
-def get_db() -> DB:
-    """Get the current DB instance from context."""
-    try:
-        return _current_db.get()
-    except LookupError:
-        raise RuntimeError(
-            "No DB instance available. Call init_db() first."
-        ) from None
-
-
-# Convenience accessors — these read from the context var so call sites
-# stay concise (db.async_session() vs get_db().async_session()).
-
-def async_session() -> AsyncSession:
-    return get_db().async_session()
-
-
-def sync_session() -> Session:
-    return get_db().sync_session()
-
-
-def get_postgres_url() -> str:
-    return get_db().url

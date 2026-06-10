@@ -18,7 +18,8 @@ from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
 from llmpuffin_fastapi.checkpoint import get_session, list_sessions
-from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
+from llmpuffin.db import DB
+from llmpuffin_fastapi.deps import get_db, get_github_client, get_llmpuffin_db, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -26,8 +27,8 @@ router = APIRouter()
 
 
 @router.get("/checkpoints/", response_class=HTMLResponse)
-async def checkpoints_list(request: Request):
-    sessions = await list_sessions()
+async def checkpoints_list(request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]):
+    sessions = await list_sessions(llmpuffin_db.url)
     return templates.TemplateResponse(
         request, "checkpoints_list.html", {"sessions": sessions}
     )
@@ -48,8 +49,9 @@ async def checkpoint_detail(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
-    session = await get_session(thread_id)
+    session = await get_session(thread_id, llmpuffin_db.url)
     if session is None:
         return templates.TemplateResponse(
             request,
@@ -97,8 +99,9 @@ async def checkpoint_messages(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
-    session = await get_session(thread_id)
+    session = await get_session(thread_id, llmpuffin_db.url)
     if session is None:
         return HTMLResponse("")
     audit_thread = await _get_audit_thread(db, thread_id)
@@ -114,6 +117,7 @@ async def checkpoint_resume(
     thread_id: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -139,7 +143,7 @@ async def checkpoint_resume(
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     spawn_audit(
         run_audit(
-            harness_config, thread_id=thread_id, user_message=msg, github_client=gh
+            harness_config, db=llmpuffin_db, thread_id=thread_id, user_message=msg, github_client=gh
         )
     )
     return toast(request, "success", "Resumed", redirect_to=redirect)

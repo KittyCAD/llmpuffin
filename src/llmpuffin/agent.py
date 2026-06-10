@@ -54,7 +54,7 @@ from anthropic.types.beta import (
 )
 
 from llmpuffin.backend import ContainerBackend
-from llmpuffin.db import async_session, get_postgres_url
+from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.log import log
@@ -88,6 +88,8 @@ def _build_agent(
     repo_path: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
+    *,
+    db: DB,
     github_client: GitHubClient | None = None,
 ):
     """Build the deep agent with all backends, tools, and middleware."""
@@ -135,6 +137,7 @@ def _build_agent(
         repo_path=repo_path,
         github_client=github_client,
         container_backend=container_backend,
+        db=db,
     )
     main_tools: list = [tools[name] for name in MAIN_AGENT_TOOLS]
 
@@ -235,6 +238,8 @@ async def fork_audit(
     config: HarnessConfig,
     source_thread_id: str,
     user_message: str,
+    *,
+    db: DB,
     thread_id: str | None = None,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
@@ -242,10 +247,9 @@ async def fork_audit(
     harness = Harness(config)
     threat_model = harness.load_threat_model()
 
-    postgres_url = get_postgres_url()
     async with (
-        AsyncPostgresSaver.from_conn_string(postgres_url) as checkpointer,
-        AsyncPostgresStore.from_conn_string(postgres_url) as store,
+        AsyncPostgresSaver.from_conn_string(db.url) as checkpointer,
+        AsyncPostgresStore.from_conn_string(db.url) as store,
     ):
         await checkpointer.setup()
         await store.setup()
@@ -257,6 +261,7 @@ async def fork_audit(
             user_message,
             checkpointer,
             store,
+            db=db,
             thread_id=thread_id,
             github_client=github_client,
         )
@@ -270,6 +275,8 @@ async def _fork_audit_inner(
     user_message: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
+    *,
+    db: DB,
     thread_id: str | None = None,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
@@ -277,19 +284,15 @@ async def _fork_audit_inner(
     new_tid = thread_id or uuid.uuid4().hex[:12]
     log.info("Forking thread %s → %s", source_thread_id, new_tid)
 
-    audit_run_id = await _create_audit_run(
-        config,
-        new_tid,
-        source_thread_id,
-    )
+    audit_run_id = await _create_audit_run(config, new_tid, source_thread_id, db=db)
 
     try:
         with harness.start_environment() as execution:
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
-            await _save_container_id(new_tid, execution.container.id)
+            await _save_container_id(new_tid, execution.container.id, db=db)
             git_info = execution.capture_git_info()
-            async with async_session() as s:
+            async with db.async_session() as s:
                 await s.execute(
                     update(AuditRun)
                     .where(AuditRun.id == audit_run_id)
@@ -307,6 +310,7 @@ async def _fork_audit_inner(
                 repo_path,
                 checkpointer,
                 store,
+                db=db,
                 github_client=github_client,
             )
 
@@ -330,21 +334,21 @@ async def _fork_audit_inner(
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
-        await _finalize_audit_run(new_tid, status, error)
+        await _finalize_audit_run(new_tid, status, error, db=db)
         raise
     except Exception as exc:
         status = AuditStatus.ERROR
         error = str(exc)
         log.error("Container startup failed: %s", error)
 
-    finding_count = await _count_findings(audit_run_id)
+    finding_count = await _count_findings(audit_run_id, db=db)
     log.info(
         "Fork complete. %d finding(s) recorded. Status: %s",
         finding_count,
         status,
     )
 
-    await _finalize_audit_run(new_tid, status, error)
+    await _finalize_audit_run(new_tid, status, error, db=db)
 
     return AuditResult(
         finding_count=finding_count,
@@ -357,6 +361,8 @@ async def _fork_audit_inner(
 
 async def run_audit(
     config: HarnessConfig,
+    *,
+    db: DB,
     thread_id: str | None = None,
     user_message: str | None = None,
     github_client: GitHubClient | None = None,
@@ -371,10 +377,9 @@ async def run_audit(
         len(threat_model.threat_scenarios),
     )
 
-    postgres_url = get_postgres_url()
     async with (
-        AsyncPostgresSaver.from_conn_string(postgres_url) as checkpointer,
-        AsyncPostgresStore.from_conn_string(postgres_url) as store,
+        AsyncPostgresSaver.from_conn_string(db.url) as checkpointer,
+        AsyncPostgresStore.from_conn_string(db.url) as store,
     ):
         await checkpointer.setup()
         await store.setup()
@@ -386,6 +391,7 @@ async def run_audit(
             checkpointer,
             store,
             user_message,
+            db=db,
             github_client=github_client,
         )
 
@@ -398,16 +404,18 @@ async def _run_audit_inner(
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
     user_message: str | None = None,
+    *,
+    db: DB,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
     p = config.profile
     tid = thread_id or uuid.uuid4().hex[:12]
     log.info("Session thread_id: %s", tid)
 
-    audit_run_id = await _create_audit_run(config, tid, thread_id)
+    audit_run_id = await _create_audit_run(config, tid, thread_id, db=db)
 
     # Look up existing container for resume
-    existing_container_id = await _get_container_id(tid)
+    existing_container_id = await _get_container_id(tid, db=db)
     log.info("Starting container: %s (code_dir: %s)", p.image, p.code_dir)
 
     try:
@@ -415,9 +423,9 @@ async def _run_audit_inner(
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
             # Store container ID for future resumes
-            await _save_container_id(tid, execution.container.id)
+            await _save_container_id(tid, execution.container.id, db=db)
             git_info = execution.capture_git_info()
-            async with async_session() as s:
+            async with db.async_session() as s:
                 await s.execute(
                     update(AuditRun)
                     .where(AuditRun.id == audit_run_id)
@@ -435,6 +443,7 @@ async def _run_audit_inner(
                 repo_path,
                 checkpointer,
                 store,
+                db=db,
                 github_client=github_client,
             )
 
@@ -459,21 +468,21 @@ async def _run_audit_inner(
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
-        await _finalize_audit_run(tid, status, error)
+        await _finalize_audit_run(tid, status, error, db=db)
         raise
     except Exception as exc:
         status = AuditStatus.ERROR
         error = str(exc)
         log.error("Container startup failed: %s", error)
 
-    finding_count = await _count_findings(audit_run_id)
+    finding_count = await _count_findings(audit_run_id, db=db)
     log.info(
         "Audit finished. %d finding(s) recorded. Status: %s",
         finding_count,
         status,
     )
 
-    await _finalize_audit_run(tid, status, error)
+    await _finalize_audit_run(tid, status, error, db=db)
 
     return AuditResult(
         finding_count=finding_count,
@@ -484,11 +493,11 @@ async def _run_audit_inner(
     )
 
 
-async def _count_findings(audit_run_id: int) -> int:
+async def _count_findings(audit_run_id: int, *, db: DB) -> int:
     """Count non-deleted findings for an audit run."""
     from llmpuffin.models import Finding
 
-    async with async_session() as s:
+    async with db.async_session() as s:
         result = await s.execute(
             select(func.count())
             .select_from(Finding)
@@ -497,10 +506,10 @@ async def _count_findings(audit_run_id: int) -> int:
         return result.scalar_one()
 
 
-async def _get_container_id(tid: str) -> str | None:
+async def _get_container_id(tid: str, *, db: DB) -> str | None:
     """Look up the container ID for a thread from the DB."""
     try:
-        async with async_session() as s:
+        async with db.async_session() as s:
             row = (
                 await s.execute(
                     select(AuditThread.container_id).where(AuditThread.thread_id == tid)
@@ -511,10 +520,10 @@ async def _get_container_id(tid: str) -> str | None:
         return None
 
 
-async def _save_container_id(tid: str, container_id: str) -> None:
+async def _save_container_id(tid: str, container_id: str, *, db: DB) -> None:
     """Store the container ID on the thread."""
     try:
-        async with async_session() as s:
+        async with db.async_session() as s:
             await s.execute(
                 update(AuditThread)
                 .where(AuditThread.thread_id == tid)
@@ -531,9 +540,11 @@ async def _create_audit_run(
     config: HarnessConfig,
     tid: str,
     resume_thread_id: str | None,
+    *,
+    db: DB,
 ) -> int:
     """Create or resume an AuditRun, register the thread. Returns audit_run.id."""
-    async with async_session() as s:
+    async with db.async_session() as s:
         if resume_thread_id:
             old_thread = (
                 await s.execute(
@@ -586,13 +597,13 @@ async def _create_audit_run(
 
 
 async def _finalize_audit_run(
-    tid: str | None, status: AuditStatus, error: str | None
+    tid: str | None, status: AuditStatus, error: str | None, *, db: DB
 ) -> None:
     """Update the thread status and the run's finished_at."""
     if not tid:
         return
     try:
-        async with async_session() as s:
+        async with db.async_session() as s:
             row = (
                 await s.execute(
                     select(AuditThread.audit_run_id).where(AuditThread.thread_id == tid)

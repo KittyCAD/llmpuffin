@@ -12,7 +12,7 @@ from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from llmpuffin.db import async_session
+from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
 
 log = logging.getLogger("llmpuffin")
@@ -88,6 +88,13 @@ def spawn_audit(coro: Coroutine) -> asyncio.Task:
     return task
 
 
-async def get_db() -> AsyncIterator[AsyncSession]:
-    async with async_session() as s:
+def get_llmpuffin_db(request: Request) -> DB:
+    """FastAPI dependency returning the DB instance from app state."""
+    return request.app.state.db
+
+
+async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
+    """FastAPI dependency yielding an AsyncSession."""
+    db: DB = request.app.state.db
+    async with db.async_session() as s:
         yield s

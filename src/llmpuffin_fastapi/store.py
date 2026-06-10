@@ -8,7 +8,6 @@ from datetime import datetime
 
 import psycopg
 
-from llmpuffin.db import get_postgres_url
 
 
 @dataclass
@@ -78,9 +77,9 @@ class StoreItem:
         return self.value[k]
 
 
-async def list_namespaces() -> list[StoreNamespace]:
+async def list_namespaces(postgres_url: str) -> list[StoreNamespace]:
     async with await psycopg.AsyncConnection.connect(
-        get_postgres_url(), autocommit=True
+        postgres_url, autocommit=True
     ) as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -93,9 +92,9 @@ async def list_namespaces() -> list[StoreNamespace]:
             return [StoreNamespace(prefix=r[0], count=r[1]) for r in rows]
 
 
-async def update_item(prefix: str, key: str, value: dict) -> None:
+async def update_item(prefix: str, key: str, value: dict, postgres_url: str) -> None:
     async with await psycopg.AsyncConnection.connect(
-        get_postgres_url(), autocommit=True
+        postgres_url, autocommit=True
     ) as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -108,9 +107,9 @@ async def update_item(prefix: str, key: str, value: dict) -> None:
             )
 
 
-async def delete_item(prefix: str, key: str) -> None:
+async def delete_item(prefix: str, key: str, postgres_url: str) -> None:
     async with await psycopg.AsyncConnection.connect(
-        get_postgres_url(), autocommit=True
+        postgres_url, autocommit=True
     ) as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -119,9 +118,9 @@ async def delete_item(prefix: str, key: str) -> None:
             )
 
 
-async def list_items(prefix: str) -> list[StoreItem]:
+async def list_items(prefix: str, postgres_url: str) -> list[StoreItem]:
     async with await psycopg.AsyncConnection.connect(
-        get_postgres_url(), autocommit=True
+        postgres_url, autocommit=True
     ) as conn:
         async with conn.cursor() as cur:
             await cur.execute(

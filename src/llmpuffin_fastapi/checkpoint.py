@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 import psycopg
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from llmpuffin.db import get_postgres_url
 
 _serde = JsonPlusSerializer()
 
@@ -44,9 +43,9 @@ class Session:
     messages: list[Message] = field(default_factory=list)
 
 
-async def list_sessions() -> list[Session]:
+async def list_sessions(postgres_url: str) -> list[Session]:
     async with await psycopg.AsyncConnection.connect(
-        get_postgres_url(), autocommit=True
+        postgres_url, autocommit=True
     ) as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -63,9 +62,9 @@ async def list_sessions() -> list[Session]:
             return [Session(thread_id=r[0], steps=r[1], status=r[2]) for r in rows]
 
 
-async def get_session(thread_id: str) -> Session | None:
+async def get_session(thread_id: str, postgres_url: str) -> Session | None:
     async with await psycopg.AsyncConnection.connect(
-        get_postgres_url(), autocommit=True
+        postgres_url, autocommit=True
     ) as conn:
         async with conn.cursor() as cur:
             await cur.execute(

@@ -15,7 +15,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from llmpuffin.db import DB
 
 
 @dataclass
@@ -144,19 +147,18 @@ class SarifReport:
         return json.dumps(self.to_sarif(), indent=indent)
 
 
-def export_sarif_for_run(audit_run_id: int) -> str:
+def export_sarif_for_run(audit_run_id: int, *, db: DB) -> str:
     """Generate SARIF JSON for an audit run from DB findings.
 
     Returns the SARIF JSON string. This is the canonical export path —
     it reads findings from the database rather than relying on in-memory state.
     """
-    from llmpuffin.db import sync_session
     from llmpuffin.models import Finding
 
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    with sync_session() as s:
+    with db.sync_session() as s:
         findings = (
             s.execute(
                 select(Finding)

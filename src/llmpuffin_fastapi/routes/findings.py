@@ -26,7 +26,8 @@ from llmpuffin.models import (
     GitHubLink,
 )
 
-from llmpuffin_fastapi.deps import get_db, get_github_client, spawn_audit, toast
+from llmpuffin.db import DB
+from llmpuffin_fastapi.deps import get_db, get_github_client, get_llmpuffin_db, spawn_audit, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -169,6 +170,7 @@ async def finding_detail(
     finding_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
 ):
     finding = await _get_finding(db, finding_id)
@@ -180,7 +182,7 @@ async def finding_detail(
     fork_session = None
     fork_thread = None
     if finding.fork_thread_id:
-        fork_session = await get_session(finding.fork_thread_id)
+        fork_session = await get_session(finding.fork_thread_id, llmpuffin_db.url)
         fork_thread = (
             await db.execute(
                 select(AuditThread).where(
@@ -383,6 +385,7 @@ async def finding_fork(
     finding_id: int,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -451,6 +454,7 @@ async def finding_fork(
                 harness_config,
                 source_thread_id=source_thread_id,
                 user_message=user_message,
+                db=llmpuffin_db,
                 thread_id=new_thread_id,
                 github_client=gh,
             )
@@ -464,7 +468,7 @@ async def finding_fork(
     await db.refresh(finding)
     from llmpuffin_fastapi.checkpoint import get_session
 
-    fork_session = await get_session(new_thread_id)
+    fork_session = await get_session(new_thread_id, llmpuffin_db.url)
     fork_thread = (
         await db.execute(
             select(AuditThread).where(AuditThread.thread_id == new_thread_id)

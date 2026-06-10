@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from llmpuffin_fastapi.deps import toast
+from llmpuffin.db import DB
+from llmpuffin_fastapi.deps import get_llmpuffin_db, toast
 from llmpuffin_fastapi.store import (
     delete_item,
     list_items,
@@ -21,16 +22,16 @@ router = APIRouter()
 
 
 @router.get("/store/", response_class=HTMLResponse)
-async def store_list(request: Request):
-    namespaces = await list_namespaces()
+async def store_list(request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]):
+    namespaces = await list_namespaces(llmpuffin_db.url)
     return templates.TemplateResponse(
         request, "store_list.html", {"namespaces": namespaces}
     )
 
 
 @router.get("/store/{prefix:path}/", response_class=HTMLResponse)
-async def store_namespace(prefix: str, request: Request):
-    items = await list_items(prefix)
+async def store_namespace(prefix: str, request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]):
+    items = await list_items(prefix, llmpuffin_db.url)
     return templates.TemplateResponse(
         request, "store_namespace.html", {"prefix": prefix, "items": items}
     )
@@ -40,6 +41,7 @@ async def store_namespace(prefix: str, request: Request):
 async def store_item_edit(
     prefix: str,
     request: Request,
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     key: Annotated[str, Form()],
     value_json: Annotated[str, Form()],
 ):
@@ -52,7 +54,7 @@ async def store_item_edit(
         return toast(
             request, "error", "Value must be a JSON object", redirect_to=redirect
         )
-    await update_item(prefix, key, value)
+    await update_item(prefix, key, value, llmpuffin_db.url)
     return toast(request, "success", f"Saved {key}", redirect_to=redirect, refresh=True)
 
 
@@ -60,9 +62,10 @@ async def store_item_edit(
 async def store_item_delete(
     prefix: str,
     request: Request,
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     key: Annotated[str, Form()],
 ):
-    await delete_item(prefix, key)
+    await delete_item(prefix, key, llmpuffin_db.url)
     return toast(
         request,
         "success",

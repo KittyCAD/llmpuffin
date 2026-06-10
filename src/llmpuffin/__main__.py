@@ -10,7 +10,7 @@ from pathlib import Path
 
 from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
-from llmpuffin.db import init_db
+from llmpuffin.db import DB
 from llmpuffin.github import client_from_config
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
@@ -18,16 +18,15 @@ from llmpuffin.sarif import export_sarif_for_run
 
 
 async def _async_abort_orphaned():
-    db = init_db()
+    db = DB()
     await db.setup()
     await db.abort_orphaned_threads()
 
 
-async def _async_main(harness_config: HarnessConfig):
-    db = init_db()
+async def _async_main(harness_config: HarnessConfig, *, db: DB):
     await db.setup()
     gh = client_from_config()
-    return await run_audit(harness_config, github_client=gh)
+    return await run_audit(harness_config, db=db, github_client=gh)
 
 
 def main() -> None:
@@ -91,14 +90,15 @@ def main() -> None:
         profile_toml=profile_text,
     )
 
-    result = asyncio.run(_async_main(harness_config))
+    db = DB()
+    result = asyncio.run(_async_main(harness_config, db=db))
     n = result.finding_count
     print(f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} recorded.")
 
     # Export SARIF if requested
     sarif_path = args.sarif
     if sarif_path and result.audit_run_id:
-        sarif_json = export_sarif_for_run(result.audit_run_id)
+        sarif_json = export_sarif_for_run(result.audit_run_id, db=db)
         sarif_path.parent.mkdir(parents=True, exist_ok=True)
         sarif_path.write_text(sarif_json)
         print(f"SARIF report written to {sarif_path}")
