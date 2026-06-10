@@ -17,9 +17,15 @@ from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
-from llmpuffin_fastapi.checkpoint import get_session, list_sessions
+from llmpuffin.checkpoint import get_session, list_sessions
 from llmpuffin.db import DB
-from llmpuffin_fastapi.deps import get_db, get_github_client, get_llmpuffin_db, spawn_audit, toast
+from llmpuffin_fastapi.deps import (
+    get_db,
+    get_github_client,
+    get_llmpuffin_db,
+    spawn_audit,
+    toast,
+)
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -27,8 +33,10 @@ router = APIRouter()
 
 
 @router.get("/checkpoints/", response_class=HTMLResponse)
-async def checkpoints_list(request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]):
-    sessions = await list_sessions(llmpuffin_db.url)
+async def checkpoints_list(
+    request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]
+):
+    sessions = await list_sessions(db=llmpuffin_db)
     return templates.TemplateResponse(
         request, "checkpoints_list.html", {"sessions": sessions}
     )
@@ -51,7 +59,7 @@ async def checkpoint_detail(
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
-    session = await get_session(thread_id, llmpuffin_db.url)
+    session = await get_session(thread_id, db=llmpuffin_db)
     if session is None:
         return templates.TemplateResponse(
             request,
@@ -101,7 +109,7 @@ async def checkpoint_messages(
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
-    session = await get_session(thread_id, llmpuffin_db.url)
+    session = await get_session(thread_id, db=llmpuffin_db)
     if session is None:
         return HTMLResponse("")
     audit_thread = await _get_audit_thread(db, thread_id)
@@ -143,7 +151,11 @@ async def checkpoint_resume(
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     spawn_audit(
         run_audit(
-            harness_config, db=llmpuffin_db, thread_id=thread_id, user_message=msg, github_client=gh
+            harness_config,
+            db=llmpuffin_db,
+            thread_id=thread_id,
+            user_message=msg,
+            github_client=gh,
         )
     )
     return toast(request, "success", "Resumed", redirect_to=redirect)

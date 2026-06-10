@@ -8,8 +8,7 @@ log = logging.getLogger("llmpuffin")
 
 
 def setup(verbose: bool = False, level: str | None = None) -> None:
-    """Configure the `llmpuffin` logger.
-    """
+    """Configure the `llmpuffin` logger."""
     if verbose:
         resolved = logging.DEBUG
     elif level:

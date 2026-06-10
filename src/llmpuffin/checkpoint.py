@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import psycopg
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
+if TYPE_CHECKING:
+    from llmpuffin.db import DB
 
 _serde = JsonPlusSerializer()
 
@@ -43,10 +46,8 @@ class Session:
     messages: list[Message] = field(default_factory=list)
 
 
-async def list_sessions(postgres_url: str) -> list[Session]:
-    async with await psycopg.AsyncConnection.connect(
-        postgres_url, autocommit=True
-    ) as conn:
+async def list_sessions(*, db: DB) -> list[Session]:
+    async with await psycopg.AsyncConnection.connect(db.url, autocommit=True) as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
                 SELECT
@@ -62,10 +63,8 @@ async def list_sessions(postgres_url: str) -> list[Session]:
             return [Session(thread_id=r[0], steps=r[1], status=r[2]) for r in rows]
 
 
-async def get_session(thread_id: str, postgres_url: str) -> Session | None:
-    async with await psycopg.AsyncConnection.connect(
-        postgres_url, autocommit=True
-    ) as conn:
+async def get_session(thread_id: str, *, db: DB) -> Session | None:
+    async with await psycopg.AsyncConnection.connect(db.url, autocommit=True) as conn:
         async with conn.cursor() as cur:
             await cur.execute(
                 "SELECT COUNT(*) FROM checkpoints WHERE thread_id = %s",

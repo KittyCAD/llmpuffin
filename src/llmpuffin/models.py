@@ -97,9 +97,7 @@ class AuditProfile(Base):
     async def get_or_create(session, *, name: str, profile_toml: str) -> AuditProfile:
         """Get or create an AuditProfile by name. CLI runs get jit=True."""
         profile = (
-            await session.execute(
-                select(AuditProfile).where(AuditProfile.name == name)
-            )
+            await session.execute(select(AuditProfile).where(AuditProfile.name == name))
         ).scalar_one_or_none()
         if profile is None:
             profile = AuditProfile(

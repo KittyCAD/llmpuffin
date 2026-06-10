@@ -204,7 +204,9 @@ class AuditExecution:
 
         remote_result = self.exec(["git", "remote", "get-url", "origin"], timeout=5)
         if not remote_result.ok:
-            raise RuntimeError(f"Failed to get git remote: {remote_result.stderr.strip()}")
+            raise RuntimeError(
+                f"Failed to get git remote: {remote_result.stderr.strip()}"
+            )
         git_remote = remote_result.stdout.strip()
 
         parsed = urlparse(git_remote)

@@ -22,7 +22,9 @@ router = APIRouter()
 
 
 @router.get("/store/", response_class=HTMLResponse)
-async def store_list(request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]):
+async def store_list(
+    request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]
+):
     namespaces = await list_namespaces(llmpuffin_db.url)
     return templates.TemplateResponse(
         request, "store_list.html", {"namespaces": namespaces}
@@ -30,7 +32,11 @@ async def store_list(request: Request, llmpuffin_db: Annotated[DB, Depends(get_l
 
 
 @router.get("/store/{prefix:path}/", response_class=HTMLResponse)
-async def store_namespace(prefix: str, request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]):
+async def store_namespace(
+    prefix: str,
+    request: Request,
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+):
     items = await list_items(prefix, llmpuffin_db.url)
     return templates.TemplateResponse(
         request, "store_namespace.html", {"prefix": prefix, "items": items}

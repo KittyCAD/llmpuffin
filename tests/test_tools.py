@@ -6,20 +6,17 @@ from unittest.mock import MagicMock
 
 from langchain_core.tools import StructuredTool
 
-from llmpuffin.sarif import SarifReport
 from llmpuffin.threat_model import ThreatModel
 from llmpuffin.tools import make_tools
 
 
 def _make_tools() -> dict:
     """Create tools with minimal mocks."""
-    report = SarifReport()
     threat_model = MagicMock(spec=ThreatModel)
     threat_model.components = []
     threat_model.connections = []
     threat_model.threat_scenarios = []
     return make_tools(
-        report=report,
         threat_model=threat_model,
         audit_run_id=1,
     )

@@ -257,6 +257,7 @@ table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 th, td { text-align: left; padding: 0.625rem 0.75rem; border-bottom: 1px solid hsl(var(--border)); }
 th { font-weight: 500; color: hsl(var(--muted-foreground)); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
 tr:hover td { background: hsl(var(--muted) / 0.4); }
+tr[hx-get] { cursor: pointer; }
 table.bordered { border: 1px solid hsl(var(--border)); border-radius: 0.5rem; overflow: hidden; }
 
 /* ───────── Tabs (shadcn underline style) ───────── */

@@ -19,7 +19,13 @@ from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun
 
 from llmpuffin.db import DB
-from llmpuffin_fastapi.deps import get_db, get_github_client, get_llmpuffin_db, spawn_audit, toast
+from llmpuffin_fastapi.deps import (
+    get_db,
+    get_github_client,
+    get_llmpuffin_db,
+    spawn_audit,
+    toast,
+)
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")

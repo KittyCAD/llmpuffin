@@ -9,7 +9,6 @@ from datetime import datetime
 import psycopg
 
 
-
 @dataclass
 class StoreNamespace:
     prefix: str

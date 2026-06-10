@@ -80,6 +80,7 @@ class AuditResult:
     thread_id: str | None = None
     audit_run_id: int | None = None
 
+
 def _build_agent(
     config: HarnessConfig,
     execution,
@@ -96,10 +97,12 @@ def _build_agent(
     p = config.profile
     agent_cfg = p.agent
     container_backend = ContainerBackend(execution)
-    routes: dict = {"/memories/": StoreBackend(
-        store=store,
-        namespace=lambda rt, _n=p.name: ("llmpuffin", _n, "memories"),
-    )}
+    routes: dict = {
+        "/memories/": StoreBackend(
+            store=store,
+            namespace=lambda rt, _n=p.name: ("llmpuffin", _n, "memories"),
+        )
+    }
 
     # Load skills from disk into an in-memory store
     skills_list: list[str] = []
@@ -296,7 +299,9 @@ async def _fork_audit_inner(
                 await s.execute(
                     update(AuditRun)
                     .where(AuditRun.id == audit_run_id)
-                    .values(github_repo_url=git_info.repo_url, git_commit=git_info.commit)
+                    .values(
+                        github_repo_url=git_info.repo_url, git_commit=git_info.commit
+                    )
                 )
                 await s.commit()
             log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
@@ -429,7 +434,9 @@ async def _run_audit_inner(
                 await s.execute(
                     update(AuditRun)
                     .where(AuditRun.id == audit_run_id)
-                    .values(github_repo_url=git_info.repo_url, git_commit=git_info.commit)
+                    .values(
+                        github_repo_url=git_info.repo_url, git_commit=git_info.commit
+                    )
                 )
                 await s.commit()
             log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
@@ -534,8 +541,6 @@ async def _save_container_id(tid: str, container_id: str, *, db: DB) -> None:
         log.warning("Failed to save container_id: %s", exc)
 
 
-
-
 async def _create_audit_run(
     config: HarnessConfig,
     tid: str,
@@ -556,7 +561,9 @@ async def _create_audit_run(
             if old_thread:
                 audit_run = old_thread.audit_run
             else:
-                db_profile = await AuditProfile.get_or_create(s, name=config.profile.name, profile_toml=config.profile_toml)
+                db_profile = await AuditProfile.get_or_create(
+                    s, name=config.profile.name, profile_toml=config.profile_toml
+                )
                 audit_run = AuditRun(
                     profile_id=db_profile.id,
                     profile_toml=config.profile_toml,
@@ -566,7 +573,9 @@ async def _create_audit_run(
                 s.add(audit_run)
                 await s.flush()
         else:
-            db_profile = await AuditProfile.get_or_create(s, name=config.profile.name, profile_toml=config.profile_toml)
+            db_profile = await AuditProfile.get_or_create(
+                s, name=config.profile.name, profile_toml=config.profile_toml
+            )
             audit_run = AuditRun(
                 profile_id=db_profile.id,
                 profile_toml=config.profile_toml,

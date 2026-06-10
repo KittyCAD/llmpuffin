@@ -17,8 +17,8 @@
 </thead>
 <tbody>
 {% for r in runs %}
-<tr>
-  <td><a href="/runs/{{ r.id }}/">#{{ r.id }}</a></td>
+<tr hx-get="/runs/{{ r.id }}/" hx-push-url="true" hx-target="body">
+  <td>#{{ r.id }}</td>
   <td>{% if r.profile %}<a href="/profiles/{{ r.profile.id }}/">{{ r.profile.name }}</a>{% else %}—{% endif %}</td>
   <td class="mono text-xs text-muted">{{ r.container_image | truncatechars(40) }}</td>
   <td class="mono text-xs text-muted">{{ r.model_name | truncatechars(28) }}</td>

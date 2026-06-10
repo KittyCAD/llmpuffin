@@ -27,7 +27,13 @@ from llmpuffin.models import (
 )
 
 from llmpuffin.db import DB
-from llmpuffin_fastapi.deps import get_db, get_github_client, get_llmpuffin_db, spawn_audit, toast
+from llmpuffin_fastapi.deps import (
+    get_db,
+    get_github_client,
+    get_llmpuffin_db,
+    spawn_audit,
+    toast,
+)
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -177,12 +183,12 @@ async def finding_detail(
     if finding is None:
         raise HTTPException(status_code=404)
 
-    from llmpuffin_fastapi.checkpoint import get_session
+    from llmpuffin.checkpoint import get_session
 
     fork_session = None
     fork_thread = None
     if finding.fork_thread_id:
-        fork_session = await get_session(finding.fork_thread_id, llmpuffin_db.url)
+        fork_session = await get_session(finding.fork_thread_id, db=llmpuffin_db)
         fork_thread = (
             await db.execute(
                 select(AuditThread).where(
@@ -466,9 +472,9 @@ async def finding_fork(
     # Re-fetch to get updated fork_thread_id, load fork session/thread for the
     # conversation partial (may be empty — messages div will start polling immediately).
     await db.refresh(finding)
-    from llmpuffin_fastapi.checkpoint import get_session
+    from llmpuffin.checkpoint import get_session
 
-    fork_session = await get_session(new_thread_id, llmpuffin_db.url)
+    fork_session = await get_session(new_thread_id, db=llmpuffin_db)
     fork_thread = (
         await db.execute(
             select(AuditThread).where(AuditThread.thread_id == new_thread_id)

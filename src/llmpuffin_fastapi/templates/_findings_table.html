@@ -121,10 +121,10 @@
 </thead>
 <tbody>
 {% for finding in findings %}
-  <tr{% if finding.deleted %} style="opacity:0.5"{% endif %}>
-    <td><a href="/findings/{{ finding.id }}/">{{ finding.local_id if finding.local_id is not none else finding.id }}</a></td>
+  <tr hx-get="/findings/{{ finding.id }}/" hx-push-url="true" hx-target="body"{% if finding.deleted %} style="opacity:0.5"{% endif %}>
+    <td>{{ finding.local_id if finding.local_id is not none else finding.id }}</td>
     <td>
-      <a href="/findings/{{ finding.id }}/">{{ (finding.title or finding.rule_id or finding.description) | truncatechars(80) }}</a>
+      {{ (finding.title or finding.rule_id or finding.description) | truncatechars(80) }}
       {% if finding.scenario_id %}
         <div class="text-xs text-muted">{{ finding.scenario_id }}</div>
       {% endif %}
