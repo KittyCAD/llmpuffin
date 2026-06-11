@@ -19,21 +19,13 @@
 
 - add justificatiosn for severity and difficulty
 
-- systematic creation of Semgrep rules
-
-- CodeQL available as tool
-
 - types for threads (main, finding)
 
 - allow comments on findings
 
-- dialog when opening github issues/advisories
-
 - allow stopping conversations
 
 - support editing severity as well as other fields
-
-- get rid of szenario_id it confusing
 
 - support effort https://reference.langchain.com/python/langchain-anthropic/chat_models/ChatAnthropic/effort
 
@@ -67,7 +59,8 @@ TM:
 - thread model editing in forked chats
 
 Tools:
-
+- systematic creation of Semgrep rules
+- CodeQL available as tool
 - searching through security issues on github
   - Deduplicating with existing findings in GH and the database
 

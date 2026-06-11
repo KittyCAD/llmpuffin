@@ -169,7 +169,7 @@ def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
 def _persist_finding_to_db(
     audit_run_id: int,
     thread_id: str,
-    scenario_id: str,
+    rule_id_prefix: str,
     title: str,
     severity: str,
     difficulty: str,
@@ -195,7 +195,7 @@ def _persist_finding_to_db(
         .scalar_subquery()
     )
     rule_id_expr = func.concat(
-        scenario_id + "-",
+        rule_id_prefix + "-",
         func.to_char(next_local_id, text("'FM000'")),
     )
 
@@ -210,7 +210,6 @@ def _persist_finding_to_db(
                 local_id=next_local_id,
                 rule_id=rule_id_expr,
                 title=title,
-                scenario_id=scenario_id,
                 severity=severity,
                 difficulty=difficulty,
                 description=description,
@@ -366,7 +365,7 @@ Existing mitigations to verify:
         _, local_id, rule_id = _persist_finding_to_db(
             audit_run_id,
             rt_thread_id,
-            scenario_id,
+            scenario_id,  # used as rule_id prefix
             title,
             severity,
             difficulty,
@@ -542,8 +541,7 @@ Existing mitigations to verify:
                 status = "validated" if f.validated else "unvalidated"
                 lines.append(
                     f"- {f.local_id}: {f.title or f.description[:60]} | "
-                    f"{f.severity}/{f.difficulty} | "
-                    f"scenario: {f.scenario_id} | {status}"
+                    f"{f.severity}/{f.difficulty} | {f.rule_id} | {status}"
                 )
             return "\n".join(lines)
         except Exception as exc:

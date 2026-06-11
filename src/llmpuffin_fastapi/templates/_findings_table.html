@@ -125,9 +125,6 @@
     <td>{{ finding.local_id if finding.local_id is not none else finding.id }}</td>
     <td>
       {{ (finding.title or finding.rule_id or finding.description) | truncatechars(80) }}
-      {% if finding.scenario_id %}
-        <div class="text-xs text-muted">{{ finding.scenario_id }}</div>
-      {% endif %}
     </td>
     <td><span class="badge sev-{{ finding.severity|lower }}">{{ finding.severity }}</span></td>
     <td>{{ finding.difficulty or "—" }}</td>

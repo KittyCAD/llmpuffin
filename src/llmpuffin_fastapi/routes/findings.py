@@ -88,7 +88,6 @@ async def findings_list(
             or_(
                 Finding.title.ilike(pattern),
                 Finding.rule_id.ilike(pattern),
-                Finding.scenario_id.ilike(pattern),
             )
         )
 
@@ -213,6 +212,39 @@ async def finding_detail(
     )
 
 
+@router.post("/findings/{finding_id}/edit/")
+async def finding_edit(
+    finding_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    title: Annotated[str | None, Form()] = None,
+    severity: Annotated[str | None, Form()] = None,
+    difficulty: Annotated[str | None, Form()] = None,
+    validated: Annotated[str | None, Form()] = None,
+):
+    finding = await _get_finding(db, finding_id)
+    if finding is None:
+        raise HTTPException(status_code=404)
+    redirect = f"/findings/{finding_id}/"
+    values: dict = {}
+    if title is not None:
+        values["title"] = title
+    if severity is not None and severity in ("high", "medium", "low", "informational"):
+        values["severity"] = severity
+    if difficulty is not None and difficulty in ("high", "medium", "low"):
+        values["difficulty"] = difficulty
+    if validated is not None:
+        values["validated"] = validated == "yes"
+    if values:
+        await db.execute(
+            sa_update(Finding).where(Finding.id == finding_id).values(**values)
+        )
+        await db.commit()
+    return toast(
+        request, "success", "Finding updated", redirect_to=redirect, refresh=True
+    )
+
+
 @router.post("/findings/{finding_id}/report/")
 async def finding_report_to_github(
     finding_id: int,
@@ -252,8 +284,9 @@ async def finding_report_to_github(
 
     # Build the body (shared between advisory and issue).
     title = f"{finding.title}"
-    body = f"**Severity:** {finding.severity} | **Difficulty:** {finding.difficulty}\n"
-    body += f"**Scenario:** {finding.scenario_id}\n\n"
+    body = (
+        f"**Severity:** {finding.severity} | **Difficulty:** {finding.difficulty}\n\n"
+    )
     body += f"## Description\n\n{finding.description}\n\n"
     body += f"## Exploit Scenario\n\n{finding.exploit_scenario}\n\n"
     body += f"## Recommendations\n\n{finding.recommendations}\n"
@@ -432,7 +465,6 @@ async def finding_fork(
     finding_context = (
         f"This conversation is forked to investigate finding #{finding.local_id}.\n"
         f"Title: {finding.title}\n"
-        f"Scenario: {finding.scenario_id}\n"
         f"Severity: {finding.severity} | Difficulty: {finding.difficulty}\n"
         f"Description: {finding.description[:500]}\n\n"
     )

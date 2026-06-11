@@ -221,7 +221,6 @@ class Finding(Base):
     local_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     rule_id: Mapped[str] = mapped_column(String(128), index=True)
     title: Mapped[str] = mapped_column(String(512), default="", server_default="")
-    scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     severity: Mapped[str] = mapped_column(String(32))
     difficulty: Mapped[str] = mapped_column(String(32))
     description: Mapped[str] = mapped_column(Text)

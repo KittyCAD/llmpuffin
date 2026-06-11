@@ -49,7 +49,6 @@ class SarifFinding:
     severity: str = "medium"  # high, medium, low, informational
     difficulty: str = "medium"  # high, medium, low
     locations: list[SarifLocation] = field(default_factory=list)
-    threat_scenario_ids: list[str] = field(default_factory=list)
     properties: dict[str, Any] = field(default_factory=dict)
 
 
@@ -112,8 +111,6 @@ class SarifReport:
                 "severity": f.severity,
                 "difficulty": f.difficulty,
             }
-            if f.threat_scenario_ids:
-                props["threatScenarioIds"] = f.threat_scenario_ids
             if f.properties:
                 props.update(f.properties)
             result["properties"] = props
@@ -211,7 +208,6 @@ def export_sarif_for_run(audit_run_id: int, *, db: DB) -> str:
                 severity=f.severity,
                 difficulty=f.difficulty,
                 locations=locations,
-                threat_scenario_ids=[f.scenario_id] if f.scenario_id else [],
                 properties=props,
             )
         )
