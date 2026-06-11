@@ -5,34 +5,43 @@
      {{ composer(action="/path/", placeholder="…") }}
 
    Parameters:
-     action        – hx-post URL (required)
-     placeholder   – textarea placeholder text
-     disabled      – if true, textarea + button are disabled
-     name          – form field name (default "message")
-     rows          – textarea rows
-     required      – whether the field is required
-     clear_on_send – clear textarea after successful submit
-     on_success    – Alpine expression to run after a successful request
-     target        – htmx target selector (default: none; set to e.g. "#fork-section" to swap a container)
-     swap          – htmx swap strategy (default: "innerHTML")
+     action          – hx-post URL (required)
+     placeholder     – textarea placeholder text (or Alpine expr if disabled_expr is set)
+     disabled_expr   – Alpine expression for reactive :disabled binding
+     required        – whether the field is required
+     on_before       – Alpine expression to run before request fires
+     on_error        – Alpine expression to run on failed request
+     stop_url        – POST URL for stop button (shown when disabled_expr is truthy)
+     target          – htmx target selector
+     swap            – htmx swap strategy (default: "innerHTML")
 #}
-{% macro composer(action, placeholder="Send a message...", disabled=false, name="message", rows=3, required=true, clear_on_send=true, on_success="", target="", swap="innerHTML") -%}
+{% macro composer(action, placeholder="Send a message...", disabled_expr="", required=true, on_before="", on_error="", stop_url="", target="", swap="innerHTML") -%}
 <form
   hx-post="{{ action }}"
-  hx-disabled-elt="find textarea, find button"
+  {% if not disabled_expr %}hx-disabled-elt="find textarea, find button"{% endif %}
   {% if target %}hx-target="{{ target }}" hx-swap="{{ swap }}"{% endif %}
-  hx-on::after-request="if (event.detail.successful) { var _h = event.detail.xhr.getResponseHeader('HX-Trigger') || ''; if (_h.indexOf('error') === -1) { {% if clear_on_send %}this.querySelector('textarea').value = '';{% endif %}{% if on_success %} {{ on_success }};{% endif %} var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); } }"
+  {% if on_before %}@htmx:before-request="{{ on_before }}"{% endif %}
+  {% if disabled_expr %}
+  @htmx:after-request="if (!event.detail.successful || (event.detail.xhr.getResponseHeader('HX-Trigger') || '').indexOf('error') !== -1) { {{ on_error }} } else { $el.querySelector('textarea').value = ''; var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); }"
+  {% else %}
+  hx-on::after-request="if (event.detail.successful) { var _h = event.detail.xhr.getResponseHeader('HX-Trigger') || ''; if (_h.indexOf('error') === -1) { this.querySelector('textarea').value = ''; var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); } }"
+  {% endif %}
   class="composer"
 >
   <textarea
-    name="{{ name }}"
+    name="message"
+    {% if disabled_expr %}
+    :placeholder="{{ placeholder }}"
+    :disabled="{{ disabled_expr }}"
+    {% else %}
     placeholder="{{ placeholder }}"
+    {% endif %}
     {% if required %}required{% endif %}
-    rows="{{ rows }}"
-    {% if disabled %}disabled{% endif %}
+    rows="3"
     onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"
   ></textarea>
-  <button type="submit" class="primary composer-send" title="Send (Enter)" aria-label="Send" {% if disabled %}disabled{% endif %}>
+  <button type="submit" class="primary composer-send" title="Send (Enter)" aria-label="Send"
+    {% if disabled_expr %}:disabled="{{ disabled_expr }}"{% endif %}>
     <svg class="composer-send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/>
@@ -42,5 +51,13 @@
       <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
     </svg>
   </button>
+  {% if stop_url and disabled_expr %}
+  <button type="button" class="destructive composer-stop"
+    title="Stop" aria-label="Stop"
+    disabled :disabled="!({{ disabled_expr }})"
+    hx-post="{{ stop_url }}" hx-swap="none">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+  </button>
+  {% endif %}
 </form>
 {%- endmacro %}

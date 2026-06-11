@@ -3,7 +3,7 @@
 <div id="fork-section">
 {% if finding.fork_thread_id %}
 {# Fork exists — show full conversation with polling. #}
-{% with conv_thread_id=finding.fork_thread_id, conv_session=fork_session, conv_thread=fork_thread %}
+{% with conv_thread_id=finding.fork_thread_id, conv_session=fork_session, conv_thread=fork_thread, conv_init_running=(not fork_thread or fork_thread.status == "running") %}
   {% include "_conversation.html" %}
 {% endwith %}
 {% else %}
@@ -12,7 +12,6 @@
   action="/findings/" ~ finding.id ~ "/fork/",
   placeholder="Optional instructions for the fork...",
   required=false,
-  clear_on_send=false,
   target="#fork-section",
   swap="outerHTML",
 ) }}

@@ -6,7 +6,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -162,3 +162,14 @@ async def checkpoint_resume(
         ),
     )
     return toast(request, "success", "Resumed", redirect_to=redirect)
+
+
+@router.post("/checkpoints/{thread_id}/stop/")
+async def checkpoint_stop(
+    thread_id: str,
+    request: Request,
+    harness: Annotated[Harness, Depends(get_harness)],
+):
+    if harness.cancel(thread_id):
+        return Response(status_code=204)
+    return Response(status_code=404)

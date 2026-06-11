@@ -1,4 +1,4 @@
-- allow closing findings by referencing it with a github issue
+``- allow closing findings by referencing it with a github issue
 - allow opening github issues from the finding tab
 - Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
 
@@ -11,13 +11,10 @@
 - use git blame
 - never attach readble documents as findings, those typicalls go into notes
 
-- fresh containers per thread? e.g. when forking you get a new one
+- fresh containers per thread? e.g. each forking should get a forked/cloned container
 
 - confirmation about the action that will be performed when releasing on github
 
-- We want that we can publish code to private forks. Like the github advisory private fork.
-
-- add justificatiosn for severity and difficulty
 
 - types for threads (main, finding)
 
@@ -48,9 +45,9 @@ Prompt:
 - improve memory instructions, it mostly created audit_notes.md
 - explain that users can not access container contents (you need to show examples)
 - make clear that we are zoo/kittycad. Data exfiltrated is only relevant if it crosses a threat zone
+- add justificatiosn for severity and difficulty
 
 Validation:
-- building and setting the project up
 - allow exporting files from the container
 
 TM:
@@ -63,6 +60,7 @@ Tools:
 - CodeQL available as tool
 - searching through security issues on github
   - Deduplicating with existing findings in GH and the database
+- We want that we can publish code to private forks. Like the github advisory private fork.
 
 Misc: 
 - pausable chats and web ui to continue them
