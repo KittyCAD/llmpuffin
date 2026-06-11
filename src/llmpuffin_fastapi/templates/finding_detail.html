@@ -18,6 +18,9 @@
   </svg>
 {%- endmacro %}
 
+<div class="finding-layout">
+<div class="finding-main">
+
 {# ─── GitHub report ─── #}
 {% if finding.github_link %}
 {% set gl = finding.github_link %}
@@ -202,4 +205,48 @@
 <h2>Fork conversation</h2>
 {% include "_finding_fork.html" %}
 {% endif %}
+
+</div>{# .finding-main #}
+
+{# ─── Comments sidebar ─── #}
+<aside class="finding-sidebar">
+  <h3>Comments <span class="text-muted text-sm" style="font-weight: 400;">({{ finding.comments|length }})</span></h3>
+
+  {% for c in finding.comments %}
+  <div class="comment-card mt-2" x-data="{ editing: false }">
+    <div class="comment-card-header">
+      {{ c.created_at | datetimefmt("%Y-%m-%d %H:%M") }}
+      <span style="margin-left: auto;">
+        <button class="btn ghost text-xs" style="padding: 0.125rem 0.375rem;" @click="editing = true" x-show="!editing">edit</button>
+        <form hx-post="/findings/{{ finding.id }}/comments/{{ c.id }}/delete/"
+              hx-confirm="Delete this comment?"
+              hx-disabled-elt="find button"
+              style="display: inline;">
+          <button type="submit" class="btn ghost text-xs" style="padding: 0.125rem 0.375rem;">delete</button>
+        </form>
+      </span>
+    </div>
+    <div x-show="!editing" class="text-sm" style="white-space: pre-wrap;">{{ c.body }}</div>
+    <form x-show="editing" x-cloak
+          hx-post="/findings/{{ finding.id }}/comments/{{ c.id }}/edit/"
+          class="mt-1">
+      <textarea name="body" rows="3" style="width: 100%; font-size: 0.8125rem;">{{ c.body }}</textarea>
+      <div class="row gap-2 mt-1">
+        <button type="submit" class="btn primary text-xs">save</button>
+        <button type="button" class="btn ghost text-xs" @click="editing = false">cancel</button>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+
+  <form hx-post="/findings/{{ finding.id }}/comments/"
+        hx-disabled-elt="find button"
+        class="mt-4">
+    <textarea name="body" rows="3" placeholder="Add a comment..." required
+              style="width: 100%; font-size: 0.8125rem;"></textarea>
+    <button type="submit" class="btn primary text-xs mt-1">comment</button>
+  </form>
+</aside>
+
+</div>{# .finding-layout #}
 {% endblock %}

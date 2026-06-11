@@ -25,12 +25,25 @@ The command exits non-zero if any step fails. **Do not declare work done until `
   - `agent.py` — deepagents orchestrator. The main agent only has finding-management tools (`MAIN_AGENT_TOOLS`); threat-model tools are scoped to subagents.
   - `subagents/` — one subagent per file. Each module exports a `TOOLS` tuple of tool names and a factory `name(tools)` that builds the spec from the shared tools dict. Shared constants live in `subagents/_constants.py`.
   - `tools.py` — `make_tools(...)` returns a `dict[str, Callable]`; the parent agent and subagents pick the names they need.
-  - `models.py` — SQLAlchemy models (`AuditProfile`, `AuditRun`, `AuditThread`, `Finding`, `FindingLocation`).
-  - `db.py` — async + sync session factories, `setup_db()`.
-- `src/llmpuffin_fastapi/` — FastAPI web UI (Jinja2 + HTMX) and Alembic migrations under `alembic/`.
+  - `models.py` — SQLAlchemy models (`AuditProfile`, `AuditRun`, `AuditThread`, `Finding`, `FindingLocation`, `FindingComment`, `FindingAttachment`, `ValidationNote`, `GitHubLink`).
+  - `db.py` — `DB` class holding async + sync engines/sessions. Created once and passed explicitly — no global state.
+  - `harness.py` — `HarnessConfig` (profile + TOML), `Harness` (threat model loading, container lifecycle, task tracking for running audits).
+  - `checkpoint.py` — reading langgraph checkpoint data for the conversation viewer.
+  - `system_prompt.py` — default system prompt for the audit agent (overridable per profile).
+  - `alembic/` — database migrations.
+- `src/llmpuffin_fastapi/` — FastAPI web UI (Jinja2 + HTMX + Alpine.js).
+  - `deps.py` — FastAPI dependencies (`get_db`, `get_harness`, `get_llmpuffin_db`, `get_github_client`, `toast`).
+  - `templates/` — Jinja2 templates. `_` prefix = partials/macros. `_composer.html` = reusable message composer. `_conversation.html` = polling conversation viewer.
+  - `static/app.css` — shadcn-style tokens (HSL triplets), Tailwind v4 browser build for utilities.
 - `src/llmpuffin_dev/` — developer scripts (`check`, `run`, `postgres`).
 - `profiles/` — per-codebase audit profiles.
-- `threat_model/` — example threat model TOML files.
+
+## Architecture principles
+
+- **No global mutable state.** `DB` is created once and passed via function args (keyword-only `*, db: DB`). `Harness` lives on `app.state.harness` in FastAPI. No module-level singletons.
+- **DB is the source of truth.** No in-memory shadow state (the old `SarifReport` was removed). SARIF export reads from DB.
+- **Keyword-only `db` parameter.** All functions taking a `DB` instance use `*, db: DB` to prevent positional misuse.
+- **Alpine owns reactivity, htmx owns the network.** Use `@htmx:event` (Alpine listener) when updating Alpine state from htmx events. Use `hx-on::event` (htmx listener) for pure DOM/htmx operations.
 
 ## Key conventions
 
@@ -39,7 +52,8 @@ The command exits non-zero if any step fails. **Do not declare work done until `
 - **Assume the database is present.** Drop fallback branches that paper over missing Postgres.
 - **Tool calls from subagents** are logged to the server console via `_ToolLogHandler` but do not show up in the checkpoint viewer — that is a deepagents architecture constraint.
 - **Finding `local_id` allocation** uses a per-`audit_run_id` Postgres advisory lock (`pg_advisory_xact_lock`) inside the insert transaction. A unique constraint `(audit_run_id, local_id)` enforces correctness; the advisory lock prevents the race.
-- **Background tasks** are launched via `asyncio.create_task` and tracked in a module-level set in `src/llmpuffin_fastapi/deps.py`. The FastAPI lifespan cancels in-flight tasks on shutdown so `_finalize_audit_run` can mark threads as `"aborted"`.
+- **Background audit tasks** are tracked by `Harness._tasks` (dict keyed by thread_id). `harness.spawn(thread_id, coro)` launches, `harness.cancel(thread_id)` stops. The FastAPI lifespan calls `harness.cancel_all()` on shutdown.
+- **Inline editing** uses Alpine `x-data="{ editing: false }"` with `x-show` to toggle between display and edit mode. Selects auto-submit on change; text inputs submit on Enter.
 
 ## Commands
 
@@ -47,8 +61,8 @@ The command exits non-zero if any step fails. **Do not declare work done until `
 | -------------------------- | ---------------------------------------------------------------------- |
 | Install deps               | `uv sync`                                                              |
 | Start PostgreSQL           | `uv run llmpuffin-pg start`                                            |
-| Apply migrations           | `uv run alembic -c src/llmpuffin/alembic.ini upgrade head`     |
-| Create a migration         | `uv run alembic -c src/llmpuffin/alembic.ini revision -m "…"`  |
+| Apply migrations           | `uv run alembic -c src/llmpuffin/alembic.ini upgrade head`             |
+| Create a migration         | `uv run alembic -c src/llmpuffin/alembic.ini revision -m "…"`          |
 | Run an audit               | `uv run llmpuffin-run -v -p profiles/<profile>/profile.toml`           |
 | Run the web UI             | `uv run llmpuffin-fastapi`                                             |
 | **Check (lint+test+compile)** | **`uv run llmpuffin-check`**                                        |

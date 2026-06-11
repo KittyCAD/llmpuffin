@@ -260,6 +260,11 @@ class Finding(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    comments: Mapped[list[FindingComment]] = relationship(
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        order_by="FindingComment.created_at.asc()",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -376,3 +381,23 @@ class GitHubLink(Base):
     )
 
     finding: Mapped[Finding] = relationship(back_populates="github_link")
+
+
+class FindingComment(Base):
+    """A human comment on a finding."""
+
+    __tablename__ = "finding_comment"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    finding_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("finding.id", ondelete="CASCADE")
+    )
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    finding: Mapped[Finding] = relationship(back_populates="comments")

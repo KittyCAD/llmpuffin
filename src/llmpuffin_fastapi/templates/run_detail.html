@@ -53,12 +53,22 @@
   <div class="card" style="padding: 0;">
   <table>
   <thead>
-    <tr><th>Thread</th><th>Container</th><th>Status</th><th>Created</th><th></th></tr>
+    <tr><th>Thread</th><th>Related Finding</th><th>Container</th><th>Status</th><th>Created</th><th></th></tr>
   </thead>
   <tbody>
+  {% set fork_findings = {} %}
+  {% for f in findings if f.fork_thread_id %}{% if fork_findings.update({f.fork_thread_id: f}) %}{% endif %}{% endfor %}
   {% for t in threads %}
   <tr>
     <td><a href="/checkpoints/{{ t.thread_id }}/" class="mono text-xs">{{ t.thread_id | truncatechars(16) }}</a></td>
+    <td class="text-xs">
+      {% if t.thread_id in fork_findings %}
+        {% set f = fork_findings[t.thread_id] %}
+        <a href="/findings/{{ f.id }}/">{{ f.title | truncatechars(40) }}</a>
+      {% else %}
+        <span class="text-muted">main</span>
+      {% endif %}
+    </td>
     <td>{% if t.container_id %}<code class="mono text-xs">{{ t.container_id | truncatechars(12) }}</code>{% else %}—{% endif %}</td>
     <td>
       {% if t.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>

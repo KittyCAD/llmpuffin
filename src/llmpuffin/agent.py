@@ -168,8 +168,18 @@ def _build_agent(
     if agent_cfg.interrupt_on:
         interrupt_on_config = {name: True for name in agent_cfg.interrupt_on}
 
+    # Build model — use ChatAnthropic directly when anthropic-specific config is set,
+    # otherwise pass the model string and let deepagents handle it.
+    model: str | object = agent_cfg.model
+    anthropic_cfg = p.anthropic
+    if anthropic_cfg.effort:
+        from langchain_anthropic import ChatAnthropic
+
+        model_name = agent_cfg.model.removeprefix("anthropic:")
+        model = ChatAnthropic(model=model_name, effort=anthropic_cfg.effort)
+
     return create_deep_agent(
-        model=f"{agent_cfg.model}",
+        model=model,
         tools=main_tools,
         backend=backend,
         store=store,

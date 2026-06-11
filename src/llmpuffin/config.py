@@ -34,6 +34,9 @@ Example profile.toml:
     skills_dir = "vendor/trailofbits-skills/plugins"
     # interrupt_on = ["execute", "write_file"]
     # system_prompt = "Custom system prompt (overrides default)"
+
+    [anthropic]
+    # effort = "high"  # max, xhigh, high, medium, low
 """
 
 from __future__ import annotations
@@ -42,6 +45,7 @@ import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from llmpuffin.system_prompt import DEFAULT_SYSTEM_PROMPT
 
@@ -179,6 +183,13 @@ class ProfileAgent:
 
 
 @dataclass
+class ProfileAnthropic:
+    """Anthropic-specific configuration."""
+
+    effort: str | None = None  # max, xhigh, high, medium, low
+
+
+@dataclass
 class Profile:
     """Per-audit profile loaded from TOML."""
 
@@ -187,6 +198,7 @@ class Profile:
     threat_model_dir: Path
     code_dir: str = "/src"
     agent: ProfileAgent = field(default_factory=ProfileAgent)
+    anthropic: ProfileAnthropic = field(default_factory=ProfileAnthropic)
 
     @classmethod
     def from_toml(cls, path: Path) -> Profile:
@@ -198,10 +210,36 @@ class Profile:
     def from_toml_string(cls, toml_str: str) -> Profile:
         return cls._from_dict(tomllib.loads(toml_str))
 
+    _KNOWN_SECTIONS: ClassVar[set[str]] = {"audit", "agent", "anthropic"}
+    _KNOWN_KEYS: ClassVar[dict[str, set[str]]] = {
+        "audit": {"name", "image", "threat_model_dir", "code_dir", "output"},
+        "agent": {
+            "model",
+            "max_iterations",
+            "interrupt_on",
+            "skills_dir",
+            "system_prompt",
+        },
+        "anthropic": {"effort"},
+    }
+
     @classmethod
     def _from_dict(cls, data: dict) -> Profile:
+        unknown_sections = set(data.keys()) - cls._KNOWN_SECTIONS
+        if unknown_sections:
+            raise ValueError(
+                f"Unknown profile section(s): {', '.join(sorted(unknown_sections))}"
+            )
+        for section, keys in cls._KNOWN_KEYS.items():
+            unknown_keys = set(data.get(section, {}).keys()) - keys
+            if unknown_keys:
+                raise ValueError(
+                    f"Unknown key(s) in [{section}]: {', '.join(sorted(unknown_keys))}"
+                )
+
         audit = data.get("audit", {})
         agent_data = data.get("agent", {})
+        anthropic_data = data.get("anthropic", {})
 
         skills_dir_str = agent_data.get("skills_dir")
         skills_dir = Path(skills_dir_str) if skills_dir_str else None
@@ -217,6 +255,9 @@ class Profile:
                 interrupt_on=agent_data.get("interrupt_on", []),
                 skills_dir=skills_dir,
                 system_prompt=agent_data.get("system_prompt", DEFAULT_SYSTEM_PROMPT),
+            ),
+            anthropic=ProfileAnthropic(
+                effort=anthropic_data.get("effort"),
             ),
         )
 

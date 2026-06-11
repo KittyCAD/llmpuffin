@@ -409,6 +409,19 @@ p.error, p.success {
 }
 .note-card-header::before { content: "📝 "; }
 .note-card .markdown { margin: 0; }
+.comment-card {
+  padding: 0.75em 1em;
+  background: hsl(var(--primary) / 0.06);
+  border: 1px solid hsl(var(--primary) / 0.2);
+  border-left: 3px solid hsl(var(--primary));
+  border-radius: 4px;
+}
+.comment-card-header {
+  color: hsl(var(--primary));
+  font-size: 0.7rem; letter-spacing: 0.04em;
+  font-weight: 500; margin-bottom: 0.4em;
+  display: flex; align-items: center; gap: 0.5rem;
+}
 
 form.inline { display: inline; }
 
@@ -607,6 +620,25 @@ html.__sidebar-collapsed .layout .sidebar-header:hover .sidebar-toggle { opacity
   background: hsl(var(--warning) / 0.18);
   border-color: hsl(var(--warning));
 }
+/* ───────── Finding detail: main + comments sidebar ───────── */
+.finding-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 2rem;
+  align-items: start;
+}
+.finding-main { min-width: 0; }
+.finding-sidebar {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+@media (max-width: 64rem) {
+  .finding-layout { grid-template-columns: 1fr; }
+  .finding-sidebar { position: static; max-height: none; }
+}
+
 .checkpoint-finding-title {
   font-size: 0.85rem;
   margin-top: 0.25rem;

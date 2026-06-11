@@ -23,6 +23,7 @@ from llmpuffin.models import (
     AuditThread,
     Finding,
     FindingAttachment,
+    FindingComment,
     GitHubLink,
 )
 
@@ -165,6 +166,7 @@ async def _get_finding(db: AsyncSession, finding_id: int) -> Finding | None:
                 selectinload(Finding.attachments),
                 selectinload(Finding.validation_notes),
                 selectinload(Finding.github_link),
+                selectinload(Finding.comments),
             )
             .where(Finding.id == finding_id)
         )
@@ -558,4 +560,75 @@ async def finding_attachment_download(
         headers={
             "Content-Disposition": f'attachment; filename="{basename}"',
         },
+    )
+
+
+# ─── Comments ───
+
+
+@router.post("/findings/{finding_id}/comments/")
+async def finding_comment_add(
+    finding_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: Annotated[str, Form()],
+):
+    redirect = f"/findings/{finding_id}/"
+    if not body.strip():
+        return toast(request, "error", "Comment cannot be empty", redirect_to=redirect)
+    db.add(FindingComment(finding_id=finding_id, body=body.strip()))
+    await db.commit()
+    return toast(
+        request, "success", "Comment added", redirect_to=redirect, refresh=True
+    )
+
+
+@router.post("/findings/{finding_id}/comments/{comment_id}/edit/")
+async def finding_comment_edit(
+    finding_id: int,
+    comment_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: Annotated[str, Form()],
+):
+    redirect = f"/findings/{finding_id}/"
+    comment = (
+        await db.execute(
+            select(FindingComment).where(
+                FindingComment.id == comment_id,
+                FindingComment.finding_id == finding_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if comment is None:
+        raise HTTPException(status_code=404)
+    comment.body = body.strip()
+    await db.commit()
+    return toast(
+        request, "success", "Comment updated", redirect_to=redirect, refresh=True
+    )
+
+
+@router.post("/findings/{finding_id}/comments/{comment_id}/delete/")
+async def finding_comment_delete(
+    finding_id: int,
+    comment_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    redirect = f"/findings/{finding_id}/"
+    comment = (
+        await db.execute(
+            select(FindingComment).where(
+                FindingComment.id == comment_id,
+                FindingComment.finding_id == finding_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if comment is None:
+        raise HTTPException(status_code=404)
+    await db.delete(comment)
+    await db.commit()
+    return toast(
+        request, "success", "Comment deleted", redirect_to=redirect, refresh=True
     )
