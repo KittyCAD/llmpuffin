@@ -1,10 +1,14 @@
 
+- Prepare fat Docker image with many tools included
+- Allow amd64 execution of images
+
+
 Open questions:
 - What about memories? - I think we store them in the db now, validate
 - How to do validation? make sure it does what it can
 
 Bugs:
-- deduplicate findings in one thread at least
+- deduplicate findings across runs
 - the composer does not update when starting a thread from a finding
 - memory handling must be more conservative. If we give the memory to the next run, it is likely going to ignore bugs as they were deemed irrelevant
 

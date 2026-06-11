@@ -3,7 +3,6 @@ name = "delta-chat"
 image = "llmpuffin-delta-chat"
 threat_model_dir = "examples/delta-chat/threat_model"
 code_dir = "/src"
-output = "examples/delta-chat/results.sarif"
 
 [agent]
 model = "anthropic:claude-opus-4-7"

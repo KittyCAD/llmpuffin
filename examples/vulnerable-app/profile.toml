@@ -3,7 +3,6 @@ name = "vulnerable-app"
 image = "llmpuffin-vulnerable-app"
 threat_model_dir = "examples/vulnerable-app/threat_model"
 code_dir = "/src"
-output = "examples/vulnerable-app/results.sarif"
 
 [agent]
 model = "anthropic:claude-sonnet-4-20250514"
