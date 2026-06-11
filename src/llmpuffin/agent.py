@@ -36,8 +36,7 @@ from typing import Any
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
 from deepagents.backends.utils import create_file_data
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage
 from langchain_core.stores import BaseStore
 from langchain_quickjs import CodeInterpreterMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -192,61 +191,52 @@ def _build_agent(
     )
 
 
-class _ToolLogHandler(BaseCallbackHandler):
-    """Log tool calls from subagents that don't go through the main stream."""
-
-    def on_tool_start(self, serialized, input_str, *, run_id, **kwargs):
-        name = serialized.get("name", "?")
-        log.info("  tool: %s(%s)", name, _truncate(str(input_str), 120))
-
-    def on_tool_error(self, error, *, run_id, **kwargs):
-        log.warning("  tool error: %s", _truncate(str(error), 200))
-
-
 async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
-    """Stream agent execution and log progress. Returns (status, error)."""
-    run_config.setdefault("callbacks", []).append(_ToolLogHandler())
+    """Stream agent execution via event streaming and log progress.
+
+    Uses astream_events (v2) for granular visibility into tool calls,
+    model output, and subagent activity — including events from nested
+    subgraphs that the old stream_mode="updates" approach missed.
+
+    Returns (status, error).
+    """
     status = AuditStatus.COMPLETED
     error: str | None = None
     try:
-        async for chunk in agent.astream(
+        async for event in agent.astream_events(
             {"messages": input_messages},
             config=run_config,
-            stream_mode="updates",
+            version="v2",
         ):
             # Explicit cancel point — allows asyncio.Task.cancel() to
-            # take effect between chunks even if astream doesn't yield
-            # to the event loop frequently enough.
+            # take effect between events.
             await asyncio.sleep(0)
-            for node, updates in chunk.items():
-                if updates is None:
-                    continue
-                messages = updates.get("messages", [])
-                # LangGraph may wrap messages in an Overwrite container
-                if hasattr(messages, "value"):
-                    messages = messages.value
-                if not isinstance(messages, list):
-                    continue
-                for msg in messages:
-                    log.debug("  [%s] %s", type(msg).__name__, repr(msg))
-                    if isinstance(msg, AIMessage):
-                        if not msg.content and not msg.tool_calls:
-                            status = AuditStatus.ERROR
-                            error = "Model returned empty response"
-                            log.error("%s: %s", error, repr(msg))
-                            return status, error
 
-                        if msg.tool_calls:
-                            for tc in msg.tool_calls:
-                                log.info(
-                                    "  tool: %s(%s)",
-                                    tc["name"],
-                                    _truncate(str(tc["args"]), 120),
-                                )
-                        elif msg.content:
-                            log.info("  agent: %s", _truncate(str(msg.content), 200))
-                    elif isinstance(msg, ToolMessage):
-                        log.debug("  result: %s", _truncate(str(msg.content), 200))
+            kind = event["event"]
+
+            if kind == "on_chat_model_end":
+                msg = event["data"].get("output")
+                if isinstance(msg, AIMessage):
+                    if not msg.content and not msg.tool_calls:
+                        status = AuditStatus.ERROR
+                        error = "Model returned empty response"
+                        log.error("%s: %s", error, repr(msg))
+                        return status, error
+                    if msg.content and not msg.tool_calls:
+                        log.info("  agent: %s", _truncate(str(msg.content), 200))
+
+            elif kind == "on_tool_start":
+                name = event.get("name", "?")
+                input_data = event["data"].get("input", "")
+                log.info("  tool: %s(%s)", name, _truncate(str(input_data), 120))
+
+            elif kind == "on_tool_end":
+                output = event["data"].get("output", "")
+                log.debug("  result: %s", _truncate(str(output), 200))
+
+            elif kind == "on_tool_error":
+                err_data = event["data"].get("error", "")
+                log.warning("  tool error: %s", _truncate(str(err_data), 200))
     except GraphRecursionError:
         status = AuditStatus.RECURSION_LIMIT
         error = f"Agent hit recursion limit ({max_iterations} iterations)"
