@@ -19,7 +19,7 @@ dependencies = [
     "langchain-anthropic>=1.4.4",
     "langgraph-checkpoint-postgres",
     "docker>=7",
-    "psycopg[binary]>=3",
+    "psycopg[binary]>=3.3.4",
     "pydantic>=2",
     "sarif-om>=1.0",
     "nh3>=0.3.5",

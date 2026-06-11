@@ -914,7 +914,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-postgres" },
     { name = "markdown" },
     { name = "nh3", specifier = ">=0.3.5" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pygithub", specifier = ">=2.9.1" },
     { name = "python-multipart", specifier = ">=0.0.29" },
