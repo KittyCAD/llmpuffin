@@ -44,11 +44,16 @@ llmpuffin harness — the infrastructure layer surrounding the LLM agent.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import asyncio
+import logging
+from collections.abc import Coroutine
+from dataclasses import dataclass
 
 from llmpuffin.audit_environment import AuditEnvironment, AuditExecution
 from llmpuffin.config import Profile
 from llmpuffin.threat_model import ThreatModel
+
+log = logging.getLogger("llmpuffin")
 
 
 @dataclass
@@ -63,16 +68,6 @@ class HarnessConfig:
     profile_toml: str = ""
 
 
-@dataclass
-class HarnessState:
-    """
-    Mutable state maintained across the agentic loop.
-    """
-
-    threat_model: ThreatModel | None = None
-    findings: list[dict] = field(default_factory=list)
-
-
 class Harness:
     """The main harness orchestrating a security audit.
 
@@ -84,16 +79,22 @@ class Harness:
          b. Agent uses containerized tools to investigate
          c. Verify and collect findings
       4. Produce SARIF output (artifact persistence)
+
+    Task management:
+      The harness tracks in-flight audit tasks by thread_id.
+      Use ``spawn`` to launch, ``cancel`` to stop a specific thread,
+      and ``cancel_all`` for graceful shutdown.
     """
 
-    def __init__(self, config: HarnessConfig) -> None:
+    def __init__(self, config: HarnessConfig | None = None) -> None:
         self.config = config
-        self.state = HarnessState()
+        self.threat_model: ThreatModel | None = None
+        self._tasks: dict[str, asyncio.Task] = {}
 
     def load_threat_model(self) -> ThreatModel:
         """Load the threat model from TOML — the declarative spec driving the audit."""
         tm = ThreatModel.from_dir(self.config.profile.threat_model_dir)
-        self.state.threat_model = tm
+        self.threat_model = tm
         return tm
 
     def start_environment(self, container_id: str | None = None) -> AuditExecution:
@@ -103,7 +104,7 @@ class Harness:
             container_id: If given, tries to restart an existing stopped
                 container before creating a new one.
 
-        Returns an AuditExecution context manager. Use with `with`:
+        Returns an AuditExecution context manager. Use with ``with``:
 
             with harness.start_environment() as execution:
                 ...
@@ -114,3 +115,59 @@ class Harness:
             code_dir=p.code_dir,
         )
         return environment.start(container_id=container_id)
+
+    # ── Task management ──
+
+    def spawn(self, thread_id: str, coro: Coroutine) -> asyncio.Task:
+        """Launch an audit coroutine and track it by thread_id.
+
+        The task is removed from tracking when it completes. Exceptions
+        from the task are logged but not re-raised.
+        """
+        task = asyncio.create_task(coro)
+        self._tasks[thread_id] = task
+
+        def _done(t: asyncio.Task) -> None:
+            self._tasks.pop(thread_id, None)
+            if not t.cancelled():
+                exc = t.exception()
+                if exc is not None:
+                    log.exception(
+                        "Background audit task failed",
+                        exc_info=(type(exc), exc, exc.__traceback__),
+                    )
+
+        task.add_done_callback(_done)
+        return task
+
+    def cancel(self, thread_id: str) -> bool:
+        """Cancel a running audit by thread_id. Returns True if found."""
+        task = self._tasks.get(thread_id)
+        if task is None:
+            return False
+        task.cancel()
+        return True
+
+    async def cancel_all(self, timeout: float = 30.0) -> None:
+        """Cancel all in-flight tasks and wait for them to finish."""
+        if not self._tasks:
+            return
+        log.info("Cancelling %d in-flight audit task(s)…", len(self._tasks))
+        for t in self._tasks.values():
+            t.cancel()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*self._tasks.values(), return_exceptions=True),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            log.warning(
+                "Audit tasks did not finish within %.0fs; %d still pending",
+                timeout,
+                len(self._tasks),
+            )
+
+    @property
+    def running_threads(self) -> set[str]:
+        """Thread IDs of currently running audit tasks."""
+        return set(self._tasks.keys())

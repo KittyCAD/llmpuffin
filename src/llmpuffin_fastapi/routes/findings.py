@@ -27,11 +27,12 @@ from llmpuffin.models import (
 )
 
 from llmpuffin.db import DB
+from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
     get_db,
     get_github_client,
+    get_harness,
     get_llmpuffin_db,
-    spawn_audit,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -425,6 +426,7 @@ async def finding_fork(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    harness: Annotated[Harness, Depends(get_harness)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -499,7 +501,7 @@ async def finding_fork(
         except Exception:
             log.exception("Background finding fork failed")
 
-    spawn_audit(_do_fork())
+    harness.spawn(new_thread_id, _do_fork())
 
     # Re-fetch to get updated fork_thread_id, load fork session/thread for the
     # conversation partial (may be empty — messages div will start polling immediately).

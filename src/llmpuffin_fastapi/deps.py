@@ -1,11 +1,10 @@
-"""FastAPI dependencies + background-task registry."""
+"""FastAPI dependencies."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-from typing import AsyncIterator, Coroutine
+from typing import AsyncIterator
 from urllib.parse import quote
 
 from fastapi import Request, Response
@@ -14,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
+from llmpuffin.harness import Harness
 
 log = logging.getLogger("llmpuffin")
 
@@ -65,27 +65,9 @@ def toast(
     )
 
 
-# Strong references to in-flight audit tasks so they aren't GC'd.
-_tasks: set[asyncio.Task] = set()
-
-
-def spawn_audit(coro: Coroutine) -> asyncio.Task:
-    """Schedule a fire-and-forget audit coroutine on the running loop."""
-    task = asyncio.create_task(coro)
-    _tasks.add(task)
-
-    def _done(t: asyncio.Task) -> None:
-        _tasks.discard(t)
-        if not t.cancelled():
-            exc = t.exception()
-            if exc is not None:
-                log.exception(
-                    "Background audit task failed",
-                    exc_info=(type(exc), exc, exc.__traceback__),
-                )
-
-    task.add_done_callback(_done)
-    return task
+def get_harness(request: Request) -> Harness:
+    """FastAPI dependency returning the Harness instance from app state."""
+    return request.app.state.harness
 
 
 def get_llmpuffin_db(request: Request) -> DB:

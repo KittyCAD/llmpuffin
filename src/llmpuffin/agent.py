@@ -204,6 +204,10 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
             config=run_config,
             stream_mode="updates",
         ):
+            # Explicit cancel point — allows asyncio.Task.cancel() to
+            # take effect between chunks even if astream doesn't yield
+            # to the event loop frequently enough.
+            await asyncio.sleep(0)
             for node, updates in chunk.items():
                 if updates is None:
                     continue

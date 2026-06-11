@@ -19,11 +19,12 @@ from llmpuffin.models import AuditRun, AuditThread, Finding
 from llmpuffin.sarif import export_sarif_for_run
 
 from llmpuffin.db import DB
+from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
     get_db,
     get_github_client,
+    get_harness,
     get_llmpuffin_db,
-    spawn_audit,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -171,6 +172,7 @@ async def run_resume(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    harness: Annotated[Harness, Depends(get_harness)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -207,14 +209,15 @@ async def run_resume(
 
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    spawn_audit(
+    harness.spawn(
+        thread_id,
         run_audit(
             harness_config,
             db=llmpuffin_db,
             thread_id=thread_id,
             user_message=message.strip() or None,
             github_client=gh,
-        )
+        ),
     )
     return toast(
         request,
@@ -232,6 +235,7 @@ async def run_fork(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    harness: Annotated[Harness, Depends(get_harness)],
     message: Annotated[str, Form()],
 ):
     run = (
@@ -271,15 +275,20 @@ async def run_fork(
             request, "error", "No config available for fork", redirect_to=redirect
         )
 
+    import uuid as _uuid
+
+    new_tid = _uuid.uuid4().hex[:12]
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    spawn_audit(
+    harness.spawn(
+        new_tid,
         fork_audit(
             harness_config,
             source_thread_id=thread_id,
             user_message=msg,
             db=llmpuffin_db,
-        )
+            thread_id=new_tid,
+        ),
     )
     return toast(
         request,
@@ -287,4 +296,25 @@ async def run_fork(
         f"Forked from thread {thread_id}",
         redirect_to=redirect,
         refresh=True,
+    )
+
+
+@router.post("/runs/{run_id}/stop/{thread_id}/")
+async def run_stop(
+    run_id: int,
+    thread_id: str,
+    request: Request,
+    harness: Annotated[Harness, Depends(get_harness)],
+):
+    redirect = f"/runs/{run_id}/"
+    if harness.cancel(thread_id):
+        return toast(
+            request,
+            "success",
+            f"Stopping thread {thread_id}",
+            redirect_to=redirect,
+            refresh=True,
+        )
+    return toast(
+        request, "error", "Thread not found or not running", redirect_to=redirect
     )

@@ -5,24 +5,24 @@
 
 {% set init_running = conv_thread and conv_thread.status == "running" %}
 
-<div x-data="{ running: {{ 'true' if init_running else 'false' }} }">
+<div x-data="{ clientRunning: false, serverRunning: {{ 'true' if init_running else 'false' }} }">
 
   {# Composer — outside polling div so morph never touches it. #}
   <form
     hx-post="/checkpoints/{{ conv_thread_id }}/resume/"
-    hx-on::before-request="running = true;"
-    hx-on::after-request="if (event.detail.successful) { var _h = event.detail.xhr.getResponseHeader('HX-Trigger') || ''; if (_h.indexOf('error') === -1) { this.querySelector('textarea').value = ''; var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); } else { running = false; } } else { running = false; }"
+    @htmx:before-request="clientRunning = true"
+    @htmx:after-request="if (!event.detail.successful || (event.detail.xhr.getResponseHeader('HX-Trigger') || '').indexOf('error') !== -1) { clientRunning = false; } else { $el.querySelector('textarea').value = ''; var m = document.getElementById('messages'); if (m) htmx.trigger(m, 'refresh'); }"
     class="composer"
   >
     <textarea
       name="message"
-      :placeholder="running ? 'Thread is running — wait for it to finish before sending.' : 'Send a message to resume this thread...'"
+      :placeholder="(clientRunning || serverRunning) ? 'Thread is running — wait for it to finish before sending.' : 'Send a message to resume this thread...'"
       required
       rows="3"
-      :disabled="running"
+      :disabled="clientRunning || serverRunning"
       onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"
     ></textarea>
-    <button type="submit" class="primary composer-send" title="Send (Enter)" aria-label="Send" :disabled="running">
+    <button type="submit" class="primary composer-send" title="Send (Enter)" aria-label="Send" :disabled="clientRunning || serverRunning">
       <svg class="composer-send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/>
@@ -40,7 +40,7 @@
        hx-trigger="every 3s, refresh"
        hx-swap="morph:innerHTML focus-scroll:true"
        hx-ext="morph"
-       @htmx:after-swap.dot="var s = $el.querySelector('[data-status]'); if (s) running = (s.dataset.status === 'running');">
+       @htmx:after-swap="const s = $el.querySelector('[data-status]'); if (s) { serverRunning = (s.dataset.status === 'running'); clientRunning = serverRunning; }">
     {% if conv_session %}
       {% with session = conv_session, audit_thread = conv_thread %}
         {% include "_checkpoint_messages.html" %}

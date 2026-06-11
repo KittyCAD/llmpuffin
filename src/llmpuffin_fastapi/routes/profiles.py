@@ -19,11 +19,12 @@ from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditProfile, AuditRun
 
 from llmpuffin.db import DB
+from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
     get_db,
     get_github_client,
+    get_harness,
     get_llmpuffin_db,
-    spawn_audit,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -141,6 +142,7 @@ async def profile_run(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    harness: Annotated[Harness, Depends(get_harness)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
 ):
     profile = (
@@ -154,7 +156,12 @@ async def profile_run(
     except Exception as exc:
         return toast(request, "error", f"Invalid config: {exc}", redirect_to=redirect)
     harness_config = HarnessConfig(profile=parsed, profile_toml=profile.profile_toml)
-    spawn_audit(run_audit(harness_config, db=llmpuffin_db, github_client=gh))
+    import uuid
+
+    tid = uuid.uuid4().hex[:12]
+    harness.spawn(
+        tid, run_audit(harness_config, db=llmpuffin_db, thread_id=tid, github_client=gh)
+    )
     return toast(
         request, "success", "Audit started", redirect_to=redirect, refresh=True
     )
