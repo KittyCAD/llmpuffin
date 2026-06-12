@@ -1,22 +1,19 @@
+## Open questions
+- What about memories? - I think we store them in the db now, validate
+- How to do validation? make sure it does what it can
 
+## Future directions:
+- feature: validation of external findings
+- Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
+
+## Sandboxing:
 - Prepare fat Docker image with many tools included
 - Allow amd64 execution of images
 
 
-Open questions:
-- What about memories? - I think we store them in the db now, validate
-- How to do validation? make sure it does what it can
-
-Bugs:
-- deduplicate findings across runs
-- the composer does not update when starting a thread from a finding
+## Harness:
 - memory handling must be more conservative. If we give the memory to the next run, it is likely going to ignore bugs as they were deemed irrelevant
-
-New directions:
-- feature: validation of external findings
-- Support auditing of PRs (create containers with ref checked out + PR descriptions as context)
-
-Harness:
+- Deduplicating with existing findings in GH and the database
 - build docker images dynamically or via UI
 - fresh containers per thread? e.g. each forking should get a forked/cloned container
 - Validation:
@@ -24,7 +21,7 @@ Harness:
   - add post audit step that checks if findings were validated, PoC exists. Add a stage that can ask question back automatically, or propose the user options.
 
 
-Prompt/Tool usage docs:
+## Prompt/Tool usage docs:
 - avoid duplicating risks like, yes hoops could be vulnerable
 - explain other repos are available
 - improve memory instructions, it mostly created audit_notes.md
@@ -34,24 +31,23 @@ Prompt/Tool usage docs:
 - integrate this knowledge: https://github.com/KittyCAD/wiki/blob/fb9734660deb02b01f28bea291a40690289564d4/eng/full-stack-local-development.md?plain=1#L4
 - never attach readable documents as attachments, those typically go into notes
 
-TM:
+## TM:
 - Zoo will have one thread-model, or maybe ZDS as a whole. We need to make sure that the LLM picks the risks relevant for it.
 - improving thread model post audit
 - thread model editing in forked chats
 
-Tools:
+## Tools:
 - systematic creation of Semgrep rules
 - CodeQL available as tool
 - searching through security issues on github
-  - Deduplicating with existing findings in GH and the database
 - We want that we can publish code to private forks. Like the github advisory private fork.
 - use git blame
 
 
-Misc: 
+## Misc: 
 - pausable chats and web ui to continue them
 
-Publication/Export:
+## Publication/Export:
 - confirmation about the action that will be performed when releasing on github
 - allow closing findings by tracking a GitHub issue
 
