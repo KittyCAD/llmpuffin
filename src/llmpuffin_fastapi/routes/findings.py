@@ -24,6 +24,7 @@ from llmpuffin.models import (
     Finding,
     FindingAttachment,
     FindingComment,
+    FindingLocation,
     GitHubLink,
 )
 
@@ -184,6 +185,63 @@ async def _get_finding(db: AsyncSession, finding_id: int) -> Finding | None:
     ).scalar_one_or_none()
 
 
+async def _find_similar(
+    db: AsyncSession, finding: Finding, *, threshold: float = 0.3, limit: int = 10
+) -> list[tuple[Finding, float]]:
+    """Find other findings with at least one location whose file_path is
+    similar (trigram similarity) to any of this finding's locations.
+
+    The score combines file path similarity (70%) with line proximity (30%).
+    Line proximity is 1/(1 + abs(line_diff)/20), so lines within ~20 of each
+    other score high, and distant lines still get partial credit.
+
+    Returns (finding, best_score) pairs sorted by score descending.
+    """
+    if not finding.locations:
+        return []
+
+    # For each of our locations, build a combined score expression against
+    # each candidate location: path_sim * 0.7 + line_proximity * 0.3
+    score_exprs = []
+    for loc in finding.locations:
+        path_sim = func.similarity(FindingLocation.file_path, loc.file_path)
+        line_diff = func.abs(FindingLocation.start_line - loc.start_line)
+        line_prox = 1.0 / (1.0 + line_diff / 20.0)
+        score_exprs.append(path_sim * 0.7 + line_prox * 0.3)
+
+    best_score = score_exprs[0] if len(score_exprs) == 1 else func.greatest(*score_exprs)
+
+    # Subquery: candidate finding IDs with their best combined score.
+    candidates = (
+        select(
+            FindingLocation.finding_id,
+            func.max(best_score).label("score"),
+        )
+        .where(
+            FindingLocation.finding_id != finding.id,
+            best_score >= threshold,
+        )
+        .group_by(FindingLocation.finding_id)
+        .subquery()
+    )
+
+    rows = (
+        await db.execute(
+            select(Finding, candidates.c.score)
+            .join(candidates, Finding.id == candidates.c.finding_id)
+            .where(Finding.deleted == False)  # noqa: E712
+            .options(
+                selectinload(Finding.locations),
+                selectinload(Finding.audit_run).selectinload(AuditRun.profile),
+            )
+            .order_by(candidates.c.score.desc())
+            .limit(limit)
+        )
+    ).all()
+
+    return [(row[0], round(row[1], 2)) for row in rows]
+
+
 @router.get("/findings/{finding_id}/", response_class=HTMLResponse)
 async def finding_detail(
     finding_id: int,
@@ -210,6 +268,8 @@ async def finding_detail(
             )
         ).scalar_one_or_none()
 
+    similar_findings = await _find_similar(db, finding)
+
     return templates.TemplateResponse(
         request,
         "finding_detail.html",
@@ -222,6 +282,7 @@ async def finding_detail(
             "locations": finding.locations,
             "fork_session": fork_session,
             "fork_thread": fork_thread,
+            "similar_findings": similar_findings,
         },
     )
 

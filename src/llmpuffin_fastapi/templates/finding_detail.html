@@ -197,6 +197,28 @@
 </div>
 {% endif %}
 
+{# ─── Similar findings ─── #}
+{% if similar_findings %}
+<h2>Similar findings <span class="text-muted text-sm" style="font-weight: 400;">({{ similar_findings|length }})</span></h2>
+<div class="card" style="padding: 0;">
+<table>
+<thead>
+  <tr><th>Title</th><th>Severity</th><th>Run</th><th>Match</th></tr>
+</thead>
+<tbody>
+{% for sf, sim in similar_findings %}
+<tr hx-get="/findings/{{ sf.id }}/" hx-push-url="true" hx-target="body">
+  <td>{{ (sf.title or sf.rule_id) | truncatechars(60) }}</td>
+  <td><span class="badge sev-{{ sf.severity|lower }}">{{ sf.severity }}</span></td>
+  <td><a href="/runs/{{ sf.audit_run_id }}/">#{{ sf.audit_run_id }}</a></td>
+  <td class="text-xs text-muted">{{ (sim * 100) | int }}%</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+
 {# ─── Fork conversation ─── #}
 {% if finding.thread_id %}
 <h2>Fork conversation</h2>
