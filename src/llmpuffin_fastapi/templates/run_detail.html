@@ -50,6 +50,7 @@
 
 {# ─── Threads tab ─── #}
 {% if tab == 'threads' %}
+  <div x-data="{ modal: { open: false, title: '', action: '', placeholder: '', required: false, submitLabel: '' } }">
   <div class="card" style="padding: 0;">
   <table>
   <thead>
@@ -86,14 +87,16 @@
         <button type="submit" class="destructive">stop</button>
       </form>
       {% else %}
-      <form hx-post="/runs/{{ run.id }}/resume/{{ t.thread_id }}/" hx-disabled-elt="find button, find input" class="row gap-2" style="margin-bottom: 0.25rem;">
-        <input type="text" name="message" placeholder="optional message" style="max-width: 16rem;">
-        <button type="submit">resume</button>
-      </form>
-      <form hx-post="/runs/{{ run.id }}/fork/{{ t.thread_id }}/" hx-disabled-elt="find button, find input" class="row gap-2">
-        <input type="text" name="message" placeholder="message for fork" required style="max-width: 16rem;">
-        <button type="submit">fork</button>
-      </form>
+      <div class="row gap-2">
+        <button type="button"
+          @click="modal = { open: true, title: 'Resume', action: '/runs/{{ run.id }}/resume/{{ t.thread_id }}/', placeholder: 'Optional message...', required: false, submitLabel: 'Resume' }">
+          resume
+        </button>
+        <button type="button"
+          @click="modal = { open: true, title: 'Fork', action: '/runs/{{ run.id }}/fork/{{ t.thread_id }}/', placeholder: 'Message for fork...', required: true, submitLabel: 'Fork' }">
+          fork
+        </button>
+      </div>
       {% endif %}
     </td>
   </tr>
@@ -102,6 +105,8 @@
   {% endfor %}
   </tbody>
   </table>
+  </div>
+  {% include "_modal.html" %}
   </div>
 {% endif %}
 

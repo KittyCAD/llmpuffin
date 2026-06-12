@@ -1,0 +1,68 @@
+{# Reusable modal component. Uses Alpine x-data on the caller side.
+
+   Usage:
+     1. Include once inside an Alpine scope that defines `modal`:
+        {% include "_modal.html" %}
+
+     2. Open it by setting `modal` properties:
+        <div x-data="{ modal: { open: false, title: '', action: '', placeholder: '', required: false, submitLabel: '', showInput: true } }">
+          <button @click="modal = { open: true, title: 'Resume', action: '/runs/1/resume/abc/', placeholder: 'optional message', required: false, submitLabel: 'Resume', showInput: true }">
+            Resume
+          </button>
+          {% include "_modal.html" %}
+        </div>
+
+   Properties:
+     open         – whether the modal is visible
+     title        – modal header text
+     action       – POST URL
+     placeholder  – textarea placeholder
+     required     – whether the textarea is required
+     submitLabel  – submit button text (defaults to title)
+     showInput    – show the textarea (default true). Set false for confirmation-only modals.
+     description  – optional description text shown above the input
+#}
+<template x-teleport="body">
+  <div x-show="modal.open" x-cloak
+       class="modal-backdrop"
+       @keydown.escape.window="modal.open = false">
+    <div class="modal-panel" @click.outside="modal.open = false"
+         x-data="{ submitting: false }"
+         x-effect="if (modal.open) { submitting = false; $nextTick(() => { if ($refs.modalTextarea) $refs.modalTextarea.focus(); }); }">
+      <div class="modal-header">
+        <h3 class="modal-title" x-text="modal.title"></h3>
+        <button type="button" class="ghost modal-close" @click="modal.open = false" aria-label="Close">&times;</button>
+      </div>
+      <form @submit.prevent="
+              if (modal.showInput !== false && modal.required && $refs.modalTextarea && !$refs.modalTextarea.value.trim()) return;
+              submitting = true;
+              htmx.ajax('POST', modal.action, {
+                values: (modal.showInput !== false && $refs.modalTextarea) ? { message: $refs.modalTextarea.value } : {},
+                target: 'body',
+                swap: 'none'
+              }).then(() => {
+                modal.open = false;
+                if ($refs.modalTextarea) $refs.modalTextarea.value = '';
+              }).finally(() => { submitting = false; });
+            "
+            class="modal-body">
+        <p x-show="modal.description" x-cloak class="text-sm text-muted" style="margin: 0 0 0.75rem;" x-text="modal.description"></p>
+        <textarea
+          x-show="modal.showInput !== false"
+          x-cloak
+          name="message"
+          :placeholder="modal.placeholder || 'Send a message...'"
+          :required="modal.showInput !== false && modal.required"
+          rows="3"
+          x-ref="modalTextarea"
+          :disabled="submitting"
+          onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"
+        ></textarea>
+        <div class="modal-footer">
+          <button type="button" class="ghost" @click="modal.open = false">Cancel</button>
+          <button type="submit" class="primary" x-text="modal.submitLabel || modal.title" :disabled="submitting"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>

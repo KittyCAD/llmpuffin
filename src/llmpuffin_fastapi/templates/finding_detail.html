@@ -18,6 +18,7 @@
   </svg>
 {%- endmacro %}
 
+<div x-data="{ modal: { open: false, title: '', action: '', placeholder: '', required: false, submitLabel: '', showInput: true, description: '' } }">
 <div class="finding-layout">
 <div class="finding-main">
 
@@ -35,26 +36,22 @@
     </div>
   </div>
   {% if github_configured %}
-  <form hx-post="/findings/{{ finding.id }}/report/"
-        hx-confirm="Update the GitHub {{ gl.github_type }}?"
-        hx-disabled-elt="find button"
-        class="inline">
-    <button type="submit" class="btn ghost">Update</button>
-  </form>
+  <button type="button" class="btn ghost"
+    @click="modal = { open: true, title: 'Update GitHub {{ gl.github_type }}', action: '/findings/{{ finding.id }}/report/', showInput: false, submitLabel: 'Update', description: 'This will update the existing GitHub {{ gl.github_type }} with the current finding details.' }">
+    Update
+  </button>
   {% else %}
   <div class="text-xs text-muted">Configure GitHub integration to update the {{ gl.github_type }} from here.</div>
   {% endif %}
 </div>
 {% elif github_configured %}
-<form hx-post="/findings/{{ finding.id }}/report/"
-      hx-confirm="Report this finding to GitHub?"
-      hx-disabled-elt="find button"
-      class="inline mt-4">
-  <button type="submit" class="btn gh-btn">
+<div class="mt-4">
+  <button type="button" class="btn gh-btn"
+    @click="modal = { open: true, title: 'Report to GitHub', action: '/findings/{{ finding.id }}/report/', showInput: false, submitLabel: 'Report', description: 'This will create a GitHub issue or security advisory for this finding.' }">
     {{ gh_icon() }}
     <span>Report to GitHub</span>
   </button>
-</form>
+</div>
 {% else %}
 <div class="text-xs text-muted">Configure GitHub integration to update the issue/advisory from here.</div>
 {% endif %}
@@ -249,4 +246,6 @@
 </aside>
 
 </div>{# .finding-layout #}
+{% include "_modal.html" %}
+</div>{# x-data modal #}
 {% endblock %}
