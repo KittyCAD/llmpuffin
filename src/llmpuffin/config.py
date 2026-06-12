@@ -68,6 +68,8 @@ class GitHubConfig(BaseModel):
     app_id: str = "3779149"
     private_key: str = ""
     installation_id: str = ""
+    findings_repo: str = ""
+    """Private repo (owner/repo) to create issues in instead of advisories for public repos."""
 
     @property
     def configured(self) -> bool:

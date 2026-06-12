@@ -1,6 +1,7 @@
 ## Open questions
 - What about memories? - I think we store them in the db now, validate
 - How to do validation? make sure it does what it can
+- Should we introduce the term "projects" to bundle profiles and findings? Project -> profiles -> findings
 
 ## Future directions:
 - feature: validation of external findings
@@ -12,6 +13,7 @@
 
 
 ## Harness:
+- New mode: focus on commits of the past week, month
 - memory handling must be more conservative. If we give the memory to the next run, it is likely going to ignore bugs as they were deemed irrelevant
 - Deduplicating with existing findings in GH and the database
 - build docker images dynamically or via UI

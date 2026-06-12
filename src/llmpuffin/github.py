@@ -93,10 +93,17 @@ class CommitInfo:
 class GitHubClient:
     """GitHub App client that stores credentials and exposes API methods."""
 
-    def __init__(self, app_id: str, private_key: str, installation_id: str):
+    def __init__(
+        self,
+        app_id: str,
+        private_key: str,
+        installation_id: str,
+        findings_repo: str = "",
+    ):
         self.app_id = app_id
         self.private_key = private_key
         self.installation_id = installation_id
+        self.findings_repo = findings_repo
 
     @property
     def configured(self) -> bool:
@@ -276,4 +283,5 @@ def client_from_config() -> GitHubClient:
         app_id=gh.app_id,
         private_key=gh.private_key,
         installation_id=gh.installation_id,
+        findings_repo=gh.findings_repo,
     )

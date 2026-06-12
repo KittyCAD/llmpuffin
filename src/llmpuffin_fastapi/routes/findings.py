@@ -42,6 +42,17 @@ log = logging.getLogger("llmpuffin")
 router = APIRouter()
 
 
+def _repo_from_github_url(url: str) -> str | None:
+    """Extract 'owner/repo' from a GitHub URL like https://github.com/owner/repo/..."""
+    url = url.rstrip("/")
+    if "github.com/" not in url:
+        return None
+    parts = url.split("github.com/", 1)[1].split("/")
+    if len(parts) >= 2:
+        return f"{parts[0]}/{parts[1]}"
+    return None
+
+
 @router.get("/findings/", response_class=HTMLResponse)
 async def findings_list(
     request: Request,
@@ -257,8 +268,9 @@ async def finding_report_to_github(
 ):
     """Report a finding to GitHub.
 
-    Public repos  → draft security advisory (doesn't leak details).
-    Private repos → GitHub issue (visible only to collaborators).
+    Public repos + findings_repo configured → issue in the private issues repo.
+    Public repos (no findings_repo)         → draft security advisory.
+    Private repos                         → GitHub issue in the source repo.
     """
     finding = await _get_finding(db, finding_id)
     if finding is None:
@@ -306,10 +318,17 @@ async def finding_report_to_github(
     # If an issue/advisory already exists, update it.
     if finding.github_link:
         link = finding.github_link
+        # Derive the repo the issue/advisory lives in from the stored URL,
+        # since it may be in findings_repo rather than the source repo.
+        link_repo = _repo_from_github_url(link.github_url) or repo
+        # If the issue lives in a different repo (findings_repo), include source context.
+        update_body = body
+        if link_repo != repo:
+            update_body = f"**Source repo:** {audit_run.github_repo_url}\n\n{body}"
         if link.github_type == "issue":
             try:
                 gh.update_issue(
-                    repo=repo, issue_number=int(link.github_id), title=title, body=body
+                    repo=link_repo, issue_number=int(link.github_id), title=title, body=update_body
                 )
                 return toast(
                     request,
@@ -329,7 +348,7 @@ async def finding_report_to_github(
         else:
             try:
                 gh.update_advisory(
-                    repo=repo,
+                    repo=link_repo,
                     ghsa_id=link.github_id,
                     summary=title,
                     description=body,
@@ -351,7 +370,57 @@ async def finding_report_to_github(
                     redirect_to=redirect,
                 )
 
-    # Public repo → draft security advisory (safe, not publicly visible).
+    # Public repo + findings_repo configured → issue in the private issues repo.
+    if not is_private and gh.findings_repo:
+        findings_repo_info = gh.check_repo_access(gh.findings_repo)
+        if findings_repo_info is None:
+            return toast(
+                request,
+                "error",
+                f"Cannot access issues repo '{gh.findings_repo}' — is the GitHub App installed?",
+                redirect_to=redirect,
+            )
+        if not findings_repo_info.get("private", False):
+            return toast(
+                request,
+                "error",
+                f"Issues repo '{gh.findings_repo}' is not private — refusing to post findings to a public repo",
+                redirect_to=redirect,
+            )
+        try:
+            issue_url = gh.create_issue(
+                repo=gh.findings_repo,
+                title=title,
+                body=f"**Source repo:** {audit_run.github_repo_url}\n\n{body}",
+                labels=["vulnerability"],
+            )
+            issue_number = issue_url.rstrip("/").rsplit("/", 1)[-1]
+            db.add(
+                GitHubLink(
+                    finding_id=finding_id,
+                    github_type="issue",
+                    github_id=issue_number,
+                    github_url=issue_url,
+                )
+            )
+            await db.commit()
+            return toast(
+                request,
+                "success",
+                f"Issue created in {gh.findings_repo}",
+                redirect_to=redirect,
+                refresh=True,
+            )
+        except Exception as exc:
+            log.exception("Failed to create issue in findings_repo")
+            return toast(
+                request,
+                "error",
+                f"Failed to create issue: {exc}",
+                redirect_to=redirect,
+            )
+
+    # Public repo (no findings_repo) → draft security advisory (safe, not publicly visible).
     if not is_private:
         try:
             advisory_url = gh.create_draft_advisory(

@@ -10,6 +10,7 @@ allowed_hosts = ["*"]
 [github]
 app_id = "3779149"
 installation_id = "133980810"
+findings_repo = "KittyCAD/cvd-internal"
 
 [auth]
 enabled = true
