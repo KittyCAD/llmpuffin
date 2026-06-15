@@ -47,10 +47,6 @@ from langgraph.store.postgres.aio import AsyncPostgresStore
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
-from anthropic.types.beta import (
-    BetaWebFetchTool20250910Param,
-    BetaWebSearchTool20250305Param,
-)
 
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import DB
@@ -143,21 +139,29 @@ def _build_agent(
     )
     main_tools: list = [tools[name] for name in MAIN_AGENT_TOOLS]
 
-    # Anthropic server-side tools — executed by Claude, no local handler needed.
-    main_tools.append(
-        BetaWebSearchTool20250305Param(
-            name="web_search",
-            type="web_search_20250305",
-            max_uses=5,
+    provider = p.provider
+
+    # Anthropic server-side tools — only available with Anthropic models.
+    if provider == "anthropic":
+        from anthropic.types.beta import (
+            BetaWebFetchTool20250910Param,
+            BetaWebSearchTool20250305Param,
         )
-    )
-    main_tools.append(
-        BetaWebFetchTool20250910Param(
-            name="web_fetch",
-            type="web_fetch_20250910",
-            max_uses=5,
+
+        main_tools.append(
+            BetaWebSearchTool20250305Param(
+                name="web_search",
+                type="web_search_20250305",
+                max_uses=5,
+            )
         )
-    )
+        main_tools.append(
+            BetaWebFetchTool20250910Param(
+                name="web_fetch",
+                type="web_fetch_20250910",
+                max_uses=5,
+            )
+        )
 
     subagents = build_subagents(tools)
 
@@ -167,15 +171,26 @@ def _build_agent(
     if agent_cfg.interrupt_on:
         interrupt_on_config = {name: True for name in agent_cfg.interrupt_on}
 
-    # Build model — use ChatAnthropic directly when anthropic-specific config is set,
-    # otherwise pass the model string and let deepagents handle it.
+    # Build model — use provider-specific classes when provider config is set,
+    # otherwise pass the model string and let deepagents/init_chat_model handle it.
     model: str | object = agent_cfg.model
-    anthropic_cfg = p.anthropic
-    if anthropic_cfg.effort:
+
+    if provider == "anthropic" and p.anthropic.effort:
         from langchain_anthropic import ChatAnthropic
 
         model_name = agent_cfg.model.removeprefix("anthropic:")
-        model = ChatAnthropic(model=model_name, effort=anthropic_cfg.effort)
+        model = ChatAnthropic(model=model_name, effort=p.anthropic.effort)
+    elif provider == "openai":
+        openai_cfg = p.openai
+        kwargs: dict = {}
+        if openai_cfg.reasoning_effort:
+            kwargs["reasoning_effort"] = openai_cfg.reasoning_effort
+        if kwargs or not openai_cfg.use_responses_api:
+            from langchain_openai import ChatOpenAI
+
+            model_name = agent_cfg.model.removeprefix("openai:")
+            kwargs["use_responses_api"] = openai_cfg.use_responses_api
+            model = ChatOpenAI(model=model_name, **kwargs)
 
     return create_deep_agent(
         model=model,

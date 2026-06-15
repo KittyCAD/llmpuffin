@@ -36,6 +36,14 @@ Example profile.toml:
 
     [anthropic]
     # effort = "high"  # max, xhigh, high, medium, low
+
+    # Or use OpenAI:
+    # [agent]
+    # model = "openai:o3"
+    #
+    # [openai]
+    # reasoning_effort = "high"  # high, medium, low
+    # use_responses_api = true
 """
 
 from __future__ import annotations
@@ -163,6 +171,15 @@ class ProfileAnthropic(BaseModel):
     effort: Literal["max", "xhigh", "high", "medium", "low"] | None = None
 
 
+class ProfileOpenAI(BaseModel):
+    """OpenAI-specific configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reasoning_effort: Literal["high", "medium", "low"] | None = None
+    use_responses_api: bool = True
+
+
 class _AuditSection(BaseModel):
     """Validates the [audit] section of a profile TOML."""
 
@@ -182,6 +199,7 @@ class _ProfileToml(BaseModel):
     audit: _AuditSection
     agent: ProfileAgent = ProfileAgent()
     anthropic: ProfileAnthropic = ProfileAnthropic()
+    openai: ProfileOpenAI = ProfileOpenAI()
 
 
 class Profile(BaseModel):
@@ -193,6 +211,21 @@ class Profile(BaseModel):
     code_dir: str = "/src"
     agent: ProfileAgent = ProfileAgent()
     anthropic: ProfileAnthropic = ProfileAnthropic()
+    openai: ProfileOpenAI = ProfileOpenAI()
+
+    @property
+    def provider(self) -> str:
+        """Derive the provider from the model string (e.g. 'anthropic:...' → 'anthropic')."""
+        model = self.agent.model
+        if ":" in model:
+            return model.split(":", 1)[0]
+        # Infer from model name prefix
+        lower = model.lower()
+        if lower.startswith(("claude",)):
+            return "anthropic"
+        if lower.startswith(("gpt-", "o1", "o3", "o4")):
+            return "openai"
+        return "unknown"
 
     @classmethod
     def from_toml(cls, path: Path) -> Profile:
@@ -215,6 +248,7 @@ class Profile(BaseModel):
             code_dir=parsed.audit.code_dir,
             agent=parsed.agent,
             anthropic=parsed.anthropic,
+            openai=parsed.openai,
         )
 
 
