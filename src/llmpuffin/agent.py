@@ -319,7 +319,7 @@ async def _fork_audit_inner(
         with harness.start_environment() as execution:
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
-            await _save_container_id(new_tid, execution.container.id, db=db)
+            await _save_container_id(new_tid, execution.container_id, db=db)
             git_info = execution.capture_git_info()
             async with db.async_session() as s:
                 await s.execute(
@@ -454,7 +454,7 @@ async def _run_audit_inner(
             cwd = execution.exec(["pwd"], timeout=5)
             log.info("Container cwd: %s", cwd.stdout.strip())
             # Store container ID for future resumes
-            await _save_container_id(tid, execution.container.id, db=db)
+            await _save_container_id(tid, execution.container_id, db=db)
             git_info = execution.capture_git_info()
             async with db.async_session() as s:
                 await s.execute(

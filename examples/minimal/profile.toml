@@ -1,0 +1,9 @@
+[audit]
+name = "minimal"
+image = "ubuntu:latest"
+threat_model_dir = "examples/minimal/threat_model"
+code_dir = "/src"
+
+[agent]
+model = "anthropic:claude-sonnet-4-20250514"
+max_iterations = 40

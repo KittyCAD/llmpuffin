@@ -219,7 +219,6 @@ class Finding(Base):
         String(64), default="", server_default="", index=True
     )
     local_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    rule_id: Mapped[str] = mapped_column(String(128), index=True)
     title: Mapped[str] = mapped_column(String(512), default="", server_default="")
     severity: Mapped[str] = mapped_column(String(32))
     difficulty: Mapped[str] = mapped_column(String(32))
@@ -277,7 +276,7 @@ class Finding(Base):
     )
 
     def __str__(self) -> str:
-        return f"{self.rule_id}: {self.title or self.description[:80]}"
+        return self.title or self.description[:80]
 
 
 class FindingLocation(Base):

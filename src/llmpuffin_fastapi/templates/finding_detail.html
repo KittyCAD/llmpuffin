@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ finding.rule_id }}{% endblock %}
+{% block title %}{{ finding.title or "Finding #" ~ finding.local_id }}{% endblock %}
 {% block content %}
 <p><a href="/runs/{{ finding.audit_run_id }}/">← run #{{ finding.audit_run_id }}</a></p>
 
 <div class="row" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
-  <h1>{{ finding.rule_id }}{% if finding.title %}: {{ finding.title }}{% endif %}</h1>
+  <h1>{{ finding.title or "Finding #" ~ finding.local_id }}</h1>
   <div class="row gap-2">
     <span class="badge sev-{{ finding.severity|lower }}">{{ finding.severity }}</span>
     <span class="badge outline">{{ finding.difficulty }}</span>
@@ -208,7 +208,7 @@
 <tbody>
 {% for sf, sim in similar_findings %}
 <tr hx-get="/findings/{{ sf.id }}/" hx-push-url="true" hx-target="body">
-  <td>{{ (sf.title or sf.rule_id) | truncatechars(60) }}</td>
+  <td>{{ (sf.title or "(untitled)") | truncatechars(60) }}</td>
   <td><span class="badge sev-{{ sf.severity|lower }}">{{ sf.severity }}</span></td>
   <td><a href="/runs/{{ sf.audit_run_id }}/">#{{ sf.audit_run_id }}</a></td>
   <td class="text-xs text-muted">{{ (sim * 100) | int }}%</td>

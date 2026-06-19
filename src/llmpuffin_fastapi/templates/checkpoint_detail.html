@@ -45,7 +45,7 @@
                 <span class="text-xs text-muted">#{{ f.local_id }}</span>
                 {% if f.deleted %}<span class="badge outline text-xs">deleted</span>{% endif %}
               </div>
-              <div class="checkpoint-finding-title">{{ f.title or f.rule_id or "(untitled)" }}</div>
+              <div class="checkpoint-finding-title">{{ f.title or "(untitled)" }}</div>
               {% if is_highlighted %}
                 <div class="text-xs" style="margin-top: 0.25rem; color: hsl(var(--warning)); font-weight: 600;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"

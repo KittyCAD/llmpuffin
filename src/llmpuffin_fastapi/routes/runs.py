@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -317,4 +317,26 @@ async def run_stop(
         )
     return toast(
         request, "error", "Thread not found or not running", redirect_to=redirect
+    )
+
+
+@router.post("/runs/{run_id}/unlink/{thread_id}/")
+async def run_unlink_finding(
+    run_id: int,
+    thread_id: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Unlink a finding from its fork thread."""
+    redirect = f"/runs/{run_id}/?tab=threads"
+    result = await db.execute(
+        sa_update(Finding)
+        .where(Finding.fork_thread_id == thread_id, Finding.audit_run_id == run_id)
+        .values(fork_thread_id="")
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        return toast(request, "error", "No linked finding found", redirect_to=redirect)
+    return toast(
+        request, "success", "Finding unlinked", redirect_to=redirect, refresh=True
     )

@@ -63,7 +63,7 @@ class TestToolDocumentation:
         sig = inspect.signature(tools["report_finding"])
         params = set(sig.parameters.keys())
 
-        expected = {"scenario_id", "title", "severity", "difficulty",
+        expected = {"title", "severity", "difficulty",
                     "description", "exploit_scenario", "recommendations"}
         assert expected <= params, f"Missing params: {expected - params}"
 

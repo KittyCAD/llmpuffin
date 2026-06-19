@@ -10,7 +10,7 @@
 ## Sandboxing:
 - Prepare fat Docker image with many tools included
 - Allow amd64 execution of images
-
+- Restrict reading AGENT.md files as they might inject arbitrary instructions
 
 ## Harness:
 - New mode: focus on commits of the past week, month

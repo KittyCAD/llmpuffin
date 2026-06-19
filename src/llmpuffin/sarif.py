@@ -41,7 +41,7 @@ class SarifFinding:
     traceability from threat model → code → finding.
     """
 
-    rule_id: str
+    rule_id: str  # generated from local_id for SARIF compliance
     title: str
     description: str
     exploit_scenario: str
@@ -200,7 +200,7 @@ def export_sarif_for_run(audit_run_id: int, *, db: DB) -> str:
 
         report.add_finding(
             SarifFinding(
-                rule_id=f.rule_id,
+                rule_id=f"finding-{f.local_id}",
                 title=f.title,
                 description=f.description,
                 exploit_scenario=f.exploit_scenario,

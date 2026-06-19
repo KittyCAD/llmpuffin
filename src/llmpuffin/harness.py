@@ -49,8 +49,8 @@ import logging
 from collections.abc import Coroutine
 from dataclasses import dataclass
 
-from llmpuffin.audit_environment import AuditEnvironment, AuditExecution
-from llmpuffin.config import Profile
+from llmpuffin.audit_environment import AuditExecution
+from llmpuffin.config import Config, Profile
 from llmpuffin.threat_model import ThreatModel
 
 log = logging.getLogger("llmpuffin")
@@ -110,10 +110,22 @@ class Harness:
                 ...
         """
         p = self.config.profile
-        environment = AuditEnvironment(
-            image=p.image,
-            code_dir=p.code_dir,
-        )
+        cfg = Config.load()
+        if cfg.runtime == "nexecutor":
+            from llmpuffin.runtime_nexecutor import NexecutorEnvironment
+
+            environment = NexecutorEnvironment(
+                image=p.image,
+                code_dir=p.code_dir,
+                base_url=cfg.nexecutor_url,
+            )
+        else:
+            from llmpuffin.runtime_podman import PodmanEnvironment
+
+            environment = PodmanEnvironment(
+                image=p.image,
+                code_dir=p.code_dir,
+            )
         return environment.start(container_id=container_id)
 
     # ── Task management ──

@@ -13,7 +13,7 @@ from typing import Callable, Literal
 from langgraph.prebuilt.tool_node import ToolRuntime
 from pydantic import BaseModel, Field
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 
 from llmpuffin.backend import ContainerBackend
@@ -43,9 +43,6 @@ class LocationInput(BaseModel):
 class ReportFindingInput(BaseModel):
     """Input schema for report_finding."""
 
-    scenario_id: str = Field(
-        description="The threat scenario ID this finding relates to (e.g. 'sqli')"
-    )
     title: str = Field(
         description="Short one-line summary (e.g. 'SQL injection in login endpoint')"
     )
@@ -169,7 +166,6 @@ def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
 def _persist_finding_to_db(
     audit_run_id: int,
     thread_id: str,
-    rule_id_prefix: str,
     title: str,
     severity: str,
     difficulty: str,
@@ -180,23 +176,19 @@ def _persist_finding_to_db(
     tool_call_id: str = "",
     *,
     db: DB | None = None,
-) -> tuple[int, int, str]:
+) -> tuple[int, int]:
     """Allocate local_id in SQL and insert a finding in one transaction.
 
     Concurrent transactions are serialized by a per-audit-run advisory lock
     held until commit, so the MAX(local_id) read and the INSERT cannot
     interleave. No retry needed.
 
-    Returns (finding_pk_id, local_id, rule_id).
+    Returns (finding_pk_id, local_id).
     """
     next_local_id = (
         select(func.coalesce(func.max(Finding.local_id) + 1, 0))
         .where(Finding.audit_run_id == audit_run_id)
         .scalar_subquery()
-    )
-    rule_id_expr = func.concat(
-        rule_id_prefix + "-",
-        func.to_char(next_local_id, text("'FM000'")),
     )
 
     try:
@@ -208,7 +200,6 @@ def _persist_finding_to_db(
                 audit_run_id=audit_run_id,
                 thread_id=thread_id,
                 local_id=next_local_id,
-                rule_id=rule_id_expr,
                 title=title,
                 severity=severity,
                 difficulty=difficulty,
@@ -219,7 +210,7 @@ def _persist_finding_to_db(
             )
             s.add(finding)
             s.flush()
-            s.refresh(finding, attribute_names=["local_id", "rule_id"])
+            s.refresh(finding, attribute_names=["local_id"])
             for loc in locations or []:
                 s.add(
                     FindingLocation(
@@ -230,7 +221,7 @@ def _persist_finding_to_db(
                         head=loc.get("head", ""),
                     )
                 )
-            return finding.id, finding.local_id, finding.rule_id
+            return finding.id, finding.local_id
     except Exception as exc:
         log.exception("Failed to insert finding in audit_run %s: %s", audit_run_id, exc)
         raise RuntimeError(
@@ -325,7 +316,6 @@ Existing mitigations to verify:
 {mitigations}"""
 
     def report_finding(
-        scenario_id: str,
         title: str,
         severity: Literal["high", "medium", "low", "informational"],
         difficulty: Literal["high", "medium", "low"],
@@ -359,13 +349,9 @@ Existing mitigations to verify:
                     d["head"] = gi.head
                 loc_dicts.append(d)
 
-        # Persist first so we get the authoritative, race-safe local_id +
-        # rule_id from the DB. The SARIF entry uses the same values to keep
-        # the two stores consistent.
-        _, local_id, rule_id = _persist_finding_to_db(
+        _, local_id = _persist_finding_to_db(
             audit_run_id,
             rt_thread_id,
-            scenario_id,  # used as rule_id prefix
             title,
             severity,
             difficulty,
@@ -541,7 +527,7 @@ Existing mitigations to verify:
                 status = "validated" if f.validated else "unvalidated"
                 lines.append(
                     f"- {f.local_id}: {f.title or f.description[:60]} | "
-                    f"{f.severity}/{f.difficulty} | {f.rule_id} | {status}"
+                    f"{f.severity}/{f.difficulty} | {status}"
                 )
             return "\n".join(lines)
         except Exception as exc:

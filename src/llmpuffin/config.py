@@ -107,6 +107,8 @@ class LoggingConfig(BaseModel):
 class Config(BaseModel):
     """Global llmpuffin configuration."""
 
+    runtime: Literal["podman", "nexecutor"] = "podman"
+    nexecutor_url: str = "http://localhost:8080"
     postgres: PostgresConfig = PostgresConfig()
     web: WebConfig = WebConfig()
     github: GitHubConfig = GitHubConfig()

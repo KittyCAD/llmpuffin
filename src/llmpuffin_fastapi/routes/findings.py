@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import distinct, func, or_, select, update as sa_update
+from sqlalchemy import distinct, func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -98,12 +98,7 @@ async def findings_list(
         stmt = stmt.where(~Finding.github_link.has())
     if q:
         pattern = f"%{q}%"
-        stmt = stmt.where(
-            or_(
-                Finding.title.ilike(pattern),
-                Finding.rule_id.ilike(pattern),
-            )
-        )
+        stmt = stmt.where(Finding.title.ilike(pattern))
 
     findings = (await db.execute(stmt)).scalars().all()
 

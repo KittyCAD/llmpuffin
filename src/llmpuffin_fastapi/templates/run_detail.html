@@ -65,7 +65,12 @@
     <td class="text-xs">
       {% if t.thread_id in fork_findings %}
         {% set f = fork_findings[t.thread_id] %}
-        <a href="/findings/{{ f.id }}/">{{ f.title | truncatechars(40) }}</a>
+        <div class="row gap-2" style="align-items: center;">
+          <a href="/findings/{{ f.id }}/">{{ f.title | truncatechars(40) }}</a>
+          <form hx-post="/runs/{{ run.id }}/unlink/{{ t.thread_id }}/" hx-confirm="Unlink this finding from the thread?" hx-disabled-elt="find button" class="inline">
+            <button type="submit" class="ghost text-xs" style="padding: 0.125rem 0.375rem;">unlink</button>
+          </form>
+        </div>
       {% else %}
         <span class="text-muted">main</span>
       {% endif %}

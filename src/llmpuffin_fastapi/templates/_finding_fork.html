@@ -7,7 +7,7 @@
   {% include "_conversation.html" %}
 {% endwith %}
 {% else %}
-{# No fork yet — show composer to start one. Swaps this whole section on submit. #}
+{# No fork yet — show composer + placeholder. Swaps this whole section on submit. #}
 {{ composer(
   action="/findings/" ~ finding.id ~ "/fork/",
   placeholder="Optional instructions for the fork...",
@@ -15,5 +15,8 @@
   target="#fork-section",
   swap="outerHTML",
 ) }}
+<div class="text-muted text-sm" style="padding: 3rem 1rem; text-align: center;">
+  Responses will appear here once the agent starts running.
+</div>
 {% endif %}
 </div>
