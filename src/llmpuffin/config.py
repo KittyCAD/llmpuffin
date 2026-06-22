@@ -127,6 +127,14 @@ class Config(BaseModel):
 
     @classmethod
     def _from_dict(cls, data: dict) -> Config:
+        # Environment variable overrides (LLMPUFFIN_ prefix).
+        if v := os.environ.get("LLMPUFFIN_RUNTIME"):
+            data["runtime"] = v
+        if v := os.environ.get("LLMPUFFIN_NEXECUTOR_URL"):
+            data["nexecutor_url"] = v
+        pg = data.setdefault("postgres", {})
+        if v := os.environ.get("POSTGRES_URL"):
+            pg["url"] = v
         gh = data.get("github", {})
         # GH_LLMPUFFIN_KEY env var overrides the private_key field.
         if env_key := os.environ.get("GH_LLMPUFFIN_KEY", ""):

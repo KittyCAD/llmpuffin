@@ -27,7 +27,7 @@ log = logging.getLogger("llmpuffin")
 _SHUTDOWN_TIMEOUT = 30.0
 
 # Paths that don't require authentication.
-_PUBLIC_PATHS = frozenset({"/auth/login", "/auth/callback", "/auth/logout"})
+_PUBLIC_PATHS = frozenset({"/auth/login", "/auth/callback", "/auth/logout", "/healthz"})
 
 
 @asynccontextmanager
@@ -60,6 +60,10 @@ def create_app() -> FastAPI:
     app.include_router(findings.router)
     app.include_router(store_routes.router)
     app.include_router(about.router)
+
+    @app.get("/healthz")
+    async def healthz():
+        return {"status": "ok"}
 
     # Auth middleware checks session — must be added BEFORE SessionMiddleware
     # (Starlette middleware is LIFO: last added = outermost).
