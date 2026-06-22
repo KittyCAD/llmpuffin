@@ -112,7 +112,13 @@ class Harness:
         p = self.config.profile
         cfg = Config.load()
         if cfg.runtime == "nexecutor":
-            from llmpuffin.runtime_nexecutor import NexecutorRuntime
+            try:
+                from llmpuffin.runtime_nexecutor import NexecutorRuntime
+            except ImportError:
+                raise RuntimeError(
+                    "nexecutor-client is not installed. "
+                    "Install it with: pip install llmpuffin[nexecutor]"
+                ) from None
 
             return NexecutorRuntime.start(
                 image=p.image,
