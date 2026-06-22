@@ -112,21 +112,21 @@ class Harness:
         p = self.config.profile
         cfg = Config.load()
         if cfg.runtime == "nexecutor":
-            from llmpuffin.runtime_nexecutor import NexecutorEnvironment
+            from llmpuffin.runtime_nexecutor import NexecutorRuntime
 
-            environment = NexecutorEnvironment(
+            return NexecutorRuntime.start(
                 image=p.image,
                 code_dir=p.code_dir,
                 base_url=cfg.nexecutor_url,
+                container_id=container_id,
             )
         else:
             from llmpuffin.runtime_podman import PodmanEnvironment
 
-            environment = PodmanEnvironment(
+            return PodmanEnvironment(
                 image=p.image,
                 code_dir=p.code_dir,
-            )
-        return environment.start(container_id=container_id)
+            ).start(container_id=container_id)
 
     # ── Task management ──
 

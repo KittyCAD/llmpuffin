@@ -213,8 +213,9 @@ class ContainerBackend(SandboxBackendProtocol):
 
     def glob(self, pattern: str, path: str = "/") -> GlobResult:
         # Use find + fnmatch
+        search_path = path or "/"
         exit_code, stdout, _ = self._run(
-            ["find", path, "-type", "f", "-o", "-type", "d"],
+            ["find", search_path, "-type", "f", "-o", "-type", "d"],
         )
         if exit_code != 0:
             return GlobResult(matches=[])

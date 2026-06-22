@@ -171,7 +171,7 @@ class PodmanExecution:
             stderr=stderr,
         )
 
-    def capture_git_info(self) -> GitInfo:
+    def capture_git_info(self) -> GitInfo | None:
         return _capture_git_info(self)
 
     def stop(self, timeout: int = 30, remove: bool = False) -> None:

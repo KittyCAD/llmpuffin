@@ -17,6 +17,7 @@ from nexecutor_client.api.workloads import (
     stop_workload,
 )
 from nexecutor_client.models.create_workload_request import CreateWorkloadRequest
+from nexecutor_client.models.error import Error
 from nexecutor_client.models.exec_request import ExecRequest
 from nexecutor_client.models.exec_response import ExecResponse
 
@@ -26,28 +27,36 @@ log = logging.getLogger("llmpuffin")
 
 
 @dataclass
-class NexecutorEnvironment:
-    """A container image ready to be instantiated via nexecutor."""
+class NexecutorRuntime:
+    """AuditExecution backed by a nexecutor workload.
+
+    Handles creation, exec, and automatic re-creation if the workload
+    disappears (404 on exec).
+    """
 
     image: str
-    code_dir: str = "/src"
-    base_url: str = ""
+    _client: Client
+    _code_dir: str
+    _workload_id: str = ""
 
-    def start(self, container_id: str | None = None) -> NexecutorExecution:
-        """Create and start a workload, or resume an existing one."""
-        base_url = self.base_url
+    @classmethod
+    def start(
+        cls, image: str, code_dir: str, base_url: str, container_id: str | None = None
+    ) -> NexecutorRuntime:
         client = Client(base_url=base_url, timeout=3000.0)
+        rt = cls(image=image, _client=client, _code_dir=code_dir)
 
         if container_id:
             log.info("Resuming nexecutor workload %s", container_id[:12])
-            return NexecutorExecution(
-                _workload_id=container_id,
-                _client=client,
-                _code_dir=self.code_dir,
-            )
+            rt._workload_id = container_id
+        else:
+            rt._create_workload()
 
+        return rt
+
+    def _create_workload(self) -> None:
         resp = run_workload.sync(
-            client=client,
+            client=self._client,
             body=CreateWorkloadRequest(
                 image=self.image,
                 command=["sleep", "infinity"],
@@ -55,24 +64,8 @@ class NexecutorEnvironment:
         )
         if resp is None or not hasattr(resp, "id"):
             raise RuntimeError(f"Failed to create nexecutor workload: {resp}")
-
-        workload_id = resp.id
-        log.info("Created nexecutor workload %s", workload_id[:12])
-
-        return NexecutorExecution(
-            _workload_id=workload_id,
-            _client=client,
-            _code_dir=self.code_dir,
-        )
-
-
-@dataclass
-class NexecutorExecution:
-    """AuditExecution backed by a nexecutor workload."""
-
-    _workload_id: str
-    _client: Client
-    _code_dir: str
+        self._workload_id = resp.id
+        log.info("Created nexecutor workload %s", self._workload_id[:12])
 
     @property
     def container_id(self) -> str:
@@ -82,7 +75,7 @@ class NexecutorExecution:
     def code_dir(self) -> str:
         return self._code_dir
 
-    def __enter__(self) -> NexecutorExecution:
+    def __enter__(self) -> NexecutorRuntime:
         return self
 
     def __exit__(
@@ -94,17 +87,33 @@ class NexecutorExecution:
         self.stop()
 
     def exec(self, command: list[str], timeout: int = 300) -> ExecResult:
-        """Execute a command inside the workload."""
+        """Execute a command inside the workload.
+
+        If the workload has disappeared (404), re-creates it and retries once.
+        """
+        body = ExecRequest(
+            command=command,
+            workdir=self._code_dir,
+            timeout_secs=timeout,
+        )
+        log.debug("nexecutor exec: %s", body.to_dict())
         client = self._client.with_timeout(timeout=float(timeout + 10))
+
         resp = exec_command.sync(
             id=self._workload_id,
             client=client,
-            body=ExecRequest(
-                command=command,
-                workdir=self._code_dir,
-                timeout_secs=timeout,
-            ),
+            body=body,
         )
+
+        # Workload gone — recreate and retry once.
+        if isinstance(resp, Error) and "not found" in resp.message.lower():
+            log.warning("Workload %s gone, recreating", self._workload_id[:12])
+            self._create_workload()
+            resp = exec_command.sync(
+                id=self._workload_id,
+                client=client,
+                body=body,
+            )
 
         if resp is None or not isinstance(resp, ExecResponse):
             raise RuntimeError(f"Exec failed: {resp}")
@@ -121,7 +130,7 @@ class NexecutorExecution:
             stderr=resp.stderr,
         )
 
-    def capture_git_info(self) -> GitInfo:
+    def capture_git_info(self) -> GitInfo | None:
         return _capture_git_info(self)
 
     def stop(self, timeout: int = 30, remove: bool = False) -> None:
@@ -136,5 +145,3 @@ class NexecutorExecution:
                 destroy_workload.sync(id=self._workload_id, client=self._client)
             except Exception as exc:
                 log.debug("destroy failed: %s", exc)
-
-

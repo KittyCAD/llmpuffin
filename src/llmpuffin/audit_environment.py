@@ -71,8 +71,12 @@ class AuditExecution(Protocol):
         """Execute a command inside the container."""
         ...
 
-    def capture_git_info(self) -> GitInfo:
-        """Extract git remote URL and HEAD commit from the container."""
+    def capture_git_info(self) -> GitInfo | None:
+        """Extract git remote URL and HEAD commit from the container.
+
+        Returns None if git info cannot be determined (e.g. no git repo,
+        non-GitHub remote, etc.).
+        """
         ...
 
     def stop(self, timeout: int = 30, remove: bool = False) -> None:
@@ -83,31 +87,37 @@ class AuditExecution(Protocol):
     def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
 
 
-def _capture_git_info(execution: AuditExecution) -> GitInfo:
-    """Shared implementation: extract git info by running commands."""
+def _capture_git_info(execution: AuditExecution) -> GitInfo | None:
+    """Shared implementation: extract git info by running commands.
+
+    Returns None on any failure instead of raising.
+    """
     from urllib.parse import urlparse
 
-    remote_result = execution.exec(["git", "remote", "get-url", "origin"], timeout=5)
-    if not remote_result.ok:
-        raise RuntimeError(
-            f"Failed to get git remote: {remote_result.stderr.strip()}"
+    try:
+        remote_result = execution.exec(["git", "remote", "get-url", "origin"], timeout=5)
+        if not remote_result.ok:
+            log.info("No git remote: %s", remote_result.stderr.strip())
+            return None
+        git_remote = remote_result.stdout.strip()
+
+        parsed = urlparse(git_remote)
+        if parsed.scheme != "https" or parsed.hostname != "github.com":
+            log.info("Non-GitHub remote, skipping git info: %s", git_remote)
+            return None
+
+        repo_path = parsed.path.removesuffix(".git").strip("/")
+
+        head_result = execution.exec(["git", "rev-parse", "HEAD"], timeout=5)
+        if not head_result.ok:
+            log.info("Failed to get git HEAD: %s", head_result.stderr.strip())
+            return None
+
+        return GitInfo(
+            repo_path=repo_path,
+            repo_url=f"https://github.com/{repo_path}",
+            commit=head_result.stdout.strip(),
         )
-    git_remote = remote_result.stdout.strip()
-
-    parsed = urlparse(git_remote)
-    if parsed.scheme != "https" or parsed.hostname != "github.com":
-        raise RuntimeError(
-            f"Git remote must be a https://github.com URL, got: {git_remote}"
-        )
-
-    repo_path = parsed.path.removesuffix(".git").strip("/")
-
-    head_result = execution.exec(["git", "rev-parse", "HEAD"], timeout=5)
-    if not head_result.ok:
-        raise RuntimeError(f"Failed to get git HEAD: {head_result.stderr.strip()}")
-
-    return GitInfo(
-        repo_path=repo_path,
-        repo_url=f"https://github.com/{repo_path}",
-        commit=head_result.stdout.strip(),
-    )
+    except Exception as exc:
+        log.info("Could not capture git info: %s", exc)
+        return None

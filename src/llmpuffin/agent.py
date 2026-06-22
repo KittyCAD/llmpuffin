@@ -321,17 +321,21 @@ async def _fork_audit_inner(
             log.info("Container cwd: %s", cwd.stdout.strip())
             await _save_container_id(new_tid, execution.container_id, db=db)
             git_info = execution.capture_git_info()
-            async with db.async_session() as s:
-                await s.execute(
-                    update(AuditRun)
-                    .where(AuditRun.id == audit_run_id)
-                    .values(
-                        github_repo_url=git_info.repo_url, git_commit=git_info.commit
+            repo_path = ""
+            if git_info:
+                async with db.async_session() as s:
+                    await s.execute(
+                        update(AuditRun)
+                        .where(AuditRun.id == audit_run_id)
+                        .values(
+                            github_repo_url=git_info.repo_url, git_commit=git_info.commit
+                        )
                     )
-                )
-                await s.commit()
-            log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
-            repo_path = git_info.repo_path
+                    await s.commit()
+                log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
+                repo_path = git_info.repo_path
+            else:
+                log.info("No git info available, continuing without")
 
             agent = _build_agent(
                 config,
@@ -456,17 +460,21 @@ async def _run_audit_inner(
             # Store container ID for future resumes
             await _save_container_id(tid, execution.container_id, db=db)
             git_info = execution.capture_git_info()
-            async with db.async_session() as s:
-                await s.execute(
-                    update(AuditRun)
-                    .where(AuditRun.id == audit_run_id)
-                    .values(
-                        github_repo_url=git_info.repo_url, git_commit=git_info.commit
+            repo_path = ""
+            if git_info:
+                async with db.async_session() as s:
+                    await s.execute(
+                        update(AuditRun)
+                        .where(AuditRun.id == audit_run_id)
+                        .values(
+                            github_repo_url=git_info.repo_url, git_commit=git_info.commit
+                        )
                     )
-                )
-                await s.commit()
-            log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
-            repo_path = git_info.repo_path
+                    await s.commit()
+                log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
+                repo_path = git_info.repo_path
+            else:
+                log.info("No git info available, continuing without")
 
             agent = _build_agent(
                 config,
