@@ -68,7 +68,7 @@ class ContainerBackend(SandboxBackendProtocol):
         timeout: int | None = None,
     ) -> ExecuteResponse:
         exit_code, stdout, stderr = self._run(
-            ["sh", "-c", command],
+            ["/bin/sh", "-c", command],
             timeout=timeout,
         )
 
