@@ -107,8 +107,11 @@ class LoggingConfig(BaseModel):
 class Config(BaseModel):
     """Global llmpuffin configuration."""
 
-    runtime: Literal["podman", "nexecutor"] = "podman"
+    runtime: Literal["podman", "nexecutor", "microvm"] = "podman"
     nexecutor_url: str = "http://localhost:8080"
+    microvm_image_arn: str = ""
+    microvm_region: str = "us-east-1"
+    microvm_profile: str = ""
     postgres: PostgresConfig = PostgresConfig()
     web: WebConfig = WebConfig()
     github: GitHubConfig = GitHubConfig()
@@ -132,6 +135,12 @@ class Config(BaseModel):
             data["runtime"] = v
         if v := os.environ.get("LLMPUFFIN_NEXECUTOR_URL"):
             data["nexecutor_url"] = v
+        if v := os.environ.get("LLMPUFFIN_MICROVM_IMAGE_ARN"):
+            data["microvm_image_arn"] = v
+        if v := os.environ.get("LLMPUFFIN_MICROVM_REGION"):
+            data["microvm_region"] = v
+        if v := os.environ.get("LLMPUFFIN_MICROVM_PROFILE"):
+            data["microvm_profile"] = v
         pg = data.setdefault("postgres", {})
         if v := os.environ.get("POSTGRES_URL"):
             pg["url"] = v

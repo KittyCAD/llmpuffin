@@ -126,6 +126,28 @@ class Harness:
                 base_url=cfg.nexecutor_url,
                 container_id=container_id,
             )
+        elif cfg.runtime == "microvm":
+            try:
+                from llmpuffin.runtime_microvm import MicrovmRuntime
+            except ImportError:
+                raise RuntimeError(
+                    "boto3 is not installed. "
+                    "Install it with: pip install boto3"
+                ) from None
+
+            if not cfg.microvm_image_arn:
+                raise RuntimeError(
+                    "microvm_image_arn is not configured. "
+                    "Set it in llmpuffin.toml or LLMPUFFIN_MICROVM_IMAGE_ARN."
+                )
+
+            return MicrovmRuntime.start(
+                image_arn=cfg.microvm_image_arn,
+                code_dir=p.code_dir,
+                region=cfg.microvm_region,
+                profile=cfg.microvm_profile,
+                container_id=container_id,
+            )
         else:
             from llmpuffin.runtime_podman import PodmanEnvironment
 
