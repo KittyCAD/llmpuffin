@@ -19,6 +19,17 @@ Example llmpuffin.toml:
     [logging]
     level = "INFO"
 
+Environment variables override TOML values. Convention:
+
+    LLMPUFFIN__<FIELD>                  — top-level fields
+    LLMPUFFIN__<SECTION>__<FIELD>       — nested fields
+
+Examples:
+    LLMPUFFIN__RUNTIME=nexecutor
+    LLMPUFFIN__POSTGRES__URL=postgresql://...
+    LLMPUFFIN__WEB__PORT=9000
+    LLMPUFFIN__GITHUB__PRIVATE_KEY=...
+
 Example profile.toml:
 
     [audit]
@@ -54,6 +65,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from llmpuffin.system_prompt import DEFAULT_SYSTEM_PROMPT
 
@@ -104,8 +116,30 @@ class LoggingConfig(BaseModel):
     level: str = "INFO"
 
 
-class Config(BaseModel):
-    """Global llmpuffin configuration."""
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Merge override into base, recursing into nested dicts."""
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
+class Config(BaseSettings):
+    """Global llmpuffin configuration.
+
+    Values are loaded in order (later wins):
+      1. Field defaults
+      2. llmpuffin.toml (if present)
+      3. Environment variables (LLMPUFFIN__* prefix)
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLMPUFFIN__",
+        env_nested_delimiter="__",
+    )
 
     runtime: Literal["podman", "nexecutor", "microvm"] = "podman"
     nexecutor_url: str = "http://localhost:8080"
@@ -130,31 +164,21 @@ class Config(BaseModel):
 
     @classmethod
     def _from_dict(cls, data: dict) -> Config:
-        # Environment variable overrides (LLMPUFFIN_ prefix).
-        if v := os.environ.get("LLMPUFFIN_RUNTIME"):
-            data["runtime"] = v
-        if v := os.environ.get("LLMPUFFIN_NEXECUTOR_URL"):
-            data["nexecutor_url"] = v
-        if v := os.environ.get("LLMPUFFIN_MICROVM_IMAGE_ARN"):
-            data["microvm_image_arn"] = v
-        if v := os.environ.get("LLMPUFFIN_MICROVM_REGION"):
-            data["microvm_region"] = v
-        if v := os.environ.get("LLMPUFFIN_MICROVM_PROFILE"):
-            data["microvm_profile"] = v
-        pg = data.setdefault("postgres", {})
-        if v := os.environ.get("POSTGRES_URL"):
-            pg["url"] = v
+        # TOML ints → str for GitHub config fields.
         gh = data.get("github", {})
-        # GH_LLMPUFFIN_KEY env var overrides the private_key field.
-        if env_key := os.environ.get("GH_LLMPUFFIN_KEY", ""):
-            gh["private_key"] = env_key
-        # app_id and installation_id come from TOML as ints, store as str.
-        if "app_id" in gh:
-            gh["app_id"] = str(gh["app_id"])
-        if "installation_id" in gh:
-            gh["installation_id"] = str(gh["installation_id"])
-        data["github"] = gh
-        return cls.model_validate(data)
+        for k in ("app_id", "installation_id"):
+            if k in gh:
+                gh[k] = str(gh[k])
+        if gh:
+            data["github"] = gh
+
+        # Build from env vars first (via pydantic-settings), then layer
+        # TOML underneath as defaults. Env vars win over TOML.
+        env_config = cls()
+        env_overrides = env_config.model_dump(exclude_defaults=True)
+        # Deep-merge: TOML is the base, env overrides on top.
+        merged = _deep_merge(data, env_overrides)
+        return cls.model_validate(merged)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
@@ -164,6 +188,7 @@ class Config(BaseModel):
         default = Path("llmpuffin.toml")
         if default.exists():
             return cls.from_toml(default)
+        # No TOML file — construct from defaults + env vars only.
         return cls()
 
 
