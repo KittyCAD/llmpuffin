@@ -1,8 +1,9 @@
+runtime = "podman"
 #runtime = "nexecutor"
-runtime = "microvm"
-microvm_image_arn = "arn:aws:lambda:us-east-1:211360623297:microvm-image:llmpuffin1"
-microvm_region = "us-east-1"
-microvm_profile = "admin-executor"
+#runtime = "microvm"
+#microvm_image_arn = "arn:aws:lambda:us-east-1:211360623297:microvm-image:llmpuffin1"
+#microvm_region = "us-east-1"
+#microvm_profile = "admin-executor"
 
 [postgres]
 url = "postgresql://localhost:5434/llmpuffin"

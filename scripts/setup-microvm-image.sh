@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-alias aws='uv run --extra microvm aws'
+aws() { uv run --extra microvm aws "$@"; }
 
 export AWS_PROFILE="${AWS_PROFILE:-admin-executor}"
 
@@ -115,8 +115,6 @@ BUILD_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 
 echo "==> Preparing MicroVM build artifact..."
 
-cp "$REPO_ROOT/src/llmpuffin/microvm_agent/server.py" "$WORK_DIR/agent.py"
-
 cat > "$WORK_DIR/Dockerfile" <<'DOCKERFILE'
 FROM python:3.13-slim-bookworm
 
@@ -126,19 +124,21 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /src
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-WORKDIR /app
-COPY agent.py .
+RUN uv pip install --system \
+    "llmpuffin @ git+https://github.com/KittyCAD/llmpuffin.git"
+
+RUN mkdir -p /src
 
 EXPOSE 8080
 
-CMD ["python", "agent.py"]
+CMD ["llmpuffin-microvm-agent"]
 DOCKERFILE
 
 echo "==> Packaging and uploading to s3://$S3_BUCKET/$IMAGE_NAME.zip..."
 cd "$WORK_DIR"
-zip -r artifact.zip Dockerfile agent.py
+zip -r artifact.zip Dockerfile
 aws s3 cp artifact.zip "s3://$S3_BUCKET/$IMAGE_NAME.zip"
 
 # ── 4. MicroVM image ──

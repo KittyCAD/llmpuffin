@@ -13,6 +13,12 @@
 - Restrict reading AGENT.md files as they might inject arbitrary instructions
 
 ## Harness:
+- Multi-step flows:
+  1) create script to setup env. Run and optionally persist it for future "cold start runs"
+  2) Audit and report findings.
+  3) Validation of all.
+  4) Create Semgrep and CodeQL rules for avoiding findings in the future.
+  5) Report on gaps of this audit run.
 - New mode: focus on commits of the past week, month
 - memory handling must be more conservative. If we give the memory to the next run, it is likely going to ignore bugs as they were deemed irrelevant
 - Deduplicating with existing findings in GH and the database

@@ -138,7 +138,8 @@ class GitHubClient:
         try:
             r = self._gh().get_repo(repo)
             return {"private": r.private, "full_name": r.full_name}
-        except Exception:
+        except Exception as e:
+            log.warning("Unable to access GitHub repo '%s': %s", repo, e, exc_info=True)
             return None
 
     def create_issue(
