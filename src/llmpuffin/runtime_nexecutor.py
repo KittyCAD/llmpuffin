@@ -27,7 +27,7 @@ from llmpuffin.audit_environment import ExecResult, GitInfo, _capture_git_info
 log = logging.getLogger("llmpuffin")
 
 # AWS Pod Identity / EKS OIDC projected token path.
-_POD_IDENTITY_TOKEN_FILE = "/var/run/secrets/pods.eks.amazonaws.com/serviceaccount/token"
+_POD_IDENTITY_TOKEN_FILE = "/var/run/secrets/pods.eks.amazonaws.com/serviceaccount/eks-pod-identity-token"
 
 
 def _resolve_token(token: str) -> str:
@@ -44,6 +44,13 @@ def _resolve_token(token: str) -> str:
     if os.path.isfile(token):
         return open(token).read().strip()
     return token
+
+
+def _make_client(base_url: str, token: str) -> AuthenticatedClient:
+    """Create an AuthenticatedClient, skipping the auth header if token is empty."""
+    if token:
+        return AuthenticatedClient(base_url=base_url, token=token, timeout=3000.0)
+    return AuthenticatedClient(base_url=base_url, token="", prefix="", timeout=3000.0)
 
 
 @dataclass
@@ -66,7 +73,7 @@ class NexecutorRuntime:
         cls, image: str, code_dir: str, base_url: str, token: str = "", container_id: str | None = None
     ) -> NexecutorRuntime:
         resolved_token = _resolve_token(token)
-        client = AuthenticatedClient(base_url=base_url, token=resolved_token, timeout=3000.0)
+        client = _make_client(base_url, resolved_token)
         rt = cls(image=image, _client=client, _code_dir=code_dir, _token_source=token, _base_url=base_url)
 
         if container_id:
@@ -101,7 +108,7 @@ class NexecutorRuntime:
     def _refresh_client(self) -> None:
         """Re-read the token (handles rotation) and rebuild the client."""
         token = _resolve_token(self._token_source)
-        self._client = AuthenticatedClient(base_url=self._base_url, token=token, timeout=3000.0)
+        self._client = _make_client(self._base_url, token)
         log.info("Refreshed nexecutor auth token")
 
     def __enter__(self) -> NexecutorRuntime:
