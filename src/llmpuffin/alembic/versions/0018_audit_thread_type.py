@@ -19,7 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.drop_column("audit_thread", "thread_type")
+    op.execute("""
+        ALTER TABLE audit_thread DROP COLUMN IF EXISTS thread_type
+    """)
 
 
 def downgrade() -> None:
