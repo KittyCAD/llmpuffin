@@ -41,12 +41,22 @@ def _to_sync_url(url: str) -> str:
     return urlunparse(parts._replace(scheme=scheme))
 
 
-def _ssl_connect_args(ca_cert: str) -> dict:
-    """Build SSL connect_args from a PEM-encoded CA cert string."""
+def _async_ssl_args(ca_cert: str) -> dict:
+    """Build connect_args for asyncpg (uses ssl.SSLContext)."""
     import ssl
 
     ctx = ssl.create_default_context(cadata=ca_cert)
     return {"ssl": ctx}
+
+
+def _sync_ssl_args(ca_cert: str) -> dict:
+    """Build connect_args for psycopg (uses sslmode + sslrootcert)."""
+    import tempfile
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".pem", delete=False)
+    tmp.write(ca_cert.encode())
+    tmp.close()
+    return {"sslmode": "verify-full", "sslrootcert": tmp.name}
 
 
 class DB:
@@ -59,19 +69,19 @@ class DB:
         self.url = postgres.url
         self._ca_cert = postgres.ca_cert
 
-        ssl_args = _ssl_connect_args(self._ca_cert) if self._ca_cert else {}
-
         async_url = _to_async_url(self.url)
+        async_connect = _async_ssl_args(self._ca_cert) if self._ca_cert else {}
         self._async_engine: AsyncEngine = create_async_engine(
-            async_url, pool_pre_ping=True, **({"connect_args": ssl_args} if ssl_args else {})
+            async_url, pool_pre_ping=True, **({"connect_args": async_connect} if async_connect else {})
         )
         self._async_sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self._async_engine, expire_on_commit=False, class_=AsyncSession
         )
 
         sync_url = _to_sync_url(self.url)
+        sync_connect = _sync_ssl_args(self._ca_cert) if self._ca_cert else {}
         self._sync_engine = create_engine(
-            sync_url, pool_pre_ping=True, **({"connect_args": ssl_args} if ssl_args else {})
+            sync_url, pool_pre_ping=True, **({"connect_args": sync_connect} if sync_connect else {})
         )
         self._sync_sessionmaker: sessionmaker[Session] = sessionmaker(
             self._sync_engine, expire_on_commit=False, class_=Session
