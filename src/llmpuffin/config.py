@@ -145,6 +145,7 @@ class Config(BaseSettings):
 
     runtime: Literal["podman", "nexecutor", "microvm"] = "podman"
     nexecutor_url: str = "http://localhost:8080"
+    nexecutor_token: str = ""
     microvm_image_arn: str = ""
     microvm_region: str = "us-east-1"
     microvm_profile: str = ""

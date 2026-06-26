@@ -6,10 +6,11 @@ Talks to a remote nexecutor service via the nexecutor-client SDK.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from types import TracebackType
 
-from nexecutor_client import Client
+from nexecutor_client import AuthenticatedClient
 from nexecutor_client.api.workloads import (
     destroy_workload,
     exec_command,
@@ -25,6 +26,25 @@ from llmpuffin.audit_environment import ExecResult, GitInfo, _capture_git_info
 
 log = logging.getLogger("llmpuffin")
 
+# AWS Pod Identity / EKS OIDC projected token path.
+_POD_IDENTITY_TOKEN_FILE = "/var/run/secrets/pods.eks.amazonaws.com/serviceaccount/token"
+
+
+def _resolve_token(token: str) -> str:
+    """Resolve a token value.
+
+    If token is a file path that exists, read the token from it.
+    If empty, try the standard AWS Pod Identity token file.
+    Otherwise return the token string as-is.
+    """
+    if not token:
+        if os.path.isfile(_POD_IDENTITY_TOKEN_FILE):
+            return open(_POD_IDENTITY_TOKEN_FILE).read().strip()
+        return ""
+    if os.path.isfile(token):
+        return open(token).read().strip()
+    return token
+
 
 @dataclass
 class NexecutorRuntime:
@@ -35,16 +55,19 @@ class NexecutorRuntime:
     """
 
     image: str
-    _client: Client
+    _client: AuthenticatedClient
     _code_dir: str
     _workload_id: str = ""
+    _token_source: str = ""
+    _base_url: str = ""
 
     @classmethod
     def start(
-        cls, image: str, code_dir: str, base_url: str, container_id: str | None = None
+        cls, image: str, code_dir: str, base_url: str, token: str = "", container_id: str | None = None
     ) -> NexecutorRuntime:
-        client = Client(base_url=base_url, timeout=3000.0)
-        rt = cls(image=image, _client=client, _code_dir=code_dir)
+        resolved_token = _resolve_token(token)
+        client = AuthenticatedClient(base_url=base_url, token=resolved_token, timeout=3000.0)
+        rt = cls(image=image, _client=client, _code_dir=code_dir, _token_source=token, _base_url=base_url)
 
         if container_id:
             log.info("Resuming nexecutor workload %s", container_id[:12])
@@ -74,6 +97,12 @@ class NexecutorRuntime:
     @property
     def code_dir(self) -> str:
         return self._code_dir
+
+    def _refresh_client(self) -> None:
+        """Re-read the token (handles rotation) and rebuild the client."""
+        token = _resolve_token(self._token_source)
+        self._client = AuthenticatedClient(base_url=self._base_url, token=token, timeout=3000.0)
+        log.info("Refreshed nexecutor auth token")
 
     def __enter__(self) -> NexecutorRuntime:
         return self
@@ -105,15 +134,18 @@ class NexecutorRuntime:
             body=body,
         )
 
+        # Auth error — refresh token and retry once.
+        if isinstance(resp, Error) and ("unauthorized" in resp.message.lower() or "forbidden" in resp.message.lower()):
+            log.warning("Auth error, refreshing token and retrying")
+            self._refresh_client()
+            client = self._client.with_timeout(timeout=float(timeout + 10))
+            resp = exec_command.sync(id=self._workload_id, client=client, body=body)
+
         # Workload gone — recreate and retry once.
         if isinstance(resp, Error) and "not found" in resp.message.lower():
             log.warning("Workload %s gone, recreating", self._workload_id[:12])
             self._create_workload()
-            resp = exec_command.sync(
-                id=self._workload_id,
-                client=client,
-                body=body,
-            )
+            resp = exec_command.sync(id=self._workload_id, client=client, body=body)
 
         if resp is None or not isinstance(resp, ExecResponse):
             raise RuntimeError(f"Exec failed: {resp}")

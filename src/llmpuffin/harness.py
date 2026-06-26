@@ -129,6 +129,7 @@ class Harness:
                 image=p.image,
                 code_dir=p.code_dir,
                 base_url=cfg.nexecutor_url,
+                token=cfg.nexecutor_token,
                 container_id=container_id,
             )
         elif cfg.runtime == "microvm":
