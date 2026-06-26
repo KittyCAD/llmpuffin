@@ -23,11 +23,10 @@ from llmpuffin.models import AuditThread
 log = logging.getLogger("llmpuffin")
 
 
-def _get_postgres_url() -> str:
-    """Get the canonical postgresql:// URL from env or config."""
-    if url := os.environ.get("LLMPUFFIN_POSTGRES"):
-        return url
-    return Config.load().postgres.url
+def _get_postgres_config() -> tuple[str, str]:
+    """Get (url, ca_cert) from config."""
+    cfg = Config.load().postgres
+    return cfg.url, cfg.ca_cert
 
 
 def _to_async_url(url: str) -> str:
@@ -48,25 +47,43 @@ def _to_sync_url(url: str) -> str:
     return urlunparse(parts._replace(scheme=scheme))
 
 
+def _ssl_connect_args(ca_cert: str) -> dict:
+    """Build SSL connect_args from a PEM-encoded CA cert string."""
+    import ssl
+
+    ctx = ssl.create_default_context(cadata=ca_cert)
+    return {"ssl": ctx}
+
+
 class DB:
     """Database connection holder — owns both async and sync engines/sessions.
 
     Create once at startup, then pass through the app to wherever it's needed.
     """
 
-    def __init__(self, postgres_url: str | None = None) -> None:
-        self.url = postgres_url or _get_postgres_url()
+    def __init__(self, postgres_url: str | None = None, ca_cert: str | None = None) -> None:
+        if postgres_url is None:
+            url, default_ca = _get_postgres_config()
+            self.url = url
+            self._ca_cert = ca_cert or default_ca
+        else:
+            self.url = postgres_url
+            self._ca_cert = ca_cert or ""
+
+        ssl_args = _ssl_connect_args(self._ca_cert) if self._ca_cert else {}
 
         async_url = _to_async_url(self.url)
         self._async_engine: AsyncEngine = create_async_engine(
-            async_url, pool_pre_ping=True
+            async_url, pool_pre_ping=True, **({"connect_args": ssl_args} if ssl_args else {})
         )
         self._async_sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self._async_engine, expire_on_commit=False, class_=AsyncSession
         )
 
         sync_url = _to_sync_url(self.url)
-        self._sync_engine = create_engine(sync_url, pool_pre_ping=True)
+        self._sync_engine = create_engine(
+            sync_url, pool_pre_ping=True, **({"connect_args": ssl_args} if ssl_args else {})
+        )
         self._sync_sessionmaker: sessionmaker[Session] = sessionmaker(
             self._sync_engine, expire_on_commit=False, class_=Session
         )

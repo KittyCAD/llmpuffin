@@ -75,6 +75,8 @@ from llmpuffin.system_prompt import DEFAULT_SYSTEM_PROMPT
 
 class PostgresConfig(BaseModel):
     url: str = "postgresql://localhost:5434/llmpuffin"
+    ca_cert: str = ""
+    """PEM-encoded CA certificate for TLS connections."""
 
 
 class WebConfig(BaseModel):
