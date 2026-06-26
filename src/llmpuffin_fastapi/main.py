@@ -32,11 +32,11 @@ _PUBLIC_PATHS = frozenset({"/auth/login", "/auth/callback", "/auth/logout", "/he
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    config = Config.load()
+    config: Config = app.state.config
     setup_logging(level=config.logging.level)
     log.info("llmpuffin starting on port %s", config.web.port)
     await app.state.db.setup()
-    set_github_client(client_from_config())
+    set_github_client(client_from_config(config.github))
 
     try:
         yield
@@ -47,11 +47,12 @@ async def _lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     config = Config.load()
     app = FastAPI(title="llmpuffin", lifespan=_lifespan)
-    app.state.db = DB()
+    app.state.config = config
+    app.state.db = DB(config.postgres)
     # Shared harness for task tracking. Individual audits create their own
     # Harness instances for config/threat-model, but this one owns the
     # task registry so we can cancel running audits from the web UI.
-    app.state.harness = Harness()
+    app.state.harness = Harness(global_config=config)
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(runs.router)

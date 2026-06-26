@@ -18,6 +18,8 @@ from urllib.request import Request, urlopen
 
 from github import Auth, Github, GithubIntegration
 
+from llmpuffin.config import GitHubConfig
+
 log = logging.getLogger("llmpuffin")
 
 
@@ -275,11 +277,8 @@ class GitHubClient:
         )
 
 
-def client_from_config() -> GitHubClient:
-    """Create a GitHubClient from llmpuffin.toml config."""
-    from llmpuffin.config import Config
-
-    gh = Config.load().github
+def client_from_config(gh: GitHubConfig) -> GitHubClient:
+    """Create a GitHubClient from a GitHubConfig."""
     return GitHubClient(
         app_id=gh.app_id,
         private_key=gh.private_key,

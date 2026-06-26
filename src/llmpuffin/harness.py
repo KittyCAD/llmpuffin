@@ -86,8 +86,11 @@ class Harness:
       and ``cancel_all`` for graceful shutdown.
     """
 
-    def __init__(self, config: HarnessConfig | None = None) -> None:
+    def __init__(
+        self, config: HarnessConfig | None = None, *, global_config: Config | None = None
+    ) -> None:
         self.config = config
+        self.global_config = global_config
         self.threat_model: ThreatModel | None = None
         self._tasks: dict[str, asyncio.Task] = {}
 
@@ -110,7 +113,9 @@ class Harness:
                 ...
         """
         p = self.config.profile
-        cfg = Config.load()
+        if not self.global_config:
+            raise RuntimeError("global_config is required to start an environment")
+        cfg = self.global_config
         if cfg.runtime == "nexecutor":
             try:
                 from llmpuffin.runtime_nexecutor import NexecutorRuntime

@@ -49,6 +49,7 @@ from sqlalchemy.orm import selectinload
 
 
 from llmpuffin.backend import ContainerBackend
+from llmpuffin.config import Config
 from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
@@ -269,11 +270,12 @@ async def fork_audit(
     user_message: str,
     *,
     db: DB,
+    global_config: Config,
     thread_id: str | None = None,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
     """Fork from an existing thread and continue with a new message."""
-    harness = Harness(config)
+    harness = Harness(config, global_config=global_config)
     threat_model = harness.load_threat_model()
 
     async with (
@@ -398,12 +400,13 @@ async def run_audit(
     config: HarnessConfig,
     *,
     db: DB,
+    global_config: Config,
     thread_id: str | None = None,
     user_message: str | None = None,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
     """Run a full security audit driven by the threat model."""
-    harness = Harness(config)
+    harness = Harness(config, global_config=global_config)
     threat_model = harness.load_threat_model()
 
     log.info(

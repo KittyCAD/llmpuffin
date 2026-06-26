@@ -17,16 +17,10 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, sessionmaker
 
-from llmpuffin.config import Config
+from llmpuffin.config import PostgresConfig
 from llmpuffin.models import AuditThread
 
 log = logging.getLogger("llmpuffin")
-
-
-def _get_postgres_config() -> tuple[str, str]:
-    """Get (url, ca_cert) from config."""
-    cfg = Config.load().postgres
-    return cfg.url, cfg.ca_cert
 
 
 def _to_async_url(url: str) -> str:
@@ -61,14 +55,9 @@ class DB:
     Create once at startup, then pass through the app to wherever it's needed.
     """
 
-    def __init__(self, postgres_url: str | None = None, ca_cert: str | None = None) -> None:
-        if postgres_url is None:
-            url, default_ca = _get_postgres_config()
-            self.url = url
-            self._ca_cert = ca_cert or default_ca
-        else:
-            self.url = postgres_url
-            self._ca_cert = ca_cert or ""
+    def __init__(self, postgres: PostgresConfig) -> None:
+        self.url = postgres.url
+        self._ca_cert = postgres.ca_cert
 
         ssl_args = _ssl_connect_args(self._ca_cert) if self._ca_cert else {}
 

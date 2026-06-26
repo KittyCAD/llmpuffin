@@ -190,7 +190,6 @@ class Config(BaseSettings):
         default = Path("llmpuffin.toml")
         if default.exists():
             return cls.from_toml(default)
-        # No TOML file — construct from defaults + env vars only.
         return cls()
 
 

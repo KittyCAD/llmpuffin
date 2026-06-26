@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -17,16 +16,16 @@ from llmpuffin.log import setup as setup_logging
 from llmpuffin.sarif import export_sarif_for_run
 
 
-async def _async_abort_orphaned():
-    db = DB()
+async def _async_abort_orphaned(config: Config):
+    db = DB(config.postgres)
     await db.setup()
     await db.abort_orphaned_threads()
 
 
-async def _async_main(harness_config: HarnessConfig, *, db: DB):
+async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
     await db.setup()
-    gh = client_from_config()
-    return await run_audit(harness_config, db=db, github_client=gh)
+    gh = client_from_config(config.github)
+    return await run_audit(harness_config, db=db, global_config=config, github_client=gh)
 
 
 def main() -> None:
@@ -74,11 +73,10 @@ def main() -> None:
     args = parser.parse_args()
 
     global_config = Config.load(args.config)
-    os.environ.setdefault("LLMPUFFIN_POSTGRES", global_config.postgres.url)
     setup_logging(verbose=args.verbose, level=global_config.logging.level)
 
     if args.command == "abort-orphaned-threads":
-        asyncio.run(_async_abort_orphaned())
+        asyncio.run(_async_abort_orphaned(global_config))
         return
 
     # --- run ---
@@ -90,8 +88,8 @@ def main() -> None:
         profile_toml=profile_text,
     )
 
-    db = DB()
-    result = asyncio.run(_async_main(harness_config, db=db))
+    db = DB(global_config.postgres)
+    result = asyncio.run(_async_main(harness_config, config=global_config, db=db))
     n = result.finding_count
     print(f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} recorded.")
 

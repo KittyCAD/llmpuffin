@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit
-from llmpuffin.config import Profile
+from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import (
@@ -31,6 +31,7 @@ from llmpuffin.models import (
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
+    get_config,
     get_db,
     get_github_client,
     get_harness,
@@ -554,6 +555,7 @@ async def finding_fork(
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     harness: Annotated[Harness, Depends(get_harness)],
+    config: Annotated[Config, Depends(get_config)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -622,6 +624,7 @@ async def finding_fork(
                 source_thread_id=source_thread_id,
                 user_message=user_message,
                 db=llmpuffin_db,
+                global_config=config,
                 thread_id=new_thread_id,
                 github_client=gh,
             )

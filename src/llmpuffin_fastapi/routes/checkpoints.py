@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import run_audit
-from llmpuffin.config import Profile
+from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
@@ -21,6 +21,7 @@ from llmpuffin.checkpoint import get_session, list_sessions
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
+    get_config,
     get_db,
     get_github_client,
     get_harness,
@@ -128,6 +129,7 @@ async def checkpoint_resume(
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     harness: Annotated[Harness, Depends(get_harness)],
+    config: Annotated[Config, Depends(get_config)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
@@ -156,6 +158,7 @@ async def checkpoint_resume(
         run_audit(
             harness_config,
             db=llmpuffin_db,
+            global_config=config,
             thread_id=thread_id,
             user_message=msg,
             github_client=gh,

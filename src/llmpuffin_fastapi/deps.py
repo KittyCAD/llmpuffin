@@ -11,6 +11,7 @@ from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from llmpuffin.config import Config
 from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness
@@ -63,6 +64,11 @@ def toast(
     return RedirectResponse(
         f"{redirect_to}{sep}{level}={quote(message)}", status_code=303
     )
+
+
+def get_config(request: Request) -> Config:
+    """FastAPI dependency returning the Config instance from app state."""
+    return request.app.state.config
 
 
 def get_harness(request: Request) -> Harness:
