@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Creates everything needed for a Lambda MicroVM audit environment:
-#   1. S3 bucket for build artifacts
-#   2. IAM build role with the required trust policy and permissions
-#   3. The MicroVM image itself
+# Creates a Lambda MicroVM image.
+#
+# Shared resources (S3 bucket, IAM role) are created once and reused
+# across all images. Each invocation uploads a new build artifact and
+# creates a new MicroVM image.
 #
 # Usage:
 #   ./scripts/setup-microvm-image.sh [--skip-image] <image-name> [region]
@@ -27,17 +28,18 @@ fi
 IMAGE_NAME="${1:?Usage: $0 [--skip-image] <image-name> [region]}"
 REGION="${2:-us-east-1}"
 
-S3_BUCKET="llmpuffin-microvm-artifacts-$(aws sts get-caller-identity --query Account --output text)"
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+S3_BUCKET="llmpuffin-microvm-artifacts-${ACCOUNT_ID}"
 ROLE_NAME="llmpuffin-microvm-build"
+BUILD_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
+IMAGE_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:microvm-image:${IMAGE_NAME}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-# ── 1. S3 bucket ──
+# ── 1. Ensure shared S3 bucket ──
 
 echo "==> Ensuring S3 bucket: $S3_BUCKET"
 if aws s3api head-bucket --bucket "$S3_BUCKET" 2>/dev/null; then
@@ -50,7 +52,7 @@ else
     echo "    Created bucket"
 fi
 
-# ── 2. IAM build role ──
+# ── 2. Ensure shared IAM build role ──
 
 echo "==> Ensuring IAM role: $ROLE_NAME"
 
@@ -109,8 +111,6 @@ aws iam put-role-policy \
     --policy-document "$PERMISSIONS_POLICY"
 echo "    Permissions policy updated"
 
-BUILD_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
-
 # ── 3. Build artifact ──
 
 echo "==> Preparing MicroVM build artifact..."
@@ -126,24 +126,22 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+RUN mkdir -p /src
+
 RUN uv pip install --system \
     "llmpuffin @ git+https://github.com/KittyCAD/llmpuffin.git"
-
-RUN mkdir -p /src
 
 EXPOSE 8080
 
 CMD ["llmpuffin-microvm-agent"]
 DOCKERFILE
 
-echo "==> Packaging and uploading to s3://$S3_BUCKET/$IMAGE_NAME.zip..."
+echo "==> Uploading to s3://$S3_BUCKET/$IMAGE_NAME.zip..."
 cd "$WORK_DIR"
 zip -r artifact.zip Dockerfile
 aws s3 cp artifact.zip "s3://$S3_BUCKET/$IMAGE_NAME.zip"
 
 # ── 4. MicroVM image ──
-
-IMAGE_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:microvm-image:${IMAGE_NAME}"
 
 if [ "$SKIP_IMAGE" = true ]; then
     echo "==> Skipping image creation (--skip-image)"
