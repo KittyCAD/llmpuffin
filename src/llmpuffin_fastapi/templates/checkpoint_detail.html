@@ -39,11 +39,11 @@
         {% for f in findings %}
           <li>
             {% set is_highlighted = f.id in highlighted_finding_ids %}
-            <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if is_highlighted %}highlighted{% elif f.thread_id == session.thread_id %}current{% endif %}" {% if f.deleted %}style="opacity: 0.5;"{% endif %}>
+            <a href="/findings/{{ f.id }}/" class="checkpoint-finding {% if is_highlighted %}highlighted{% elif f.thread_id == session.thread_id %}current{% endif %}" {% if f.status in ("deleted", "invalid") %}style="opacity: 0.5;"{% endif %}>
               <div class="row gap-2" style="align-items: center; min-width: 0;">
                 <span class="badge sev-{{ f.severity|lower }} text-xs"><span class="dot"></span>{{ f.severity or "?" }}</span>
                 <span class="text-xs text-muted">#{{ f.local_id }}</span>
-                {% if f.deleted %}<span class="badge outline text-xs">deleted</span>{% endif %}
+                {% if f.status != "open" %}<span class="badge outline text-xs">{{ f.status }}</span>{% endif %}
               </div>
               <div class="checkpoint-finding-title">{{ f.title or "(untitled)" }}</div>
               {% if is_highlighted %}

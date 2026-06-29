@@ -12,7 +12,7 @@ from llmpuffin.config import Profile
 
 PROFILES_DIR = Path("profiles")
 SHARED_DOCKERFILE = PROFILES_DIR / "Dockerfile"
-SHARED_IMAGE = "llmpuffin-workspace"
+SHARED_IMAGE = "llmpuffin-workspace-smudge"
 
 
 def _build_image(image: str, dockerfile: Path) -> None:

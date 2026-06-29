@@ -165,7 +165,7 @@ def export_sarif_for_run(audit_run_id: int, *, db: DB) -> str:
                 )
                 .where(
                     Finding.audit_run_id == audit_run_id,
-                    Finding.deleted.is_(False),
+                    Finding.status != "deleted",
                 )
                 .order_by(Finding.local_id)
             )

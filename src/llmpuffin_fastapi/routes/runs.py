@@ -61,7 +61,7 @@ async def runs_list(request: Request, db: Annotated[AsyncSession, Depends(get_db
         (
             await db.execute(
                 select(Finding.audit_run_id, func.count(Finding.id))
-                .where(Finding.deleted.is_(False))
+                .where(Finding.status != "deleted")
                 .group_by(Finding.audit_run_id)
             )
         ).all()

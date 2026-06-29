@@ -66,6 +66,12 @@ def toast(
     )
 
 
+def get_base_url(request: Request) -> str:
+    """Return the configured external base URL, or empty string if not set."""
+    config: Config = request.app.state.config
+    return config.web.base_url.rstrip("/")
+
+
 def get_config(request: Request) -> Config:
     """FastAPI dependency returning the Config instance from app state."""
     return request.app.state.config

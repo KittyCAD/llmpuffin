@@ -17,7 +17,7 @@ This is non-negotiable. The script (`src/llmpuffin_dev/check.py`) does, in order
 3. `pytest tests/ -q` — runs the test suite.
 4. `compileall src/` — byte-compiles every module to catch syntax/import errors.
 
-The command exits non-zero if any step fails. **Do not declare work done until `llmpuffin-check` passes cleanly.**
+The command exits non-zero if any step fails. **Do not declare work done until `llmpuffin-check` passes cleanly.** Run it at the end of every action, not just at the end of the overall task.
 
 ## Project layout
 

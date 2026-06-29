@@ -420,7 +420,11 @@ Existing mitigations to verify:
         return f"Finding {finding_id} updated"
 
     def delete_finding(finding_id: int) -> str:
-        """Delete a finding. Use if a finding was reported in error or could not be validated.
+        """Delete a finding. Use if a finding should never have been reported
+        (e.g. reported in error, duplicate, or completely wrong).
+
+        This is different from marking a finding as invalid — invalid means
+        it was a legitimate reporting attempt that turned out to be wrong.
 
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
@@ -429,7 +433,6 @@ Existing mitigations to verify:
         if not db_finding:
             return f"Finding {finding_id} not found"
 
-        # Soft-delete in DB
         try:
             with db.sync_session() as s:
                 s.execute(
@@ -438,11 +441,11 @@ Existing mitigations to verify:
                         Finding.id == db_finding.id,
                         Finding.audit_run_id == audit_run_id,
                     )
-                    .values(deleted=True)
+                    .values(status="deleted")
                 )
                 s.commit()
         except Exception as exc:
-            log.warning("Failed to soft-delete finding in DB: %s", exc)
+            log.warning("Failed to delete finding in DB: %s", exc)
 
         return f"Finding {finding_id} deleted"
 
@@ -519,15 +522,16 @@ Existing mitigations to verify:
                 return "No findings reported yet."
             lines = []
             for f in findings:
-                if f.deleted:
+                if f.status == "deleted":
                     lines.append(
                         f"- {f.local_id}: (deleted) {f.title or f.description[:60]}"
                     )
                     continue
-                status = "validated" if f.validated else "unvalidated"
+                validated = "validated" if f.validated else "unvalidated"
+                status_label = f" [{f.status}]" if f.status != "open" else ""
                 lines.append(
                     f"- {f.local_id}: {f.title or f.description[:60]} | "
-                    f"{f.severity}/{f.difficulty} | {status}"
+                    f"{f.severity}/{f.difficulty} | {validated}{status_label}"
                 )
             return "\n".join(lines)
         except Exception as exc:

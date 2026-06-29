@@ -229,8 +229,8 @@ class Finding(Base):
         Boolean, default=False, server_default="false"
     )
     validated_evidence: Mapped[str] = mapped_column(Text, default="", server_default="")
-    deleted: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
+    status: Mapped[str] = mapped_column(
+        String(32), default="open", server_default="open"
     )
     fork_thread_id: Mapped[str] = mapped_column(
         String(64), default="", server_default="", index=True
@@ -272,6 +272,10 @@ class Finding(Base):
         CheckConstraint(
             "severity IN ('low', 'medium', 'high', 'informational')",
             name="ck_finding_severity",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'fixed', 'invalid', 'deleted')",
+            name="ck_finding_status",
         ),
     )
 

@@ -8,6 +8,9 @@
   <div class="row gap-2">
     <span class="badge sev-{{ finding.severity|lower }}">{{ finding.severity }}</span>
     <span class="badge outline">{{ finding.difficulty }}</span>
+    {% if finding.status == "fixed" %}<span class="badge success">fixed</span>
+    {% elif finding.status == "invalid" %}<span class="badge warning">invalid</span>
+    {% elif finding.status == "deleted" %}<span class="badge outline">deleted</span>{% endif %}
     {% if finding.validated %}<span class="badge success"><span class="dot"></span>validated</span>{% endif %}
   </div>
 </div>
@@ -95,6 +98,7 @@
 <table>
 <tr><th>Title</th><td>{{ editable_text("title", finding.title) }}</td></tr>
 <tr><th>Thread</th><td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/{% if finding.tool_call_id %}#tc-{{ finding.tool_call_id }}{% endif %}" class="mono text-xs">{{ finding.thread_id }}</a>{% else %}—{% endif %}</td></tr>
+<tr><th>Status</th><td>{{ editable_select("status", finding.status, ["open", "fixed", "invalid", "deleted"]) }}</td></tr>
 <tr><th>Severity</th><td>{{ editable_select("severity", finding.severity, ["high", "medium", "low", "informational"]) }}</td></tr>
 <tr><th>Difficulty</th><td>{{ editable_select("difficulty", finding.difficulty, ["high", "medium", "low"]) }}</td></tr>
 <tr><th>Validated</th><td>{{ editable_select("validated", "yes" if finding.validated else "no", ["yes", "no"]) }}</td></tr>

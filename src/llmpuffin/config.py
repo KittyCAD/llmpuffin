@@ -15,6 +15,7 @@ Example llmpuffin.toml:
     debug = true
     secret_key = "change-me-in-prod"
     allowed_hosts = ["*"]
+    base_url = "https://llmpuffin.example.com"
 
     [logging]
     level = "INFO"
@@ -83,6 +84,8 @@ class WebConfig(BaseModel):
     debug: bool = True
     secret_key: str = "dev-insecure-key-change-in-prod"
     allowed_hosts: list[str] = ["*"]
+    base_url: str = ""
+    """External base URL (e.g. https://llmpuffin.example.com). Used for backlinks in GitHub issues."""
 
 
 class GitHubConfig(BaseModel):

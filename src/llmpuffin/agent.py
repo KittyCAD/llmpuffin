@@ -28,7 +28,6 @@ The agentic loop — LangGraph orchestrator for security audits.
 from __future__ import annotations
 
 import asyncio
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -284,116 +283,115 @@ async def fork_audit(
     ):
         await checkpointer.setup()
         await store.setup()
-        return await _fork_audit_inner(
+        return await _execute_pipeline(
             harness,
             config,
             threat_model,
-            source_thread_id,
-            user_message,
             checkpointer,
             store,
             db=db,
             thread_id=thread_id,
+            source_thread_id=source_thread_id,
+            user_message=user_message,
+            is_fork=True,
             github_client=github_client,
         )
 
 
-async def _fork_audit_inner(
+async def _execute_pipeline(
     harness: Harness,
     config: HarnessConfig,
     threat_model: ThreatModel,
-    source_thread_id: str,
-    user_message: str,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
     *,
     db: DB,
     thread_id: str | None = None,
+    source_thread_id: str | None = None,
+    user_message: str | None = None,
+    existing_container_id: str | None = None,
+    is_fork: bool = False,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
-    p = config.profile
-    new_tid = thread_id or uuid.uuid4().hex[:12]
-    log.info("Forking thread %s → %s", source_thread_id, new_tid)
+    """Execute the audit pipeline as a Hamilton DAG.
 
-    audit_run_id = await _create_audit_run(config, new_tid, source_thread_id, db=db)
+    Shared implementation for both fresh audits and forks.
+    """
+    from hamilton import async_driver
 
+    import llmpuffin.harness_steps as steps_module
+
+    dr = await async_driver.Builder().with_modules(steps_module).build()
+
+    inputs: dict[str, Any] = {
+        "harness": harness,
+        "config": config,
+        "threat_model": threat_model,
+        "checkpointer": checkpointer,
+        "store": store,
+        "db": db,
+        "thread_id": thread_id,
+        "source_thread_id": source_thread_id,
+        "user_message": user_message,
+        "existing_container_id": existing_container_id,
+        "is_fork": is_fork,
+        "github_client": github_client,
+    }
+
+    env_ctx = None
     try:
-        with harness.start_environment() as execution:
-            cwd = execution.exec(["pwd"], timeout=5)
-            log.info("Container cwd: %s", cwd.stdout.strip())
-            await _save_container_id(new_tid, execution.container_id, db=db)
-            git_info = execution.capture_git_info()
-            repo_path = ""
-            if git_info:
-                async with db.async_session() as s:
-                    await s.execute(
-                        update(AuditRun)
-                        .where(AuditRun.id == audit_run_id)
-                        .values(
-                            github_repo_url=git_info.repo_url,
-                            git_commit=git_info.commit,
-                        )
-                    )
-                    await s.commit()
-                log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
-                repo_path = git_info.repo_path
-            else:
-                log.info("No git info available, continuing without")
-
-            agent = _build_agent(
-                config,
-                execution,
-                threat_model,
-                audit_run_id,
-                repo_path,
-                checkpointer,
-                store,
-                db=db,
-                github_client=github_client,
-            )
-
-            source_config: dict[str, Any] = {
-                "configurable": {"thread_id": source_thread_id},
-            }
-            state = await agent.aget_state(source_config)
-
-            messages = state.values.get("messages", [])
-            messages.append({"role": "user", "content": user_message})
-
-            run_config: dict = {
-                "recursion_limit": p.agent.max_iterations,
-                "configurable": {"thread_id": new_tid},
-            }
-
-            status, error = await _stream_agent(
-                agent, messages, run_config, p.agent.max_iterations
-            )
+        result = await dr.execute(
+            ["agent_run_result", "resolved_thread", "environment_context"],
+            inputs=inputs,
+        )
+        env_ctx = result["environment_context"]
+        run_result = result["agent_run_result"]
+        resolved = result["resolved_thread"]
+        status = run_result.status
+        error = run_result.error
     except (KeyboardInterrupt, asyncio.CancelledError):
+        # Try to extract the resolved thread for finalization
+        try:
+            partial = await dr.execute(["resolved_thread"], inputs=inputs)
+            resolved = partial["resolved_thread"]
+        except Exception:
+            raise
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
-        await _finalize_audit_run(new_tid, status, error, db=db)
+        await _finalize_audit_run(resolved.tid, status, error, db=db)
         raise
     except Exception as exc:
+        # Try to extract the resolved thread for finalization
+        try:
+            partial = await dr.execute(["resolved_thread"], inputs=inputs)
+            resolved = partial["resolved_thread"]
+        except Exception:
+            raise exc from None
         status = AuditStatus.ERROR
         error = str(exc)
         log.exception("Audit failed: %s", error)
+    finally:
+        if env_ctx is not None:
+            env_ctx.execution.__exit__(None, None, None)
 
-    finding_count = await _count_findings(audit_run_id, db=db)
+    finding_count = await _count_findings(resolved.audit_run_id, db=db)
+    label = "Fork" if is_fork else "Audit"
     log.info(
-        "Fork complete. %d finding(s) recorded. Status: %s",
+        "%s complete. %d finding(s) recorded. Status: %s",
+        label,
         finding_count,
         status,
     )
 
-    await _finalize_audit_run(new_tid, status, error, db=db)
+    await _finalize_audit_run(resolved.tid, status, error, db=db)
 
     return AuditResult(
         finding_count=finding_count,
         status=status,
         error=error,
-        thread_id=new_tid,
-        audit_run_id=audit_run_id,
+        thread_id=resolved.tid,
+        audit_run_id=resolved.audit_run_id,
     )
 
 
@@ -447,95 +445,27 @@ async def _run_audit_inner(
     db: DB,
     github_client: GitHubClient | None = None,
 ) -> AuditResult:
-    p = config.profile
-    tid = thread_id or uuid.uuid4().hex[:12]
-    log.info("Session thread_id: %s", tid)
-
-    audit_run_id = await _create_audit_run(config, tid, thread_id, db=db)
-
-    # Look up existing container for resume
-    existing_container_id = await _get_container_id(tid, db=db)
-    log.info("Starting container: %s (code_dir: %s)", p.image, p.code_dir)
-
-    try:
-        with harness.start_environment(container_id=existing_container_id) as execution:
-            cwd = execution.exec(["pwd"], timeout=5)
-            log.info("Container cwd: %s", cwd.stdout.strip())
-            # Store container ID for future resumes
-            await _save_container_id(tid, execution.container_id, db=db)
-            git_info = execution.capture_git_info()
-            repo_path = ""
-            if git_info:
-                async with db.async_session() as s:
-                    await s.execute(
-                        update(AuditRun)
-                        .where(AuditRun.id == audit_run_id)
-                        .values(
-                            github_repo_url=git_info.repo_url,
-                            git_commit=git_info.commit,
-                        )
-                    )
-                    await s.commit()
-                log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
-                repo_path = git_info.repo_path
-            else:
-                log.info("No git info available, continuing without")
-
-            agent = _build_agent(
-                config,
-                execution,
-                threat_model,
-                audit_run_id,
-                repo_path,
-                checkpointer,
-                store,
-                db=db,
-                github_client=github_client,
-            )
-
-            run_config: dict = {"recursion_limit": p.agent.max_iterations}
-            if tid:
-                run_config["configurable"] = {"thread_id": tid}
-
-            if user_message:
-                msg = user_message
-            elif thread_id:
-                msg = "Continue the security audit."
-            else:
-                msg = "Begin the security audit."
-
-            status, error = await _stream_agent(
-                agent,
-                [{"role": "user", "content": msg}],
-                run_config,
-                p.agent.max_iterations,
-            )
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        status = AuditStatus.ABORTED
-        error = "Aborted by user"
-        log.warning("Aborted: %s", error)
-        await _finalize_audit_run(tid, status, error, db=db)
-        raise
-    except Exception as exc:
-        status = AuditStatus.ERROR
-        error = str(exc)
-        log.exception("Audit failed: %s", error)
-
-    finding_count = await _count_findings(audit_run_id, db=db)
+    existing_container_id = (
+        await _get_container_id(thread_id, db=db) if thread_id else None
+    )
     log.info(
-        "Audit finished. %d finding(s) recorded. Status: %s",
-        finding_count,
-        status,
+        "Starting container: %s (code_dir: %s)",
+        config.profile.image,
+        config.profile.code_dir,
     )
 
-    await _finalize_audit_run(tid, status, error, db=db)
-
-    return AuditResult(
-        finding_count=finding_count,
-        status=status,
-        error=error,
-        thread_id=tid,
-        audit_run_id=audit_run_id,
+    return await _execute_pipeline(
+        harness,
+        config,
+        threat_model,
+        checkpointer,
+        store,
+        db=db,
+        thread_id=thread_id,
+        user_message=user_message,
+        existing_container_id=existing_container_id,
+        is_fork=False,
+        github_client=github_client,
     )
 
 
@@ -547,7 +477,7 @@ async def _count_findings(audit_run_id: int, *, db: DB) -> int:
         result = await s.execute(
             select(func.count())
             .select_from(Finding)
-            .where(Finding.audit_run_id == audit_run_id, Finding.deleted.is_(False))
+            .where(Finding.audit_run_id == audit_run_id, Finding.status != "deleted")
         )
         return result.scalar_one()
 

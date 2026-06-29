@@ -28,6 +28,7 @@
 {% macro qs(overrides) -%}
 ?{% for k, v in {
     'profile_id': f.profile_id | default(''),
+    'status':     f.status | default(''),
     'severity':   f.severity | default(''),
     'difficulty': f.difficulty | default(''),
     'validated':  f.validated | default(''),
@@ -59,6 +60,13 @@
 <form method="get" action="{{ filter_action }}" class="card mt-4" style="padding: 0.875rem;">
   <div class="row gap-2" style="flex-wrap: wrap;">
     <input type="search" name="q" value="{{ f.q | default('') }}" placeholder="search title / rule / scenario…" style="max-width: 22rem;">
+
+    <select name="status" onchange="this.form.submit()" style="max-width: 9rem;">
+      <option value="">Any status</option>
+      {% for s in ['open', 'fixed', 'invalid', 'deleted'] %}
+        <option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ s | capitalize }}</option>
+      {% endfor %}
+    </select>
 
     {% if show_profile %}
     <select name="profile_id" onchange="this.form.submit()" style="max-width: 14rem;">
@@ -112,6 +120,7 @@
     <th>Difficulty</th>
     {% if show_profile %}<th>Profile</th>{% endif %}
     {% if show_run %}<th>Run</th>{% endif %}
+    <th>Status</th>
     <th>Validated</th>
     <th>Issue</th>
     <th>Fork</th>
@@ -121,7 +130,7 @@
 </thead>
 <tbody>
 {% for finding in findings %}
-  <tr hx-get="/findings/{{ finding.id }}/" hx-push-url="true" hx-target="body"{% if finding.deleted %} style="opacity:0.5"{% endif %}>
+  <tr hx-get="/findings/{{ finding.id }}/" hx-push-url="true" hx-target="body"{% if finding.status in ("deleted", "invalid") %} style="opacity:0.5"{% endif %}>
     <td>{{ finding.local_id if finding.local_id is not none else finding.id }}</td>
     <td>
       {{ (finding.title or finding.description) | truncatechars(80) }}
@@ -138,6 +147,12 @@
     {% if show_run %}
     <td><a href="/runs/{{ finding.audit_run_id }}/">#{{ finding.audit_run_id }}</a></td>
     {% endif %}
+    <td>
+      {% if finding.status == "fixed" %}<span class="badge success">fixed</span>
+      {% elif finding.status == "invalid" %}<span class="badge warning">invalid</span>
+      {% elif finding.status == "deleted" %}<span class="badge outline">deleted</span>
+      {% else %}<span class="badge primary">open</span>{% endif %}
+    </td>
     <td>
       {% if finding.validated %}
         <span class="badge success"><span class="dot"></span>yes</span>

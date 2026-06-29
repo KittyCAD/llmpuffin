@@ -14,6 +14,9 @@
 
 ## Harness:
 - Multi-step flows:
+  0) Discover the checked out code:
+    - Is LFS required? Warn
+    - Which ecosystems do we use?
   1) create script to setup env. Run and optionally persist it for future "cold start runs"
   2) Audit and report findings.
   3) Validation of all.

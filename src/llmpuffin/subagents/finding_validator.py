@@ -45,8 +45,10 @@ Each exported file should have a short description explaining what it is.
 ## Reporting
 - If validated: call validate_finding with the finding_id and your evidence, \
 then export any evidence files
-- If you found reason to believe the finding is under no realistic circumstances \
-exploitable: call delete_finding with the finding_id and explain why it should be deleted.
+- If the finding is not exploitable but was a legitimate reporting attempt: \
+call update_finding to set severity to "informational" and explain why.
+- If the finding should never have been reported (completely wrong, duplicate, \
+or nonsensical): call delete_finding with the finding_id.
 - Be honest — a theoretical possibility without a concrete chain is NOT validated
 
 You have access to all codebase tools (read_file, grep_code, list_files, run_command) \
