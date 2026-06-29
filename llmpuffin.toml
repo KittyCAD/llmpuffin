@@ -13,6 +13,7 @@ port = 8000
 debug = true
 secret_key = "dev-insecure-key-change-in-prod"
 allowed_hosts = ["*"]
+base_url = "http://127.0.0.1:8000/"
 
 [github]
 app_id = "3779149"
