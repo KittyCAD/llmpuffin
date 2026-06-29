@@ -59,7 +59,6 @@ Example profile.toml:
 
 from __future__ import annotations
 
-import os
 import tomllib
 from pathlib import Path
 from typing import Literal

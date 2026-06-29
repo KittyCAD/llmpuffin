@@ -87,7 +87,10 @@ class Harness:
     """
 
     def __init__(
-        self, config: HarnessConfig | None = None, *, global_config: Config | None = None
+        self,
+        config: HarnessConfig | None = None,
+        *,
+        global_config: Config | None = None,
     ) -> None:
         self.config = config
         self.global_config = global_config
@@ -137,8 +140,7 @@ class Harness:
                 from llmpuffin.runtime_microvm import MicrovmRuntime
             except ImportError:
                 raise RuntimeError(
-                    "boto3 is not installed. "
-                    "Install it with: pip install boto3"
+                    "boto3 is not installed. Install it with: pip install boto3"
                 ) from None
 
             if not cfg.microvm_image_arn:

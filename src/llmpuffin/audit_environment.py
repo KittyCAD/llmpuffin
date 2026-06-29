@@ -95,7 +95,9 @@ def _capture_git_info(execution: AuditExecution) -> GitInfo | None:
     from urllib.parse import urlparse
 
     try:
-        remote_result = execution.exec(["git", "remote", "get-url", "origin"], timeout=5)
+        remote_result = execution.exec(
+            ["git", "remote", "get-url", "origin"], timeout=5
+        )
         if not remote_result.ok:
             log.info("No git remote: %s", remote_result.stderr.strip())
             return None

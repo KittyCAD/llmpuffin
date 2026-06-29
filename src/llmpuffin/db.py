@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from urllib.parse import urlparse, urlunparse
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -72,7 +71,9 @@ class DB:
         async_url = _to_async_url(self.url)
         async_connect = _async_ssl_args(self._ca_cert) if self._ca_cert else {}
         self._async_engine: AsyncEngine = create_async_engine(
-            async_url, pool_pre_ping=True, **({"connect_args": async_connect} if async_connect else {})
+            async_url,
+            pool_pre_ping=True,
+            **({"connect_args": async_connect} if async_connect else {}),
         )
         self._async_sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self._async_engine, expire_on_commit=False, class_=AsyncSession
@@ -81,7 +82,9 @@ class DB:
         sync_url = _to_sync_url(self.url)
         sync_connect = _sync_ssl_args(self._ca_cert) if self._ca_cert else {}
         self._sync_engine = create_engine(
-            sync_url, pool_pre_ping=True, **({"connect_args": sync_connect} if sync_connect else {})
+            sync_url,
+            pool_pre_ping=True,
+            **({"connect_args": sync_connect} if sync_connect else {}),
         )
         self._sync_sessionmaker: sessionmaker[Session] = sessionmaker(
             self._sync_engine, expire_on_commit=False, class_=Session

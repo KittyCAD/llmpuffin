@@ -25,7 +25,9 @@ async def _async_abort_orphaned(config: Config):
 async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
     await db.setup()
     gh = client_from_config(config.github)
-    return await run_audit(harness_config, db=db, global_config=config, github_client=gh)
+    return await run_audit(
+        harness_config, db=db, global_config=config, github_client=gh
+    )
 
 
 def main() -> None:

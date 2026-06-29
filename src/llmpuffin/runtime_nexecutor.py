@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import TracebackType
 
 from nexecutor_client import AuthenticatedClient
@@ -27,7 +27,9 @@ from llmpuffin.audit_environment import ExecResult, GitInfo, _capture_git_info
 log = logging.getLogger("llmpuffin")
 
 # AWS Pod Identity / EKS OIDC projected token path.
-_POD_IDENTITY_TOKEN_FILE = "/var/run/secrets/pods.eks.amazonaws.com/serviceaccount/eks-pod-identity-token"
+_POD_IDENTITY_TOKEN_FILE = (
+    "/var/run/secrets/pods.eks.amazonaws.com/serviceaccount/eks-pod-identity-token"
+)
 
 
 def _resolve_token(token: str) -> str:
@@ -70,11 +72,22 @@ class NexecutorRuntime:
 
     @classmethod
     def start(
-        cls, image: str, code_dir: str, base_url: str, token: str = "", container_id: str | None = None
+        cls,
+        image: str,
+        code_dir: str,
+        base_url: str,
+        token: str = "",
+        container_id: str | None = None,
     ) -> NexecutorRuntime:
         resolved_token = _resolve_token(token)
         client = _make_client(base_url, resolved_token)
-        rt = cls(image=image, _client=client, _code_dir=code_dir, _token_source=token, _base_url=base_url)
+        rt = cls(
+            image=image,
+            _client=client,
+            _code_dir=code_dir,
+            _token_source=token,
+            _base_url=base_url,
+        )
 
         if container_id:
             log.info("Resuming nexecutor workload %s", container_id[:12])
@@ -142,7 +155,10 @@ class NexecutorRuntime:
         )
 
         # Auth error — refresh token and retry once.
-        if isinstance(resp, Error) and ("unauthorized" in resp.message.lower() or "forbidden" in resp.message.lower()):
+        if isinstance(resp, Error) and (
+            "unauthorized" in resp.message.lower()
+            or "forbidden" in resp.message.lower()
+        ):
             log.warning("Auth error, refreshing token and retrying")
             self._refresh_client()
             client = self._client.with_timeout(timeout=float(timeout + 10))
@@ -158,9 +174,7 @@ class NexecutorRuntime:
             raise RuntimeError(f"Exec failed: {resp}")
 
         if resp.timed_out:
-            raise TimeoutError(
-                f"Command timed out after {timeout}s: {command}"
-            )
+            raise TimeoutError(f"Command timed out after {timeout}s: {command}")
 
         return ExecResult(
             command=command,

@@ -7,7 +7,6 @@ inside the VM.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from types import TracebackType
@@ -64,7 +63,11 @@ class MicrovmRuntime:
             try:
                 rt._refresh_endpoint()
             except Exception as exc:
-                log.warning("Could not resume MicroVM %s: %s — creating new one", container_id, exc)
+                log.warning(
+                    "Could not resume MicroVM %s: %s — creating new one",
+                    container_id,
+                    exc,
+                )
                 rt._create_microvm()
         else:
             rt._create_microvm()

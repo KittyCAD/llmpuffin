@@ -330,7 +330,8 @@ async def _fork_audit_inner(
                         update(AuditRun)
                         .where(AuditRun.id == audit_run_id)
                         .values(
-                            github_repo_url=git_info.repo_url, git_commit=git_info.commit
+                            github_repo_url=git_info.repo_url,
+                            git_commit=git_info.commit,
                         )
                     )
                     await s.commit()
@@ -470,7 +471,8 @@ async def _run_audit_inner(
                         update(AuditRun)
                         .where(AuditRun.id == audit_run_id)
                         .values(
-                            github_repo_url=git_info.repo_url, git_commit=git_info.commit
+                            github_repo_url=git_info.repo_url,
+                            git_commit=git_info.commit,
                         )
                     )
                     await s.commit()

@@ -162,7 +162,14 @@ async def profile_run(
 
     tid = uuid.uuid4().hex[:12]
     harness.spawn(
-        tid, run_audit(harness_config, db=llmpuffin_db, global_config=config, thread_id=tid, github_client=gh)
+        tid,
+        run_audit(
+            harness_config,
+            db=llmpuffin_db,
+            global_config=config,
+            thread_id=tid,
+            github_client=gh,
+        ),
     )
     return toast(
         request, "success", "Audit started", redirect_to=redirect, refresh=True

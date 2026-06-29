@@ -205,7 +205,9 @@ async def _find_similar(
         line_prox = 1.0 / (1.0 + line_diff / 20.0)
         score_exprs.append(path_sim * 0.7 + line_prox * 0.3)
 
-    best_score = score_exprs[0] if len(score_exprs) == 1 else func.greatest(*score_exprs)
+    best_score = (
+        score_exprs[0] if len(score_exprs) == 1 else func.greatest(*score_exprs)
+    )
 
     # Subquery: candidate finding IDs with their best combined score.
     candidates = (
@@ -385,7 +387,10 @@ async def finding_report_to_github(
         if link.github_type == "issue":
             try:
                 gh.update_issue(
-                    repo=link_repo, issue_number=int(link.github_id), title=title, body=update_body
+                    repo=link_repo,
+                    issue_number=int(link.github_id),
+                    title=title,
+                    body=update_body,
                 )
                 return toast(
                     request,
