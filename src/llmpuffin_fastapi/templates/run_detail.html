@@ -54,7 +54,7 @@
   <div class="card" style="padding: 0;">
   <table>
   <thead>
-    <tr><th>Thread</th><th>Related Finding</th><th>Container</th><th>Status</th><th>Created</th><th></th></tr>
+    <tr><th>Thread</th><th>Related Finding</th><th>Container</th><th>Step</th><th>Status</th><th>Created</th><th></th></tr>
   </thead>
   <tbody>
   {% set fork_findings = {} %}
@@ -76,6 +76,7 @@
       {% endif %}
     </td>
     <td>{% if t.container_id %}<code class="mono text-xs">{{ t.container_id | truncatechars(12) }}</code>{% else %}—{% endif %}</td>
+    <td class="text-xs">{% if t.pipeline_state %}<span class="mono">{{ t.pipeline_state }}</span>{% else %}—{% endif %}</td>
     <td>
       {% if t.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
       {% elif t.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
@@ -106,7 +107,7 @@
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">No threads yet.</td></tr>
+  <tr><td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">No threads yet.</td></tr>
   {% endfor %}
   </tbody>
   </table>

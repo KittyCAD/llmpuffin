@@ -195,6 +195,9 @@ class AuditThread(Base):
     status: Mapped[str] = mapped_column(
         String(32), default="running", server_default="running"
     )
+    pipeline_state: Mapped[str] = mapped_column(
+        String(32), default="", server_default=""
+    )
     error: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

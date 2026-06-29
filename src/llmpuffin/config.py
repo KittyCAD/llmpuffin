@@ -228,6 +228,20 @@ class ProfileOpenAI(BaseModel):
     use_responses_api: bool = True
 
 
+class ProfileRepo(BaseModel):
+    """A git repository to clone into the audit container before running.
+
+    Cloned into /src/<repo-name> by default. Use ``path`` to override
+    when multiple repos would have the same name.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    name: str = ""
+    lfs: bool = False
+
+
 class _AuditSection(BaseModel):
     """Validates the [audit] section of a profile TOML."""
 
@@ -248,6 +262,7 @@ class _ProfileToml(BaseModel):
     agent: ProfileAgent = ProfileAgent()
     anthropic: ProfileAnthropic = ProfileAnthropic()
     openai: ProfileOpenAI = ProfileOpenAI()
+    repo: list[ProfileRepo] = []
 
 
 class Profile(BaseModel):
@@ -257,6 +272,7 @@ class Profile(BaseModel):
     image: str
     threat_model_dir: Path
     code_dir: str = "/src"
+    repos: list[ProfileRepo] = []
     agent: ProfileAgent = ProfileAgent()
     anthropic: ProfileAnthropic = ProfileAnthropic()
     openai: ProfileOpenAI = ProfileOpenAI()
@@ -294,6 +310,7 @@ class Profile(BaseModel):
             image=parsed.audit.image,
             threat_model_dir=Path(parsed.audit.threat_model_dir),
             code_dir=parsed.audit.code_dir,
+            repos=parsed.repo,
             agent=parsed.agent,
             anthropic=parsed.anthropic,
             openai=parsed.openai,

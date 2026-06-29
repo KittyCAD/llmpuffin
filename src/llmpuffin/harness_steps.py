@@ -30,21 +30,6 @@ from llmpuffin.models import AuditRun, AuditThread
 from llmpuffin.threat_model import ThreatModel
 
 
-# ── Inputs that Hamilton resolves from the `inputs` dict ──
-# harness: Harness
-# config: HarnessConfig
-# threat_model: ThreatModel
-# checkpointer: BaseCheckpointSaver
-# store: BaseStore
-# db: DB
-# thread_id: str | None
-# github_client: GitHubClient | None
-# source_thread_id: str | None
-# user_message: str | None
-# existing_container_id: str | None
-# is_fork: bool
-
-
 @dataclass
 class ResolvedThread:
     tid: str
@@ -96,47 +81,100 @@ async def environment_context(
     existing_container_id: str | None,
     db: DB,
 ) -> EnvironmentContext:
-    """Start the container and capture git info.
+    """Start the container (git info is captured later, after cloning)."""
+    await _set_pipeline_state(resolved_thread.tid, "starting", db=db)
 
-    Note: the container lifecycle (context manager) is managed by the caller
-    that holds the Hamilton driver, not by Hamilton itself.  This function
-    receives an already-started execution via the harness.
-
-    Actually — since the container is a context manager that must stay alive
-    for the duration of the agent run, we start it here but the caller must
-    ensure stop is called.  We store the execution on the result so the
-    caller can manage cleanup.
-    """
     execution = harness.start_environment(container_id=existing_container_id)
-    # Enter the context manager — caller must call execution.__exit__ later
     execution.__enter__()
 
     try:
         cwd = execution.exec(["pwd"], timeout=5)
         log.info("Container cwd: %s", cwd.stdout.strip())
         await _save_container_id(resolved_thread.tid, execution.container_id, db=db)
-
-        git_info = execution.capture_git_info()
-        repo_path = ""
-        if git_info:
-            await _save_git_info(resolved_thread.audit_run_id, git_info, db=db)
-            log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
-            repo_path = git_info.repo_path
-        else:
-            log.info("No git info available, continuing without")
-
-        return EnvironmentContext(execution=execution, repo_path=repo_path)
+        return EnvironmentContext(execution=execution, repo_path="")
     except BaseException:
         execution.__exit__(None, None, None)
         raise
 
 
-# ── Step 3: Build the agent ──
+# ── Step 3: Clone repositories ──
+
+
+async def clone_repos(
+    config: HarnessConfig,
+    environment_context: EnvironmentContext,
+    resolved_thread: ResolvedThread,
+    github_client: GitHubClient | None,
+    db: DB,
+) -> bool:
+    """Clone git repositories specified in the profile into the container.
+
+    If a GitHubClient is configured, a short-lived installation token is
+    generated and injected into clone URLs for private repo access.
+    """
+    repos = config.profile.repos
+    if not repos:
+        return True
+
+    await _set_pipeline_state(resolved_thread.tid, "cloning", db=db)
+    execution = environment_context.execution
+
+    # Generate a single token for all clones in this run
+    token = _get_clone_token(github_client)
+
+    for repo in repos:
+        repo_name = repo.name or repo.url.rstrip("/").rsplit("/", 1)[-1].removesuffix(
+            ".git"
+        )
+        clone_path = f"/src/{repo_name}"
+        clone_url = _inject_token(repo.url, token) if token else repo.url
+
+        log.info("Cloning %s → %s", repo.url, clone_path)
+        result = execution.exec(
+            ["git", "clone", "--depth", "1", clone_url, clone_path],
+            timeout=600,
+        )
+        if not result.ok:
+            raise RuntimeError(f"Failed to clone {repo.url}: {result.stderr.strip()}")
+        log.info("Cloned %s", repo.url)
+
+        if repo.lfs:
+            log.info("Setting up git LFS for %s", clone_path)
+            lfs_install = execution.exec(
+                ["git", "-C", clone_path, "lfs", "install", "--local"],
+                timeout=30,
+            )
+            if not lfs_install.ok:
+                log.warning("git lfs install failed: %s", lfs_install.stderr.strip())
+            else:
+                lfs_pull = execution.exec(
+                    ["git", "-C", clone_path, "lfs", "pull"],
+                    timeout=600,
+                )
+                if not lfs_pull.ok:
+                    log.warning("git lfs pull failed: %s", lfs_pull.stderr.strip())
+                else:
+                    log.info("LFS pull complete for %s", clone_path)
+
+    # Capture git info now that repos are cloned
+    git_info = execution.capture_git_info()
+    if git_info:
+        await _save_git_info(resolved_thread.audit_run_id, git_info, db=db)
+        log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
+        environment_context.repo_path = git_info.repo_path
+    else:
+        log.info("No git info available, continuing without")
+
+    return True
+
+
+# ── Step 4: Build the agent ──
 
 
 async def agent(
     config: HarnessConfig,
     environment_context: EnvironmentContext,
+    clone_repos: bool,
     threat_model: ThreatModel,
     resolved_thread: ResolvedThread,
     checkpointer: BaseCheckpointSaver,
@@ -145,6 +183,7 @@ async def agent(
     github_client: GitHubClient | None,
 ) -> Any:
     """Build the deep agent with all backends, tools, and middleware."""
+    await _set_pipeline_state(resolved_thread.tid, "building", db=db)
     return _build_agent(
         config,
         environment_context.execution,
@@ -158,7 +197,7 @@ async def agent(
     )
 
 
-# ── Step 4: Prepare input messages ──
+# ── Step 5: Prepare input messages ──
 
 
 async def input_messages(
@@ -189,7 +228,7 @@ async def input_messages(
         return [{"role": "user", "content": msg}]
 
 
-# ── Step 5: Run the agent ──
+# ── Step 6: Run the agent ──
 
 
 async def agent_run_result(
@@ -197,8 +236,10 @@ async def agent_run_result(
     input_messages: list,
     config: HarnessConfig,
     resolved_thread: ResolvedThread,
+    db: DB,
 ) -> AgentRunResult:
     """Stream the agent execution."""
+    await _set_pipeline_state(resolved_thread.tid, "running", db=db)
     p = config.profile
     run_config: dict = {
         "recursion_limit": p.agent.max_iterations,
@@ -210,7 +251,44 @@ async def agent_run_result(
     return AgentRunResult(status=status, error=error)
 
 
-# ── Helpers (not Hamilton nodes) ──
+# ── Helpers (not Hamilton nodes — underscore-prefixed) ──
+
+
+def _get_clone_token(github_client: GitHubClient | None) -> str | None:
+    """Get a short-lived GitHub installation token for cloning, or None."""
+    if github_client is None or not github_client.configured:
+        return None
+    try:
+        token = github_client._install_token()
+        log.info("Generated GitHub installation token for cloning")
+        return token
+    except Exception as exc:
+        log.warning("Failed to get GitHub token for cloning: %s", exc)
+        return None
+
+
+def _inject_token(url: str, token: str) -> str:
+    """Inject an access token into an HTTPS git URL.
+
+    https://github.com/org/repo.git
+      → https://x-access-token:<token>@github.com/org/repo.git
+    """
+    if url.startswith("https://"):
+        return url.replace("https://", f"https://x-access-token:{token}@", 1)
+    return url
+
+
+async def _set_pipeline_state(tid: str, state: str, *, db: DB) -> None:
+    try:
+        async with db.async_session() as s:
+            await s.execute(
+                update(AuditThread)
+                .where(AuditThread.thread_id == tid)
+                .values(pipeline_state=state)
+            )
+            await s.commit()
+    except Exception as exc:
+        log.warning("Failed to set pipeline_state: %s", exc)
 
 
 async def _save_container_id(tid: str, container_id: str, *, db: DB) -> None:
