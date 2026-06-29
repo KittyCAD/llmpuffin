@@ -398,12 +398,14 @@ async def finding_report_to_github(
         if link_repo != repo:
             update_body = f"**Source repo:** {audit_run.github_repo_url}\n\n{body}"
         if link.github_type == "issue":
+            issue_state = "closed" if finding.status in ("fixed", "invalid", "deleted") else "open"
             try:
                 gh.update_issue(
                     repo=link_repo,
                     issue_number=int(link.github_id),
                     title=title,
                     body=update_body,
+                    state=issue_state,
                 )
                 return toast(
                     request,
@@ -421,6 +423,12 @@ async def finding_report_to_github(
                     redirect_to=redirect,
                 )
         else:
+            if finding.status != "open":
+                log.warning(
+                    "Finding %d has status '%s' but advisory state sync is not supported — "
+                    "advisory %s must be managed manually on GitHub",
+                    finding_id, finding.status, link.github_id,
+                )
             try:
                 gh.update_advisory(
                     repo=link_repo,

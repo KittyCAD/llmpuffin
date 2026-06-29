@@ -230,11 +230,24 @@ class GitHubClient:
             data = json.loads(resp.read())
         return data["html_url"]
 
-    def update_issue(self, repo: str, issue_number: int, title: str, body: str) -> str:
-        """Update a GitHub issue and return its HTML URL."""
+    def update_issue(
+        self,
+        repo: str,
+        issue_number: int,
+        title: str,
+        body: str,
+        state: str = "",
+    ) -> str:
+        """Update a GitHub issue and return its HTML URL.
+
+        state: "open" or "closed". Empty string means don't change.
+        """
         r = self._gh().get_repo(repo)
         issue = r.get_issue(issue_number)
-        issue.edit(title=title, body=body)
+        kwargs: dict = {"title": title, "body": body}
+        if state in ("open", "closed"):
+            kwargs["state"] = state
+        issue.edit(**kwargs)
         return issue.html_url
 
     def fetch_pull_request(self, repo: str, number: int) -> PullRequestInfo:
