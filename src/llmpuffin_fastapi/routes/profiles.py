@@ -40,7 +40,7 @@ async def profiles_list(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     rows = (
-        (await db.execute(select(AuditProfile).where(AuditProfile.jit.is_(False))))
+        (await db.execute(select(AuditProfile).order_by(AuditProfile.name)))
         .scalars()
         .all()
     )
@@ -52,7 +52,13 @@ async def profiles_list(
         except Exception:
             image = "(invalid TOML)"
         profiles.append(
-            {"id": p.id, "name": p.name, "image": image, "updated_at": p.updated_at}
+            {
+                "id": p.id,
+                "name": p.name,
+                "image": image,
+                "updated_at": p.updated_at,
+                "jit": p.jit,
+            }
         )
     return templates.TemplateResponse(
         request, "profiles_list.html", {"profiles": profiles}

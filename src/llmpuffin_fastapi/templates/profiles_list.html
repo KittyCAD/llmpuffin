@@ -14,7 +14,10 @@
 <tbody>
 {% for p in profiles %}
 <tr>
-  <td><a href="/profiles/{{ p.id }}/">{{ p.name }}</a></td>
+  <td>
+    <a href="/profiles/{{ p.id }}/">{{ p.name }}</a>
+    {% if p.jit %}<span class="text-muted text-xs" title="Created automatically from CLI run">(jit)</span>{% endif %}
+  </td>
   <td class="mono text-xs text-muted">{{ p.image }}</td>
   <td class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
   <td>
