@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
 from types import TracebackType
 
@@ -14,6 +15,7 @@ from nexecutor_client import AuthenticatedClient
 from nexecutor_client.api.workloads import (
     destroy_workload,
     exec_command,
+    get_workload,
     run_workload,
     stop_workload,
 )
@@ -21,6 +23,8 @@ from nexecutor_client.models.create_workload_request import CreateWorkloadReques
 from nexecutor_client.models.error import Error
 from nexecutor_client.models.exec_request import ExecRequest
 from nexecutor_client.models.exec_response import ExecResponse
+from nexecutor_client.models.workload_response import WorkloadResponse
+from nexecutor_client.models.workload_status import WorkloadStatus
 
 from llmpuffin.audit_environment import ExecResult, GitInfo, _capture_git_info
 
@@ -109,6 +113,28 @@ class NexecutorRuntime:
             raise RuntimeError(f"Failed to create nexecutor workload: {resp}")
         self._workload_id = resp.id
         log.info("Created nexecutor workload %s", self._workload_id[:12])
+        self._wait_until_running()
+
+    def _wait_until_running(
+        self, poll_interval: float = 1.0, timeout: float = 120.0
+    ) -> None:
+        """Poll until the workload reaches 'running' status."""
+        deadline = time.monotonic() + timeout
+        while True:
+            resp = get_workload.sync(id=self._workload_id, client=self._client)
+            if isinstance(resp, WorkloadResponse):
+                if resp.status == WorkloadStatus.RUNNING:
+                    log.info("Workload %s is running", self._workload_id[:12])
+                    return
+                if resp.status == WorkloadStatus.FAILED:
+                    raise RuntimeError(
+                        f"Workload {self._workload_id[:12]} failed to start"
+                    )
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Workload {self._workload_id[:12]} not running after {timeout}s"
+                )
+            time.sleep(poll_interval)
 
     @property
     def container_id(self) -> str:
