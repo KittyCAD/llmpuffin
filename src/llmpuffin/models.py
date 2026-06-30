@@ -449,3 +449,45 @@ class SkillFile(Base):
     skill: Mapped[Skill] = relationship(back_populates="files")
 
     __table_args__ = (UniqueConstraint("skill_id", "path"),)
+
+
+class ThreatModelDB(Base):
+    """A named threat model — a collection of TOML files stored in the DB."""
+
+    __tablename__ = "threat_model"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), unique=True)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    files: Mapped[list[ThreatModelFile]] = relationship(
+        back_populates="threat_model",
+        cascade="all, delete-orphan",
+        order_by="ThreatModelFile.path",
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ThreatModelFile(Base):
+    """A single TOML file within a threat model."""
+
+    __tablename__ = "threat_model_file"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    threat_model_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("threat_model.id", ondelete="CASCADE")
+    )
+    path: Mapped[str] = mapped_column(String(512))
+    content: Mapped[str] = mapped_column(Text)
+
+    threat_model: Mapped[ThreatModelDB] = relationship(back_populates="files")
+
+    __table_args__ = (UniqueConstraint("threat_model_id", "path"),)

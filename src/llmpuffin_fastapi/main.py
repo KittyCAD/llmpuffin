@@ -26,6 +26,7 @@ from llmpuffin_fastapi.routes import (
     profiles,
     runs,
     skills,
+    threat_models,
 )
 from llmpuffin_fastapi.routes import store as store_routes
 
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(checkpoints.router)
     app.include_router(findings.router)
     app.include_router(skills.router)
+    app.include_router(threat_models.router)
     app.include_router(store_routes.router)
     app.include_router(about.router)
 
