@@ -61,7 +61,7 @@ threat_model_dir = "threat_model/"
 [agent]
 model = "claude-sonnet-4-20250514"
 max_iterations = 200
-skills_dir = "vendor/trailofbits-skills/plugins"
+skills = ["audit-context-building"]
 ```
 
 ## Usage

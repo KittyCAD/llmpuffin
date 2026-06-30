@@ -99,30 +99,33 @@ def _build_agent(
         )
     }
 
-    # Load skills from disk into an in-memory store
+    # Load skills from DB into an in-memory store
     skills_list: list[str] = []
-    if agent_cfg.skills_dir and agent_cfg.skills_dir.is_dir():
+    if agent_cfg.skills:
+        from llmpuffin.models import Skill, SkillFile
+
         skills_store = InMemoryStore()
         skills_backend = StoreBackend(
             store=skills_store, namespace=lambda rt: ("skills",)
         )
-        for file_path in sorted(agent_cfg.skills_dir.rglob("*")):
-            if not file_path.is_file():
-                continue
-            rel = file_path.relative_to(agent_cfg.skills_dir)
-            store_key = f"/{rel}"
-            try:
-                content = file_path.read_text()
-            except (UnicodeDecodeError, OSError):
-                continue
-            skills_store.put(
-                namespace=("skills",),
-                key=store_key,
-                value=dict(create_file_data(content)),
-            )
+        with db.sync_session() as s:
+            for skill_name in agent_cfg.skills:
+                skill = s.query(Skill).filter(Skill.name == skill_name).first()
+                if skill is None:
+                    log.warning("Skill %r not found in DB, skipping", skill_name)
+                    continue
+                for sf in (
+                    s.query(SkillFile).filter(SkillFile.skill_id == skill.id).all()
+                ):
+                    store_key = f"/{skill.name}/{sf.path}"
+                    skills_store.put(
+                        namespace=("skills",),
+                        key=store_key,
+                        value=dict(create_file_data(sf.content)),
+                    )
+                log.info("Loaded skill %r (%d files)", skill.name, len(skill.files))
         routes["/skills/"] = skills_backend
         skills_list = ["/skills/"]
-        log.info("Loaded skills from %s", agent_cfg.skills_dir)
 
     backend = CompositeBackend(
         default=container_backend,

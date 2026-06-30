@@ -42,7 +42,7 @@ Example profile.toml:
     [agent]
     model = "anthropic:claude-sonnet-4-20250514"
     max_iterations = 200
-    skills_dir = "vendor/trailofbits-skills/plugins"
+    skills = ["audit-context-building"]
     # interrupt_on = ["execute", "write_file"]
     # system_prompt = "Custom system prompt (overrides default)"
 
@@ -207,7 +207,7 @@ class ProfileAgent(BaseModel):
     model: str = "anthropic:claude-sonnet-4-20250514"
     max_iterations: int = 200
     interrupt_on: list[str] = []
-    skills_dir: Path | None = None
+    skills: list[str] = []
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
 
 

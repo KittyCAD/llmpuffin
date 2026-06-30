@@ -88,7 +88,7 @@ async def environment_context(
     execution.__enter__()
 
     try:
-        cwd = execution.exec(["pwd"], timeout=5)
+        cwd = execution.exec(["pwd"], timeout=120)
         log.info("Container cwd: %s", cwd.stdout.strip())
         await _save_container_id(resolved_thread.tid, execution.container_id, db=db)
         return EnvironmentContext(execution=execution, repo_path="")

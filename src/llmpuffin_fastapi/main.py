@@ -19,7 +19,14 @@ from llmpuffin.log import setup as setup_logging
 
 from llmpuffin_fastapi.auth import get_current_user, setup_auth
 from llmpuffin_fastapi.deps import set_github_client
-from llmpuffin_fastapi.routes import about, checkpoints, findings, profiles, runs
+from llmpuffin_fastapi.routes import (
+    about,
+    checkpoints,
+    findings,
+    profiles,
+    runs,
+    skills,
+)
 from llmpuffin_fastapi.routes import store as store_routes
 
 log = logging.getLogger("llmpuffin")
@@ -59,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(profiles.router)
     app.include_router(checkpoints.router)
     app.include_router(findings.router)
+    app.include_router(skills.router)
     app.include_router(store_routes.router)
     app.include_router(about.router)
 

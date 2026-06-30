@@ -407,3 +407,45 @@ class FindingComment(Base):
     )
 
     finding: Mapped[Finding] = relationship(back_populates="comments")
+
+
+class Skill(Base):
+    """A named skill — a collection of markdown files the agent can reference."""
+
+    __tablename__ = "skill"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), unique=True)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    files: Mapped[list[SkillFile]] = relationship(
+        back_populates="skill",
+        cascade="all, delete-orphan",
+        order_by="SkillFile.path",
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class SkillFile(Base):
+    """A single file within a skill (markdown content at a relative path)."""
+
+    __tablename__ = "skill_file"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    skill_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("skill.id", ondelete="CASCADE")
+    )
+    path: Mapped[str] = mapped_column(String(512))
+    content: Mapped[str] = mapped_column(Text)
+
+    skill: Mapped[Skill] = relationship(back_populates="files")
+
+    __table_args__ = (UniqueConstraint("skill_id", "path"),)

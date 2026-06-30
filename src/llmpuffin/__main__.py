@@ -22,6 +22,56 @@ async def _async_abort_orphaned(config: Config):
     await db.abort_orphaned_threads()
 
 
+async def _async_import_skill(config: Config, directory: Path, name: str | None):
+    from sqlalchemy import select
+
+    from llmpuffin.models import Skill, SkillFile
+
+    db = DB(config.postgres)
+    await db.setup()
+    skill_name = name or directory.name
+    if not directory.is_dir():
+        print(f"Error: {directory} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    async with db.async_session() as s:
+        skill = (
+            await s.execute(select(Skill).where(Skill.name == skill_name))
+        ).scalar_one_or_none()
+        if skill is None:
+            skill = Skill(name=skill_name)
+            s.add(skill)
+            await s.flush()
+            print(f"Created skill {skill_name!r}")
+        else:
+            print(f"Updating existing skill {skill_name!r}")
+
+        count = 0
+        for file_path in sorted(directory.rglob("*")):
+            if not file_path.is_file():
+                continue
+            try:
+                content = file_path.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            rel = str(file_path.relative_to(directory))
+            existing = (
+                await s.execute(
+                    select(SkillFile).where(
+                        SkillFile.skill_id == skill.id, SkillFile.path == rel
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing:
+                existing.content = content
+            else:
+                s.add(SkillFile(skill_id=skill.id, path=rel, content=content))
+            count += 1
+
+        await s.commit()
+    print(f"Imported {count} file(s) into skill {skill_name!r}")
+
+
 async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
     await db.setup()
     gh = client_from_config(config.github)
@@ -72,6 +122,18 @@ def main() -> None:
         help="Mark any 'running' threads as 'aborted' (cleanup after crashes)",
     )
 
+    # --- import-skill ---
+    import_skill_parser = subparsers.add_parser(
+        "import-skill",
+        help="Import a skill from a local directory into the database",
+    )
+    import_skill_parser.add_argument(
+        "directory", type=Path, help="Skill directory to import"
+    )
+    import_skill_parser.add_argument(
+        "--name", type=str, default=None, help="Skill name (default: directory name)"
+    )
+
     args = parser.parse_args()
 
     global_config = Config.load(args.config)
@@ -79,6 +141,10 @@ def main() -> None:
 
     if args.command == "abort-orphaned-threads":
         asyncio.run(_async_abort_orphaned(global_config))
+        return
+
+    if args.command == "import-skill":
+        asyncio.run(_async_import_skill(global_config, args.directory, args.name))
         return
 
     # --- run ---
