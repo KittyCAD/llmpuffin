@@ -1,6 +1,9 @@
-"""Tests for Config env var overrides."""
+"""Tests for Config env var overrides and Profile parsing."""
 
-from llmpuffin.config import Config
+import pytest
+from pydantic import ValidationError
+
+from llmpuffin.config import Config, Profile
 
 
 def test_defaults_without_toml_or_env(monkeypatch, tmp_path):
@@ -74,3 +77,109 @@ def test_toml_without_env(monkeypatch, tmp_path):
     assert c.postgres.url == "postgresql://toml:5432/x"
     assert c.github.app_id == "999"  # int → str coercion
     assert c.github.installation_id == "abc"
+
+
+# -- Profile tests --
+
+_MINIMAL_PROFILE = """\
+[audit]
+name = "test-audit"
+image = "ghcr.io/org/repo:latest"
+threat_model_dir = "threat_model/"
+"""
+
+
+class TestProfileFromToml:
+    def test_minimal_profile(self):
+        p = Profile.from_toml_string(_MINIMAL_PROFILE)
+        assert p.name == "test-audit"
+        assert p.image == "ghcr.io/org/repo:latest"
+        assert p.code_dir == "/src"  # default
+
+    def test_all_fields(self):
+        toml = """\
+[audit]
+name = "full"
+image = "img:v1"
+threat_model_dir = "tm/"
+code_dir = "/app"
+
+[agent]
+model = "openai:gpt-4o"
+max_iterations = 50
+skills = ["audit-context-building"]
+
+[openai]
+reasoning_effort = "high"
+use_responses_api = false
+"""
+        p = Profile.from_toml_string(toml)
+        assert p.name == "full"
+        assert p.code_dir == "/app"
+        assert p.agent.model == "openai:gpt-4o"
+        assert p.agent.max_iterations == 50
+        assert p.agent.skills == ["audit-context-building"]
+        assert p.openai.reasoning_effort == "high"
+        assert p.openai.use_responses_api is False
+
+    def test_extra_keys_rejected(self):
+        toml = _MINIMAL_PROFILE + '\n[agent]\nbogus = "nope"\n'
+        with pytest.raises(ValidationError):
+            Profile.from_toml_string(toml)
+
+    def test_missing_required_fields(self):
+        with pytest.raises((ValidationError, KeyError)):
+            Profile.from_toml_string('[audit]\nname = "x"\n')
+
+    def test_repos(self):
+        toml = _MINIMAL_PROFILE + """\
+[[repo]]
+url = "https://github.com/org/repo.git"
+
+[[repo]]
+url = "https://github.com/org/other.git"
+name = "custom-name"
+lfs = true
+"""
+        p = Profile.from_toml_string(toml)
+        assert len(p.repos) == 2
+        assert p.repos[0].url == "https://github.com/org/repo.git"
+        assert p.repos[1].name == "custom-name"
+        assert p.repos[1].lfs is True
+
+
+class TestProfileProvider:
+    def test_anthropic_prefixed(self):
+        p = Profile.from_toml_string(_MINIMAL_PROFILE)
+        # Default model is anthropic:claude-sonnet-...
+        assert p.provider == "anthropic"
+
+    def test_openai_prefixed(self):
+        toml = _MINIMAL_PROFILE.rstrip() + '\n\n[agent]\nmodel = "openai:gpt-4o"\n'
+        p = Profile.from_toml_string(toml)
+        assert p.provider == "openai"
+
+    def test_bare_claude(self):
+        toml = _MINIMAL_PROFILE.rstrip() + '\n\n[agent]\nmodel = "claude-sonnet-4-20250514"\n'
+        p = Profile.from_toml_string(toml)
+        assert p.provider == "anthropic"
+
+    def test_bare_gpt(self):
+        toml = _MINIMAL_PROFILE.rstrip() + '\n\n[agent]\nmodel = "gpt-4o"\n'
+        p = Profile.from_toml_string(toml)
+        assert p.provider == "openai"
+
+    def test_bare_o3(self):
+        toml = _MINIMAL_PROFILE.rstrip() + '\n\n[agent]\nmodel = "o3"\n'
+        p = Profile.from_toml_string(toml)
+        assert p.provider == "openai"
+
+    def test_bare_o4(self):
+        toml = _MINIMAL_PROFILE.rstrip() + '\n\n[agent]\nmodel = "o4-mini"\n'
+        p = Profile.from_toml_string(toml)
+        assert p.provider == "openai"
+
+    def test_unknown_model(self):
+        toml = _MINIMAL_PROFILE.rstrip() + '\n\n[agent]\nmodel = "gemini-pro"\n'
+        p = Profile.from_toml_string(toml)
+        assert p.provider == "unknown"
