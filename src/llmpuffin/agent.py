@@ -315,6 +315,7 @@ async def _execute_pipeline(
     existing_container_id: str | None = None,
     is_fork: bool = False,
     github_client: GitHubClient | None = None,
+    profile_id: int | None = None,
 ) -> AuditResult:
     """Execute the audit pipeline as a Hamilton DAG.
 
@@ -339,6 +340,7 @@ async def _execute_pipeline(
         "existing_container_id": existing_container_id,
         "is_fork": is_fork,
         "github_client": github_client,
+        "profile_id": profile_id,
     }
 
     env_ctx = None
@@ -406,6 +408,7 @@ async def run_audit(
     thread_id: str | None = None,
     user_message: str | None = None,
     github_client: GitHubClient | None = None,
+    profile_id: int | None = None,
 ) -> AuditResult:
     """Run a full security audit driven by the threat model."""
     harness = Harness(config, global_config=global_config)
@@ -433,6 +436,7 @@ async def run_audit(
             user_message,
             db=db,
             github_client=github_client,
+            profile_id=profile_id,
         )
 
 
@@ -447,6 +451,7 @@ async def _run_audit_inner(
     *,
     db: DB,
     github_client: GitHubClient | None = None,
+    profile_id: int | None = None,
 ) -> AuditResult:
     existing_container_id = (
         await _get_container_id(thread_id, db=db) if thread_id else None
@@ -469,6 +474,7 @@ async def _run_audit_inner(
         existing_container_id=existing_container_id,
         is_fork=False,
         github_client=github_client,
+        profile_id=profile_id,
     )
 
 
@@ -519,6 +525,7 @@ async def _create_audit_run(
     resume_thread_id: str | None,
     *,
     db: DB,
+    profile_id: int | None = None,
 ) -> int:
     """Create or resume an AuditRun, register the thread. Returns audit_run.id."""
     async with db.async_session() as s:
@@ -533,11 +540,13 @@ async def _create_audit_run(
             if old_thread:
                 audit_run = old_thread.audit_run
             else:
-                db_profile = await AuditProfile.get_or_create(
-                    s, name=config.profile.name, profile_toml=config.profile_toml
-                )
+                if profile_id is None:
+                    db_profile = await AuditProfile.get_or_create(
+                        s, name=config.profile.name, profile_toml=config.profile_toml
+                    )
+                    profile_id = db_profile.id
                 audit_run = AuditRun(
-                    profile_id=db_profile.id,
+                    profile_id=profile_id,
                     profile_toml=config.profile_toml,
                     container_image=config.profile.image,
                     model_name=config.profile.agent.model,
@@ -545,11 +554,13 @@ async def _create_audit_run(
                 s.add(audit_run)
                 await s.flush()
         else:
-            db_profile = await AuditProfile.get_or_create(
-                s, name=config.profile.name, profile_toml=config.profile_toml
-            )
+            if profile_id is None:
+                db_profile = await AuditProfile.get_or_create(
+                    s, name=config.profile.name, profile_toml=config.profile_toml
+                )
+                profile_id = db_profile.id
             audit_run = AuditRun(
-                profile_id=db_profile.id,
+                profile_id=profile_id,
                 profile_toml=config.profile_toml,
                 container_image=config.profile.image,
                 model_name=config.profile.agent.model,

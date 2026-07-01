@@ -43,7 +43,7 @@
   <td class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
   <td>
     {% if r.status != "running" %}
-      <form hx-post="/runs/{{ r.id }}/delete/" hx-confirm="Delete this run?" hx-disabled-elt="find button" class="inline">
+      <form hx-post="/runs/{{ r.id }}/delete/" hx-confirm="Delete this run?" hx-disabled-elt="find button" class="inline" onclick="event.stopPropagation()">
         <button type="submit" class="destructive">delete</button>
       </form>
     {% endif %}

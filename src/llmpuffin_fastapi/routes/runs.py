@@ -310,6 +310,7 @@ async def run_stop(
     thread_id: str,
     request: Request,
     harness: Annotated[Harness, Depends(get_harness)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     redirect = f"/runs/{run_id}/"
     if harness.cancel(thread_id):
@@ -320,8 +321,15 @@ async def run_stop(
             redirect_to=redirect,
             refresh=True,
         )
+    # Thread wasn't running — mark it as errored so the UI reflects reality
+    await db.execute(
+        sa_update(AuditThread)
+        .where(AuditThread.thread_id == thread_id)
+        .values(status="error", error="Orphaned thread (not running)")
+    )
+    await db.commit()
     return toast(
-        request, "error", "Thread not found or not running", redirect_to=redirect
+        request, "success", "Thread already stopped", redirect_to=redirect, refresh=True
     )
 
 

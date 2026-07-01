@@ -175,8 +175,9 @@ async def profile_run(
             global_config=config,
             thread_id=tid,
             github_client=gh,
+            profile_id=profile.id,
         ),
     )
     return toast(
-        request, "success", "Audit started", redirect_to=redirect, refresh=True
+        request, "success", "Audit started", redirect_to="/runs/", refresh=True
     )
