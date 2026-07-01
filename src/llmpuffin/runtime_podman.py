@@ -123,7 +123,9 @@ class PodmanExecution:
     ) -> None:
         self.stop()
 
-    def exec(self, command: list[str], timeout: int = 300, workdir: str | None = None) -> ExecResult:
+    def exec(
+        self, command: list[str], timeout: int = 300, workdir: str | None = None
+    ) -> ExecResult:
         """Execute a command inside the container."""
         api = self.client.api
         exec_id = api.exec_create(

@@ -500,7 +500,9 @@ class FileCoverage(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "audit_run_id", "file_path", "access_type",
+            "audit_run_id",
+            "file_path",
+            "access_type",
             name="uq_file_coverage_run_path_type",
         ),
     )

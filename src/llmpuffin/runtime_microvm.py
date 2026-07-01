@@ -151,7 +151,9 @@ class MicrovmRuntime:
     ) -> None:
         self.stop()
 
-    def exec(self, command: list[str], timeout: int = 300, workdir: str | None = None) -> ExecResult:
+    def exec(
+        self, command: list[str], timeout: int = 300, workdir: str | None = None
+    ) -> ExecResult:
         """Execute a command inside the MicroVM via the agent HTTP API."""
         url = f"https://{self._endpoint}/exec"
 

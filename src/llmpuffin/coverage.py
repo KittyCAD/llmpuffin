@@ -7,7 +7,6 @@ which tool. Each access is persisted to the database immediately.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -19,6 +18,7 @@ log = logging.getLogger("llmpuffin")
 
 # Paths we never want to track
 _IGNORE_PREFIXES = ("/proc/", "/sys/", "/dev/", "/tmp/", "/etc/", "/run/")
+
 
 def _normalize(path: str, code_dir: str) -> str | None:
     """Normalize a path relative to the code_dir, return None if outside."""
@@ -36,7 +36,8 @@ def _normalize(path: str, code_dir: str) -> str | None:
         if path.startswith(p):
             return None
     # Return relative to code_dir
-    return path[len(prefix):]
+    return path[len(prefix) :]
+
 
 def _extract_paths_from_exec(command: str, _stdout: str) -> set[str]:
     """Try to extract file paths from common shell commands."""
@@ -79,13 +80,15 @@ class CoverageTracker:
             from llmpuffin.models import FileCoverage
 
             with self.db.sync_session() as s:
-                stmt = insert(FileCoverage).values(
-                    audit_run_id=self.audit_run_id,
-                    file_path=rel_path,
-                    access_type=access_type,
-                    tool_name=access_type,
-                ).on_conflict_do_nothing(
-                    constraint="uq_file_coverage_run_path_type"
+                stmt = (
+                    insert(FileCoverage)
+                    .values(
+                        audit_run_id=self.audit_run_id,
+                        file_path=rel_path,
+                        access_type=access_type,
+                        tool_name=access_type,
+                    )
+                    .on_conflict_do_nothing(constraint="uq_file_coverage_run_path_type")
                 )
                 s.execute(stmt)
                 s.commit()
@@ -142,7 +145,7 @@ def populate_file_tree(
             return 0
         prefix = code_dir.rstrip("/") + "/"
         paths = sorted(
-            line[len(prefix):]
+            line[len(prefix) :]
             for line in result.stdout.strip().split("\n")
             if line.strip() and line.startswith(prefix)
         )
@@ -151,13 +154,15 @@ def populate_file_tree(
 
         with db.sync_session() as s:
             for path in paths:
-                stmt = insert(FileCoverage).values(
-                    audit_run_id=audit_run_id,
-                    file_path=path,
-                    access_type="tree",
-                    tool_name="tree",
-                ).on_conflict_do_nothing(
-                    constraint="uq_file_coverage_run_path_type"
+                stmt = (
+                    insert(FileCoverage)
+                    .values(
+                        audit_run_id=audit_run_id,
+                        file_path=path,
+                        access_type="tree",
+                        tool_name="tree",
+                    )
+                    .on_conflict_do_nothing(constraint="uq_file_coverage_run_path_type")
                 )
                 s.execute(stmt)
             s.commit()
@@ -200,9 +205,7 @@ class DirNode:
         return "coverage-none"
 
 
-def build_coverage_tree(
-    all_files: list[str], accessed: set[str]
-) -> DirNode:
+def build_coverage_tree(all_files: list[str], accessed: set[str]) -> DirNode:
     """Build a tree from file paths, annotating coverage.
 
     all_files: relative paths of all files in /src
@@ -254,9 +257,7 @@ def build_coverage_tree(
     return root
 
 
-def load_coverage_for_run(
-    audit_run_id: int, *, db: DB
-) -> tuple[list[str], set[str]]:
+def load_coverage_for_run(audit_run_id: int, *, db: DB) -> tuple[list[str], set[str]]:
     """Load coverage data from DB. Returns (all_files, accessed_set).
 
     all_files comes from 'tree' access_type entries.
@@ -266,14 +267,11 @@ def load_coverage_for_run(
     from sqlalchemy import select
 
     with db.sync_session() as s:
-        rows = (
-            s.execute(
-                select(FileCoverage.file_path, FileCoverage.access_type)
-                .where(FileCoverage.audit_run_id == audit_run_id)
-                .order_by(FileCoverage.file_path)
-            )
-            .all()
-        )
+        rows = s.execute(
+            select(FileCoverage.file_path, FileCoverage.access_type)
+            .where(FileCoverage.audit_run_id == audit_run_id)
+            .order_by(FileCoverage.file_path)
+        ).all()
 
     all_files: list[str] = []
     accessed: set[str] = set()

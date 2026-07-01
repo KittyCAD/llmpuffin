@@ -161,7 +161,9 @@ class NexecutorRuntime:
     ) -> None:
         self.stop()
 
-    def exec(self, command: list[str], timeout: int = 300, workdir: str | None = None) -> ExecResult:
+    def exec(
+        self, command: list[str], timeout: int = 300, workdir: str | None = None
+    ) -> ExecResult:
         """Execute a command inside the workload.
 
         If the workload has disappeared (404), re-creates it and retries once.

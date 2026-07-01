@@ -153,7 +153,9 @@ async def clone_repos(
         # Skip if already cloned (e.g. resuming with an existing container).
         # Check for .git to distinguish a real clone from an empty dir
         # created by the container runtime as working_dir.
-        check = execution.exec(["test", "-d", f"{clone_path}/.git"], timeout=5, workdir="/")
+        check = execution.exec(
+            ["test", "-d", f"{clone_path}/.git"], timeout=5, workdir="/"
+        )
         if check.ok:
             log.info("Repo already cloned at %s, skipping", clone_path)
             continue
@@ -191,7 +193,9 @@ async def clone_repos(
     # Capture git info from the first repo. We run git commands with -C
     # because the container cwd may be /src (not a git repo itself).
     first_repo = repos[0]
-    first_name = first_repo.name or first_repo.url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+    first_name = first_repo.name or first_repo.url.rstrip("/").rsplit("/", 1)[
+        -1
+    ].removesuffix(".git")
     first_path = f"/src/{first_name}"
 
     git_info = _capture_git_info_at(execution, first_path)
@@ -318,9 +322,7 @@ async def agent_run_result(
 # ── Helpers (not Hamilton nodes — underscore-prefixed) ──
 
 
-def _capture_git_info_at(
-    execution: AuditExecution, repo_path: str
-) -> GitInfo | None:
+def _capture_git_info_at(execution: AuditExecution, repo_path: str) -> GitInfo | None:
     """Capture git info from a specific directory inside the container."""
     from urllib.parse import urlparse
 

@@ -183,5 +183,9 @@ async def profile_run(
         ),
     )
     return toast(
-        request, "success", "Audit started", redirect_to=f"/runs/{run_id}/", refresh=True
+        request,
+        "success",
+        "Audit started",
+        redirect_to=f"/runs/{run_id}/",
+        refresh=True,
     )
