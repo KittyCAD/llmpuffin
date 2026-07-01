@@ -69,7 +69,9 @@ async def resolved_thread(
         log.info("Session thread_id: %s", tid)
 
     resume_tid = source_thread_id if is_fork else thread_id
-    audit_run_id = await _create_audit_run(config, tid, resume_tid, db=db, profile_id=profile_id)
+    audit_run_id = await _create_audit_run(
+        config, tid, resume_tid, db=db, profile_id=profile_id
+    )
     return ResolvedThread(tid=tid, audit_run_id=audit_run_id)
 
 
