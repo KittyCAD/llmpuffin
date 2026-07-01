@@ -7,14 +7,18 @@
 </div>
 
 <div class="card mt-4" style="padding: 0;">
-<table>
-<thead><tr><th>Thread</th><th>Checkpoints</th><th>Status</th></tr></thead>
+<table x-data="sortable">
+<thead><tr>
+  <th @click="sort('thread')" :class="sortClass('thread')">Thread</th>
+  <th @click="sort('checkpoints')" :class="sortClass('checkpoints')">Checkpoints</th>
+  <th @click="sort('status')" :class="sortClass('status')">Status</th>
+</tr></thead>
 <tbody>
 {% for s in sessions %}
 <tr>
-  <td><a href="/checkpoints/{{ s.thread_id }}/" class="mono text-xs">{{ s.thread_id }}</a></td>
-  <td>{{ s.steps }}</td>
-  <td>
+  <td data-sort-thread="{{ s.thread_id }}"><a href="/checkpoints/{{ s.thread_id }}/" class="mono text-xs">{{ s.thread_id }}</a></td>
+  <td data-sort-checkpoints="{{ s.steps }}">{{ s.steps }}</td>
+  <td data-sort-status="{{ s.status or '' }}">
     {% if s.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
     {% elif s.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
     {% elif s.status %}<span class="badge outline">{{ s.status }}</span>

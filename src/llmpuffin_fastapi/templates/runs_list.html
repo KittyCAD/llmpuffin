@@ -7,22 +7,28 @@
 </div>
 
 <div class="card mt-4" style="padding: 0;">
-<table>
+<table x-data="sortable">
 <thead>
   <tr>
-    <th>#</th><th>Profile</th><th>Image</th><th>Model</th>
-    <th>Status</th><th>Threads</th><th>Findings</th>
-    <th>Started</th><th>Finished</th><th></th>
+    <th @click="sort('id')" :class="sortClass('id')">#</th>
+    <th @click="sort('profile')" :class="sortClass('profile')">Profile</th>
+    <th>Image</th><th>Model</th>
+    <th @click="sort('status')" :class="sortClass('status')">Status</th>
+    <th @click="sort('threads')" :class="sortClass('threads')">Threads</th>
+    <th @click="sort('findings')" :class="sortClass('findings')">Findings</th>
+    <th @click="sort('started')" :class="sortClass('started')">Started</th>
+    <th @click="sort('finished')" :class="sortClass('finished')">Finished</th>
+    <th></th>
   </tr>
 </thead>
 <tbody>
 {% for r in runs %}
 <tr hx-get="/runs/{{ r.id }}/" hx-push-url="true" hx-target="body">
-  <td>#{{ r.id }}</td>
-  <td>{% if r.profile %}<a href="/profiles/{{ r.profile.id }}/">{{ r.profile.name }}</a>{% else %}—{% endif %}</td>
+  <td data-sort-id="{{ r.id }}">#{{ r.id }}</td>
+  <td data-sort-profile="{{ r.profile.name if r.profile else '' }}">{% if r.profile %}<a href="/profiles/{{ r.profile.id }}/">{{ r.profile.name }}</a>{% else %}—{% endif %}</td>
   <td class="mono text-xs text-muted">{{ r.container_image | truncatechars(40) }}</td>
   <td class="mono text-xs text-muted">{{ r.model_name | truncatechars(28) }}</td>
-  <td>
+  <td data-sort-status="{{ r.status }}">
     {% if r.status == "running" %}
       <span class="badge primary"><span class="dot"></span>running</span>
     {% elif r.status == "completed" %}
@@ -37,10 +43,10 @@
       <span class="badge outline">{{ r.status }}</span>
     {% endif %}
   </td>
-  <td>{{ r.thread_count }}</td>
-  <td>{{ r.finding_count }}</td>
-  <td class="text-muted text-xs">{{ r.started_at | datetimefmt }}</td>
-  <td class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
+  <td data-sort-threads="{{ r.thread_count }}">{{ r.thread_count }}</td>
+  <td data-sort-findings="{{ r.finding_count }}">{{ r.finding_count }}</td>
+  <td data-sort-started="{{ r.started_at.isoformat() if r.started_at else '' }}" class="text-muted text-xs">{{ r.started_at | datetimefmt }}</td>
+  <td data-sort-finished="{{ r.finished_at.isoformat() if r.finished_at else '' }}" class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
   <td>
     {% if r.status != "running" %}
       <form hx-post="/runs/{{ r.id }}/delete/" hx-confirm="Delete this run?" hx-disabled-elt="find button" class="inline" onclick="event.stopPropagation()">

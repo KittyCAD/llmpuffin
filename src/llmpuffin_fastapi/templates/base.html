@@ -79,6 +79,39 @@
   </script>
   {% include "_toasts.html" %}
 
+  <script>
+    // Sortable table: add x-data="sortable" to any <table>.
+    // Headers use @click="sort('key')" and rows carry data-sort-<key>="value" on <td>s.
+    document.addEventListener("alpine:init", () => {
+      Alpine.data("sortable", () => ({
+        col: null,
+        asc: true,
+        sort(key) {
+          if (this.col === key) { this.asc = !this.asc; }
+          else { this.col = key; this.asc = true; }
+          const tbody = this.$root.querySelector("tbody");
+          const rows = Array.from(tbody.querySelectorAll("tr"));
+          const dir = this.asc ? 1 : -1;
+          rows.sort((a, b) => {
+            const ca = a.querySelector("[data-sort-" + key + "]");
+            const cb = b.querySelector("[data-sort-" + key + "]");
+            if (!ca || !cb) return 0;
+            const va = ca.getAttribute("data-sort-" + key);
+            const vb = cb.getAttribute("data-sort-" + key);
+            const na = parseFloat(va), nb = parseFloat(vb);
+            if (!isNaN(na) && !isNaN(nb)) return (na - nb) * dir;
+            return va.localeCompare(vb, undefined, {sensitivity: "base"}) * dir;
+          });
+          rows.forEach(r => tbody.appendChild(r));
+        },
+        sortClass(key) {
+          if (this.col !== key) return "sortable";
+          return "sortable " + (this.asc ? "asc" : "desc");
+        }
+      }));
+    });
+  </script>
+
   {# Pre-paint sidebar collapsed state to avoid FOUC before Alpine boots. #}
   <script>
     (function() {

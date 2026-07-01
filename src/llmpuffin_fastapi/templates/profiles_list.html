@@ -7,19 +7,24 @@
 </div>
 
 <div class="card mt-4" style="padding: 0;">
-<table>
+<table x-data="sortable">
 <thead>
-  <tr><th>Name</th><th>Image</th><th>Updated</th><th></th></tr>
+  <tr>
+    <th @click="sort('name')" :class="sortClass('name')">Name</th>
+    <th @click="sort('image')" :class="sortClass('image')">Image</th>
+    <th @click="sort('updated')" :class="sortClass('updated')">Updated</th>
+    <th></th>
+  </tr>
 </thead>
 <tbody>
 {% for p in profiles %}
 <tr>
-  <td>
+  <td data-sort-name="{{ p.name }}">
     <a href="/profiles/{{ p.id }}/">{{ p.name }}</a>
     {% if p.jit %}<span class="text-muted text-xs" title="Created automatically from CLI run">(jit)</span>{% endif %}
   </td>
-  <td class="mono text-xs text-muted">{{ p.image }}</td>
-  <td class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
+  <td data-sort-image="{{ p.image }}" class="mono text-xs text-muted">{{ p.image }}</td>
+  <td data-sort-updated="{{ p.updated_at.isoformat() if p.updated_at else '' }}" class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
   <td>
     <form hx-post="/profiles/{{ p.id }}/run/" hx-disabled-elt="find button" class="inline">
       <button type="submit" class="primary">run</button>
