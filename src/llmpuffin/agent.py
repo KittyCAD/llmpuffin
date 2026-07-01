@@ -49,6 +49,7 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.config import Config
+from llmpuffin.coverage import CoverageTracker
 from llmpuffin.db import DB
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
@@ -87,11 +88,12 @@ def _build_agent(
     *,
     db: DB,
     github_client: GitHubClient | None = None,
+    coverage: CoverageTracker | None = None,
 ):
     """Build the deep agent with all backends, tools, and middleware."""
     p = config.profile
     agent_cfg = p.agent
-    container_backend = ContainerBackend(execution)
+    container_backend = ContainerBackend(execution, coverage=coverage)
     routes: dict = {
         "/memories/": StoreBackend(
             store=store,
@@ -316,6 +318,7 @@ async def _execute_pipeline(
     is_fork: bool = False,
     github_client: GitHubClient | None = None,
     profile_id: int | None = None,
+    audit_run_id: int | None = None,
 ) -> AuditResult:
     """Execute the audit pipeline as a Hamilton DAG.
 
@@ -341,6 +344,7 @@ async def _execute_pipeline(
         "is_fork": is_fork,
         "github_client": github_client,
         "profile_id": profile_id,
+        "audit_run_id": audit_run_id,
     }
 
     env_ctx = None
@@ -355,24 +359,38 @@ async def _execute_pipeline(
         status = run_result.status
         error = run_result.error
     except (KeyboardInterrupt, asyncio.CancelledError):
-        # Try to extract the resolved thread for finalization
+        # Try to extract already-computed nodes for finalization
         try:
-            partial = await dr.execute(["resolved_thread"], inputs=inputs)
+            partial = await dr.execute(
+                ["resolved_thread", "environment_context"], inputs=inputs
+            )
             resolved = partial["resolved_thread"]
+            env_ctx = partial.get("environment_context")
         except Exception:
-            raise
+            try:
+                partial = await dr.execute(["resolved_thread"], inputs=inputs)
+                resolved = partial["resolved_thread"]
+            except Exception:
+                raise
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
         await _finalize_audit_run(resolved.tid, status, error, db=db)
         raise
     except Exception as exc:
-        # Try to extract the resolved thread for finalization
+        # Try to extract already-computed nodes for finalization
         try:
-            partial = await dr.execute(["resolved_thread"], inputs=inputs)
+            partial = await dr.execute(
+                ["resolved_thread", "environment_context"], inputs=inputs
+            )
             resolved = partial["resolved_thread"]
+            env_ctx = partial.get("environment_context")
         except Exception:
-            raise exc from None
+            try:
+                partial = await dr.execute(["resolved_thread"], inputs=inputs)
+                resolved = partial["resolved_thread"]
+            except Exception:
+                raise exc from None
         status = AuditStatus.ERROR
         error = str(exc)
         log.exception("Audit failed: %s", error)
@@ -400,6 +418,20 @@ async def _execute_pipeline(
     )
 
 
+async def create_audit_run(
+    config: HarnessConfig,
+    tid: str,
+    *,
+    db: DB,
+    profile_id: int | None = None,
+    resume_thread_id: str | None = None,
+) -> int:
+    """Pre-create an AuditRun + thread before spawning. Returns audit_run.id."""
+    return await _create_audit_run(
+        config, tid, resume_thread_id, db=db, profile_id=profile_id
+    )
+
+
 async def run_audit(
     config: HarnessConfig,
     *,
@@ -409,6 +441,7 @@ async def run_audit(
     user_message: str | None = None,
     github_client: GitHubClient | None = None,
     profile_id: int | None = None,
+    audit_run_id: int | None = None,
 ) -> AuditResult:
     """Run a full security audit driven by the threat model."""
     harness = Harness(config, global_config=global_config)
@@ -437,6 +470,7 @@ async def run_audit(
             db=db,
             github_client=github_client,
             profile_id=profile_id,
+            audit_run_id=audit_run_id,
         )
 
 
@@ -452,6 +486,7 @@ async def _run_audit_inner(
     db: DB,
     github_client: GitHubClient | None = None,
     profile_id: int | None = None,
+    audit_run_id: int | None = None,
 ) -> AuditResult:
     existing_container_id = (
         await _get_container_id(thread_id, db=db) if thread_id else None
@@ -475,6 +510,7 @@ async def _run_audit_inner(
         is_fork=False,
         github_client=github_client,
         profile_id=profile_id,
+        audit_run_id=audit_run_id,
     )
 
 

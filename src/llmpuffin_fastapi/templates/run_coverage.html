@@ -1,0 +1,122 @@
+{# Recursive macro for tree rows — must be defined before use #}
+{% macro _render_rows(node, prefix, depth) %}
+{% set dirs = [] %}
+{% set files = [] %}
+{% for name in node.children|sort %}
+  {% set child = node.children[name] %}
+  {% if child.is_dir %}
+    {% set _ = dirs.append((name, child)) %}
+  {% else %}
+    {% set _ = files.append((name, child)) %}
+  {% endif %}
+{% endfor %}
+
+{% for name, child in dirs %}
+{% set key = prefix ~ "/" ~ name %}
+<tr class="coverage-dir"
+    {% if depth > 0 %}x-show="expanded['{{ prefix }}']" x-cloak{% endif %}
+    @click="expanded['{{ key }}'] = !expanded['{{ key }}']"
+    style="cursor: pointer;">
+  <td style="padding-left: {{ depth * 20 + 8 }}px;">
+    <span class="coverage-toggle" :class="expanded['{{ key }}'] && 'open'">&#9654;</span>
+    <span style="font-weight: 500;">{{ name }}/</span>
+  </td>
+  <td style="text-align: right;" class="text-muted text-sm">{{ child.total_files }}</td>
+  <td style="text-align: right;" class="text-sm">{{ child.accessed_files }}</td>
+  <td style="text-align: right;">
+    <span class="badge {{ child.coverage_class }} text-xs">{{ "%.0f"|format(child.coverage_pct) }}%</span>
+  </td>
+  <td>
+    <div style="background: var(--muted); border-radius: 3px; height: 6px; overflow: hidden;">
+      <div style="background: var(--primary); height: 100%; width: {{ child.coverage_pct }}%;"></div>
+    </div>
+  </td>
+</tr>
+{{ _render_rows(child, key, depth + 1) }}
+{% endfor %}
+
+{% for name, child in files %}
+<tr class="coverage-file"
+    {% if depth > 0 %}x-show="expanded['{{ prefix }}']" x-cloak{% endif %}>
+  <td style="padding-left: {{ depth * 20 + 8 }}px;">
+    {% if child.accessed_files > 0 %}
+    <span class="coverage-dot reached"></span>
+    {% else %}
+    <span class="coverage-dot"></span>
+    {% endif %}
+    <span class="mono text-xs">{{ name }}</span>
+  </td>
+  <td></td>
+  <td></td>
+  <td style="text-align: right;">
+    {% if child.accessed_files > 0 %}
+    <span class="badge coverage-high text-xs">reached</span>
+    {% else %}
+    <span class="text-xs text-muted">—</span>
+    {% endif %}
+  </td>
+  <td></td>
+</tr>
+{% endfor %}
+{% endmacro %}
+
+{% if not tree %}
+<div class="card">
+  <p class="text-muted" style="text-align: center; padding: 2rem;">
+    No coverage data available for this run.
+  </p>
+  <p class="text-xs text-muted" style="text-align: center;">
+    Coverage is collected automatically at the end of an audit run.
+  </p>
+</div>
+{% else %}
+
+<div class="card col gap-3">
+  <div class="row gap-4" style="align-items: baseline;">
+    <div>
+      <span class="text-2xl" style="font-weight: 600;">{{ "%.0f"|format(tree.coverage_pct) }}%</span>
+      <span class="text-muted text-sm"> files reached</span>
+    </div>
+    <div class="text-sm text-muted">
+      {{ accessed_files }} of {{ total_files }} files
+    </div>
+  </div>
+
+  <div style="background: var(--muted); border-radius: 4px; height: 8px; overflow: hidden;">
+    <div style="background: var(--primary); height: 100%; width: {{ tree.coverage_pct }}%; transition: width 0.3s;"></div>
+  </div>
+</div>
+
+<div class="card" style="padding: 0; overflow-x: auto;" x-data="{ expanded: {} }">
+<table class="coverage-tree">
+<thead>
+  <tr>
+    <th style="text-align: left; min-width: 400px;">Path</th>
+    <th style="text-align: right; width: 80px;">Files</th>
+    <th style="text-align: right; width: 80px;">Reached</th>
+    <th style="text-align: right; width: 80px;">Coverage</th>
+    <th style="width: 120px;"></th>
+  </tr>
+</thead>
+<tbody>
+  {{ _render_rows(tree, "", 0) }}
+</tbody>
+</table>
+</div>
+
+{% endif %}
+
+<style>
+.coverage-tree { width: 100%; }
+.coverage-tree td, .coverage-tree th { padding: 0.375rem 0.5rem; }
+.coverage-tree tbody tr:hover { background: var(--accent); }
+.coverage-toggle { display: inline-block; transition: transform 0.15s; font-size: 0.65rem; margin-right: 0.375rem; color: var(--muted-foreground); }
+.coverage-toggle.open { transform: rotate(90deg); }
+.coverage-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.375rem; background: var(--muted); vertical-align: middle; }
+.coverage-dot.reached { background: var(--primary); }
+.coverage-high { background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); }
+.coverage-medium { background: color-mix(in srgb, orange 15%, transparent); color: orange; }
+.coverage-low { background: color-mix(in srgb, red 15%, transparent); color: red; }
+.coverage-none { background: var(--muted); color: var(--muted-foreground); }
+[x-cloak] { display: none !important; }
+</style>

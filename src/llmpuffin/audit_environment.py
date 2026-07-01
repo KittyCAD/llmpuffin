@@ -67,8 +67,12 @@ class AuditExecution(Protocol):
         """Working directory inside the container."""
         ...
 
-    def exec(self, command: list[str], timeout: int = 300) -> ExecResult:
-        """Execute a command inside the container."""
+    def exec(self, command: list[str], timeout: int = 300, workdir: str | None = None) -> ExecResult:
+        """Execute a command inside the container.
+
+        workdir: Override the working directory for this command.
+                 Defaults to code_dir if None.
+        """
         ...
 
     def capture_git_info(self) -> GitInfo | None:

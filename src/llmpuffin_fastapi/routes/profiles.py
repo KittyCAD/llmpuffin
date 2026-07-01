@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from llmpuffin.agent import run_audit
+from llmpuffin.agent import create_audit_run, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
@@ -167,6 +167,9 @@ async def profile_run(
     import uuid
 
     tid = uuid.uuid4().hex[:12]
+    run_id = await create_audit_run(
+        harness_config, tid, db=llmpuffin_db, profile_id=profile.id
+    )
     harness.spawn(
         tid,
         run_audit(
@@ -176,8 +179,9 @@ async def profile_run(
             thread_id=tid,
             github_client=gh,
             profile_id=profile.id,
+            audit_run_id=run_id,
         ),
     )
     return toast(
-        request, "success", "Audit started", redirect_to="/runs/", refresh=True
+        request, "success", "Audit started", redirect_to=f"/runs/{run_id}/", refresh=True
     )

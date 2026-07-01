@@ -26,6 +26,7 @@ from deepagents.backends.protocol import (
 )
 
 from llmpuffin.audit_environment import AuditExecution
+from llmpuffin.coverage import CoverageTracker
 
 DEFAULT_EXECUTE_TIMEOUT = 120
 
@@ -43,11 +44,13 @@ class ContainerBackend(SandboxBackendProtocol):
         *,
         timeout: int = DEFAULT_EXECUTE_TIMEOUT,
         max_output_bytes: int = 100_000,
+        coverage: CoverageTracker | None = None,
     ) -> None:
         self._exec = execution
         self._default_timeout = timeout
         self._max_output_bytes = max_output_bytes
         self._sandbox_id = f"container-{uuid.uuid4().hex[:8]}"
+        self.coverage = coverage
 
     @property
     def id(self) -> str:
@@ -89,6 +92,9 @@ class ContainerBackend(SandboxBackendProtocol):
 
         if exit_code != 0:
             output = f"{output.rstrip()}\n\nExit code: {exit_code}"
+
+        if self.coverage:
+            self.coverage.record_exec(command, stdout)
 
         return ExecuteResponse(
             output=output,
@@ -160,6 +166,9 @@ class ContainerBackend(SandboxBackendProtocol):
         if exit_code != 0:
             return ReadResult(error=f"Error: File '{file_path}' not found")
 
+        if self.coverage:
+            self.coverage.record_read(file_path)
+
         return ReadResult(
             file_data=FileData(
                 content=stdout,
@@ -209,6 +218,9 @@ class ContainerBackend(SandboxBackendProtocol):
             )
             return GrepResult(error=hint)
 
+        if self.coverage and matches:
+            self.coverage.record_grep([m["path"] for m in matches])
+
         return GrepResult(matches=matches)
 
     def glob(self, pattern: str, path: str = "/") -> GlobResult:
@@ -224,6 +236,9 @@ class ContainerBackend(SandboxBackendProtocol):
         for entry in sorted(stdout.strip().split("\n")):
             if entry and fnmatch.fnmatch(entry, pattern):
                 matches.append(FileInfo(path=entry))
+
+        if self.coverage and matches:
+            self.coverage.record_glob([m["path"] for m in matches])
 
         return GlobResult(matches=matches)
 
@@ -280,5 +295,8 @@ class ContainerBackend(SandboxBackendProtocol):
         )
         if exit_code != 0:
             return EditResult(error=f"Error: {stderr.strip()}")
+
+        if self.coverage:
+            self.coverage.record_edit(file_path)
 
         return EditResult(path=file_path, occurrences=count)

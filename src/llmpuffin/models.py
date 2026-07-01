@@ -476,6 +476,36 @@ class ThreatModelDB(Base):
         return self.name
 
 
+class FileCoverage(Base):
+    """Tracks which files in /src were accessed during an audit run.
+
+    Each row records a single file access. The access_type indicates how
+    the file was reached (read, grep match, exec output, etc.).
+    """
+
+    __tablename__ = "file_coverage"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    audit_run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("audit_run.id", ondelete="CASCADE")
+    )
+    file_path: Mapped[str] = mapped_column(String(1024))
+    access_type: Mapped[str] = mapped_column(String(32))
+    """How the file was accessed: read, grep, glob, edit, exec."""
+    tool_name: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    """Which tool triggered the access (e.g. 'read', 'grep', 'execute')."""
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "audit_run_id", "file_path", "access_type",
+            name="uq_file_coverage_run_path_type",
+        ),
+    )
+
+
 class ThreatModelFile(Base):
     """A single TOML file within a threat model."""
 

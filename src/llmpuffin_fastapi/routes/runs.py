@@ -145,6 +145,40 @@ def _toml_for_run(run: AuditRun) -> str:
     return run.profile_toml or (run.profile.profile_toml if run.profile else "")
 
 
+@router.get("/runs/{run_id}/coverage/", response_class=HTMLResponse)
+async def run_coverage(
+    run_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+):
+    run = (
+        await db.execute(
+            select(AuditRun)
+            .options(selectinload(AuditRun.profile))
+            .where(AuditRun.id == run_id)
+        )
+    ).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status_code=404)
+
+    from llmpuffin.coverage import build_coverage_tree, load_coverage_for_run
+
+    all_files, accessed = load_coverage_for_run(run_id, db=llmpuffin_db)
+    tree = build_coverage_tree(all_files, accessed) if all_files else None
+
+    return templates.TemplateResponse(
+        request,
+        "run_coverage.html",
+        {
+            "run": run,
+            "tree": tree,
+            "total_files": len(all_files),
+            "accessed_files": len(accessed & set(all_files)),
+        },
+    )
+
+
 @router.get("/runs/{run_id}/sarif/")
 async def run_sarif_export(
     run_id: int,

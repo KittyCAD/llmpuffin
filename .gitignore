@@ -21,3 +21,5 @@ examples/*/store
 profiles
 
 threat_model
+
+*local.toml

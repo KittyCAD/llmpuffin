@@ -46,6 +46,9 @@
   <a class="tab {% if tab == 'config' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=config">
     Config
   </a>
+  <a class="tab {% if tab == 'coverage' %}active{% endif %}" href="/runs/{{ run.id }}/?tab=coverage">
+    Coverage
+  </a>
 </div>
 
 {# ─── Threads tab ─── #}
@@ -141,5 +144,12 @@
   <h3>Profile TOML</h3>
   <pre class="card mono text-xs">{{ run.profile_toml or run.profile.profile_toml }}</pre>
   {% endif %}
+{% endif %}
+
+{# ─── Coverage tab ─── #}
+{% if tab == 'coverage' %}
+  <div hx-get="/runs/{{ run.id }}/coverage/" hx-trigger="load" hx-swap="innerHTML">
+    <p class="text-muted">Loading coverage data...</p>
+  </div>
 {% endif %}
 {% endblock %}
