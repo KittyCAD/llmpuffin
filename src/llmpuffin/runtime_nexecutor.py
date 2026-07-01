@@ -161,14 +161,14 @@ class NexecutorRuntime:
     ) -> None:
         self.stop()
 
-    def exec(self, command: list[str], timeout: int = 300) -> ExecResult:
+    def exec(self, command: list[str], timeout: int = 300, workdir: str | None = None) -> ExecResult:
         """Execute a command inside the workload.
 
         If the workload has disappeared (404), re-creates it and retries once.
         """
         body = ExecRequest(
             command=command,
-            workdir=self._code_dir,
+            workdir=workdir or self._code_dir,
             timeout_secs=timeout,
         )
         log.debug("nexecutor exec: %s", body.to_dict())
