@@ -124,7 +124,7 @@ class Harness:
                 from llmpuffin.runtime_nexecutor import NexecutorRuntime
             except ImportError:
                 raise RuntimeError(
-                    "nexecutor-client is not installed. "
+                    "nexecutor-client is not installed or you are using an outdated version (check if you are using a cached version). "
                     "Install it with: pip install llmpuffin[nexecutor]"
                 ) from None
 
