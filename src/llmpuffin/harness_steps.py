@@ -400,6 +400,7 @@ async def _setup_git_credentials(execution: AuditExecution, token: str) -> None:
             header,
         ],
         timeout=5,
+        workdir="/",
     )
     if not write.ok:
         log.warning("Failed to write git credentials file: %s", write.stderr.strip())
@@ -415,6 +416,7 @@ async def _setup_git_credentials(execution: AuditExecution, token: str) -> None:
             _GIT_CREDENTIALS_PATH,
         ],
         timeout=5,
+        workdir="/",
     )
     if not include.ok:
         log.warning("Failed to set git include.path: %s", include.stderr.strip())
@@ -422,10 +424,11 @@ async def _setup_git_credentials(execution: AuditExecution, token: str) -> None:
 
 async def _teardown_git_credentials(execution: AuditExecution) -> None:
     """Remove the credentials file and global include after cloning."""
-    await execution.exec(["rm", "-f", _GIT_CREDENTIALS_PATH], timeout=5)
+    await execution.exec(["rm", "-f", _GIT_CREDENTIALS_PATH], timeout=5, workdir="/")
     await execution.exec(
         ["git", "config", "--global", "--unset-all", "include.path"],
         timeout=5,
+        workdir="/",
     )
 
 
