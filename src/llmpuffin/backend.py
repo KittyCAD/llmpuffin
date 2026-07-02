@@ -139,7 +139,7 @@ class ContainerBackend(SandboxBackendProtocol):
                         FileInfo(
                             path=parts[0],
                             is_dir=parts[1] == "directory",
-                            size=int(parts[2]) if parts[2].isdigit() else None,
+                            size=int(parts[2]) if parts[2].isdigit() else None,  # pyright: ignore[reportArgumentType]
                             modified_at=parts[3],
                         )
                     )
@@ -228,7 +228,7 @@ class ContainerBackend(SandboxBackendProtocol):
 
         return GrepResult(matches=matches)
 
-    async def aglob(self, pattern: str, path: str = "/") -> GlobResult:
+    async def aglob(self, pattern: str, path: str = "/") -> GlobResult:  # pyright: ignore[reportIncompatibleMethodOverride]
         # Use find + fnmatch
         search_path = path or "/"
         exit_code, stdout, _ = await self._run(
@@ -332,7 +332,7 @@ class ContainerBackend(SandboxBackendProtocol):
 
         return asyncio.run(self.agrep(pattern, path, glob))
 
-    def glob(self, pattern: str, path: str = "/") -> GlobResult:
+    def glob(self, pattern: str, path: str = "/") -> GlobResult:  # pyright: ignore[reportIncompatibleMethodOverride]
         import asyncio
 
         return asyncio.run(self.aglob(pattern, path))

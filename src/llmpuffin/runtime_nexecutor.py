@@ -237,7 +237,7 @@ class NexecutorRuntime:
         )
 
     async def capture_git_info(self) -> GitInfo | None:
-        return await _capture_git_info(self)
+        return await _capture_git_info(self)  # pyright: ignore[reportArgumentType]
 
     async def stop(self, timeout: int = 30, remove: bool = False) -> None:
         """Stop the workload."""

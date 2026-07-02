@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -100,6 +100,12 @@ async def auth_callback(request: Request):
     token = await _oauth.oidc.authorize_access_token(request)
     userinfo = token.get("userinfo") or {}
 
+    if _auth_config is None:
+        log.error("Auth callback invoked before auth configuration was initialized")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication configuration is not initialized",
+        )
     groups = userinfo.get(_auth_config.groups_claim, [])
     if isinstance(groups, str):
         groups = [groups]

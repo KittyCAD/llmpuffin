@@ -111,7 +111,7 @@ class PodmanExecution:
 
     @property
     def container_id(self) -> str:
-        return self.container.id
+        return self.container.id  # pyright: ignore[reportReturnType]
 
     @property
     def code_dir(self) -> str:
