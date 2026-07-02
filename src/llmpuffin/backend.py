@@ -61,7 +61,9 @@ class ContainerBackend(SandboxBackendProtocol):
     def id(self) -> str:
         return self._sandbox_id
 
-    async def _run(self, cmd: list[str], timeout: int | None = None) -> tuple[int, str, str]:
+    async def _run(
+        self, cmd: list[str], timeout: int | None = None
+    ) -> tuple[int, str, str]:
         """Run a command in the container, return (exit_code, stdout, stderr)."""
         t = timeout if timeout is not None else self._default_timeout
         result = await self._exec.exec(cmd, timeout=t)
@@ -310,36 +312,43 @@ class ContainerBackend(SandboxBackendProtocol):
 
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         import asyncio
-        return asyncio.run(
-            self.aexecute(command, timeout=timeout)
-        )
+
+        return asyncio.run(self.aexecute(command, timeout=timeout))
 
     def ls(self, path: str) -> LsResult:
         import asyncio
+
         return asyncio.run(self.als(path))
 
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         import asyncio
-        return asyncio.run(
-            self.aread(file_path, offset, limit)
-        )
 
-    def grep(self, pattern: str, path: str | None = None, glob: str | None = None) -> GrepResult:
+        return asyncio.run(self.aread(file_path, offset, limit))
+
+    def grep(
+        self, pattern: str, path: str | None = None, glob: str | None = None
+    ) -> GrepResult:
         import asyncio
-        return asyncio.run(
-            self.agrep(pattern, path, glob)
-        )
+
+        return asyncio.run(self.agrep(pattern, path, glob))
 
     def glob(self, pattern: str, path: str = "/") -> GlobResult:
         import asyncio
+
         return asyncio.run(self.aglob(pattern, path))
 
     def write(self, file_path: str, content: str) -> WriteResult:
         import asyncio
+
         return asyncio.run(self.awrite(file_path, content))
 
-    def edit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> EditResult:
+    def edit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
         import asyncio
-        return asyncio.run(
-            self.aedit(file_path, old_string, new_string, replace_all)
-        )
+
+        return asyncio.run(self.aedit(file_path, old_string, new_string, replace_all))

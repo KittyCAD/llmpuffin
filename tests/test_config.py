@@ -20,12 +20,12 @@ def test_defaults_without_toml_or_env(monkeypatch, tmp_path):
 def test_env_overrides_top_level(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("LLMPUFFIN__RUNTIME", "nexecutor")
-    monkeypatch.setenv("LLMPUFFIN__NEXECUTOR_URL", "http://nx:9090")
-    monkeypatch.setenv("LLMPUFFIN__MICROVM_IMAGE_ARN", "arn:aws:test")
+    monkeypatch.setenv("LLMPUFFIN__NEXECUTOR__URL", "http://nx:9090")
+    monkeypatch.setenv("LLMPUFFIN__MICROVM__IMAGE_ARN", "arn:aws:test")
     c = Config.load()
     assert c.runtime == "nexecutor"
-    assert c.nexecutor_url == "http://nx:9090"
-    assert c.microvm_image_arn == "arn:aws:test"
+    assert c.nexecutor.url == "http://nx:9090"
+    assert c.microvm.image_arn == "arn:aws:test"
 
 
 def test_env_overrides_nested(monkeypatch, tmp_path):

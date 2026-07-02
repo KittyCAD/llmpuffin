@@ -132,9 +132,7 @@ class PodmanExecution:
         self, command: list[str], timeout: int = 300, workdir: str | None = None
     ) -> ExecResult:
         """Execute a command inside the container."""
-        return await asyncio.to_thread(
-            self._exec_sync, command, timeout, workdir
-        )
+        return await asyncio.to_thread(self._exec_sync, command, timeout, workdir)
 
     def _exec_sync(
         self, command: list[str], timeout: int, workdir: str | None

@@ -103,7 +103,9 @@ class Harness:
         self.threat_model = tm
         return tm
 
-    async def start_environment(self, container_id: str | None = None) -> AuditExecution:
+    async def start_environment(
+        self, container_id: str | None = None
+    ) -> AuditExecution:
         """Start the containerized audit environment.
 
         Args:

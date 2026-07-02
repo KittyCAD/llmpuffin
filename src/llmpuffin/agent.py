@@ -31,7 +31,6 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
 from deepagents.backends.utils import create_file_data
@@ -354,20 +353,29 @@ async def _execute_pipeline(
 
         # Step 4: build agent
         agent = await build_agent_step(
-            config, env_ctx, threat_model, resolved,
-            checkpointer, store, db, github_client,
+            config,
+            env_ctx,
+            threat_model,
+            resolved,
+            checkpointer,
+            store,
+            db,
+            github_client,
         )
 
         # Step 5: prepare input messages
         messages = await input_messages(
-            agent, config, resolved, source_thread_id,
-            user_message, is_fork, thread_id,
+            agent,
+            config,
+            resolved,
+            source_thread_id,
+            user_message,
+            is_fork,
+            thread_id,
         )
 
         # Step 6: run agent
-        run_result = await agent_run_result(
-            agent, messages, config, resolved, db
-        )
+        run_result = await agent_run_result(agent, messages, config, resolved, db)
         status = run_result.status
         error = run_result.error
     except (KeyboardInterrupt, asyncio.CancelledError):

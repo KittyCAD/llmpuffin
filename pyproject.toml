@@ -48,6 +48,12 @@ llmpuffin-oidc = "llmpuffin_dev.oidc_server:main"
 llmpuffin-fastapi = "llmpuffin_fastapi.main:main"
 llmpuffin-microvm-agent = "llmpuffin_microvm_agent.main:main"
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.13"
+exclude = ["tests"]
+
 [tool.ruff]
 src = ["src"]
 

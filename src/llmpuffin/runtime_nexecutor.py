@@ -19,7 +19,6 @@ from nexecutor_client.api.workloads import (
     exec_command,
     get_workload,
     run_workload,
-    start_workload,
     stop_workload,
 )
 from nexecutor_client.models.backend_type_type_0 import BackendTypeType0
@@ -105,16 +104,6 @@ class NexecutorRuntime:
 
         return rt
 
-    async def _start_workload(self) -> None:
-        """Start a previously stopped workload."""
-        resp = await start_workload.asyncio(
-            id=self._workload_id, client=self._client
-        )
-        if isinstance(resp, Error):
-            raise RuntimeError(f"Failed to start workload: {resp.message}")
-        log.info("Started nexecutor workload %s", self._workload_id[:12])
-        await self._wait_until_running()
-
     def _resolve_backend(self) -> BackendTypeType0 | BackendTypeType1 | None:
         if self._backend == "microvm":
             return BackendTypeType1.MICROVM
@@ -146,9 +135,7 @@ class NexecutorRuntime:
         """Poll until the workload reaches 'running' status."""
         deadline = time.monotonic() + timeout
         while True:
-            resp = await get_workload.asyncio(
-                id=self._workload_id, client=self._client
-            )
+            resp = await get_workload.asyncio(id=self._workload_id, client=self._client)
             if isinstance(resp, WorkloadResponse):
                 if resp.status == WorkloadStatus.RUNNING:
                     log.info("Workload %s is running", self._workload_id[:12])

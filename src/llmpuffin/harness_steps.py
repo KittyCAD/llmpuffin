@@ -299,7 +299,9 @@ async def agent_run_result(
 # ── Helpers ──
 
 
-async def _capture_git_info_at(execution: AuditExecution, repo_path: str) -> GitInfo | None:
+async def _capture_git_info_at(
+    execution: AuditExecution, repo_path: str
+) -> GitInfo | None:
     """Capture git info from a specific directory inside the container."""
     from urllib.parse import urlparse
 
