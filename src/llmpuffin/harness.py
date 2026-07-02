@@ -122,11 +122,11 @@ class Harness:
         if cfg.runtime == "nexecutor":
             try:
                 from llmpuffin.runtime_nexecutor import NexecutorRuntime
-            except ImportError:
+            except ImportError as exc:
                 raise RuntimeError(
-                    "nexecutor-client is not installed or you are using an outdated version (check if you are using a cached version). "
-                    "Install it with: pip install llmpuffin[nexecutor]"
-                ) from None
+                    f"nexecutor-client is not installed or outdated: {exc}. "
+                    "Install with: pip install llmpuffin[nexecutor]"
+                ) from exc
 
             return await NexecutorRuntime.start(
                 image=p.image,
@@ -139,10 +139,10 @@ class Harness:
         elif cfg.runtime == "microvm":
             try:
                 from llmpuffin.runtime_microvm import MicrovmRuntime
-            except ImportError:
+            except ImportError as exc:
                 raise RuntimeError(
                     "boto3 is not installed. Install it with: pip install boto3"
-                ) from None
+                ) from exc
 
             if not cfg.microvm.image_arn:
                 raise RuntimeError(
