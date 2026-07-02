@@ -12,7 +12,7 @@ dependencies = [
     "fastapi>=0.136",
     "uvicorn[standard]>=0.34",
     "jinja2>=3",
-    "sqlalchemy[asyncio]>=2",
+    "sqlalchemy[asyncio]>=2.0.50",
     "asyncpg>=0.29",
     "alembic>=1.13",
     "markdown",
