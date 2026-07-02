@@ -134,7 +134,7 @@
   </div>
 
   {# ───────── Toast container ───────── #}
-  <div id="toasts" aria-live="polite" aria-atomic="true" x-data>
+  <div id="toasts" aria-live="polite" aria-atomic="true" x-data hx-preserve="true">
     <template x-for="t in $store.toasts.items" :key="t.id">
       <div class="toast" :class="t.level">
         <div class="toast-msg" x-text="t.message"></div>

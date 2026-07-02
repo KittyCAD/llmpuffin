@@ -1,0 +1,237 @@
+{# Reusable split-pane file editor for skills and threat models.
+
+   Expects the caller to set these Jinja2 variables:
+     collection       – the model instance (Skill or ThreatModelDB)
+     collection_label – display name, e.g. "skill" or "threat model"
+     collection_url   – base URL, e.g. "/skills" or "/threat-models"
+     list_url         – back link URL, e.g. "/skills/" or "/threat-models/"
+     path_placeholder – placeholder for new file path input
+     import_placeholder – placeholder for import directory input
+#}
+
+<p><a href="{{ list_url }}">← all {{ collection_label }}s</a></p>
+
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>{{ collection.name }}</h1>
+  <form hx-post="{{ collection_url }}/{{ collection.id }}/delete/"
+        hx-confirm="Delete this {{ collection_label }}?"
+        hx-disabled-elt="find button" class="inline">
+    <button type="submit" class="destructive">delete</button>
+  </form>
+</div>
+
+{% if collection.description %}
+<p class="text-muted">{{ collection.description }}</p>
+{% endif %}
+
+<div x-data="fileEditor()" class="mt-4">
+  <div class="file-editor-layout">
+    {# ─── Left: file tree ─── #}
+    <div class="file-tree">
+      <div class="file-tree-header">
+        <span>Files ({{ collection.files | length }})</span>
+        <button type="button" class="ghost" style="padding: 0.125rem 0.375rem; font-size: 0.75rem;"
+                @click="startNew()">+ new</button>
+      </div>
+      <ul class="file-tree-items">
+        {% for f in collection.files %}
+        <li class="file-tree-item"
+            :class="{ active: selectedId === {{ f.id }} }"
+            data-path="{{ f.path }}"
+            @click="selectFile({{ f.id }}, $el.dataset.path)">
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ f.path }}">{{ f.path }}</span>
+          <span class="file-size">{{ f.content | length }}</span>
+        </li>
+        {% else %}
+        <li style="padding: 2rem 0.75rem; text-align: center; color: hsl(var(--muted-foreground)); font-size: 0.8125rem;">
+          No files yet
+        </li>
+        {% endfor %}
+      </ul>
+      {# ─── Import from directory ─── #}
+      <div class="file-tree-actions">
+        <form hx-post="{{ collection_url }}/{{ collection.id }}/import/"
+              hx-disabled-elt="find button"
+              class="col gap-1">
+          <input type="text" name="directory" required
+                 placeholder="{{ import_placeholder }}"
+                 style="font-size: 0.75rem; padding: 0.3rem 0.5rem;">
+          <button type="submit" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: 100%;">Import dir</button>
+        </form>
+      </div>
+    </div>
+
+    {# ─── Right: editor pane ─── #}
+    <div class="file-editor-pane">
+      {# Empty state #}
+      <div class="file-editor-empty" x-show="!selectedId && !creating" x-cloak>
+        <span>Select a file to edit<template x-if="'{{ collection.files | length }}' === '0'"> or click <strong>+ new</strong> to create one</template></span>
+      </div>
+
+      {# Editor (existing file) #}
+      <template x-if="selectedId && !creating">
+        <div style="display: flex; flex-direction: column; height: 100%;">
+          <div class="file-editor-header">
+            <code x-text="selectedPath"></code>
+            <div class="row">
+              <button type="button" class="destructive" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                      @click="deleteFile()" :disabled="saving">delete</button>
+              <button type="button" class="primary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                      @click="saveFile()" :disabled="saving || !dirty">
+                <span x-text="saving ? 'Saving…' : 'Save'"></span>
+              </button>
+            </div>
+          </div>
+          <div class="file-editor-body">
+            <div x-show="loading" style="padding: 1rem; color: hsl(var(--muted-foreground)); font-size: 0.8125rem;">Loading…</div>
+            <textarea x-show="!loading"
+                      x-ref="editor"
+                      x-model="content"
+                      @input="dirty = true"
+                      @keydown.meta.s.prevent="saveFile()"
+                      @keydown.ctrl.s.prevent="saveFile()"></textarea>
+          </div>
+        </div>
+      </template>
+
+      {# New file form #}
+      <template x-if="creating">
+        <div style="display: flex; flex-direction: column; height: 100%;">
+          <div class="file-editor-header">
+            <input type="text" x-model="newPath" placeholder="{{ path_placeholder }}"
+                   x-ref="newPathInput"
+                   style="flex: 1; font-size: 0.8125rem; padding: 0.3rem 0.5rem; font-family: 'Geist Mono', monospace;">
+            <div class="row">
+              <button type="button" class="ghost" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                      @click="creating = false; newPath = ''; content = '';">Cancel</button>
+              <button type="button" class="primary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                      @click="createFile()" :disabled="saving || !newPath.trim()">
+                <span x-text="saving ? 'Saving…' : 'Create'"></span>
+              </button>
+            </div>
+          </div>
+          <div class="file-editor-body">
+            <textarea x-ref="newEditor" x-model="content" placeholder="File content…"></textarea>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+<script>
+function fileEditor() {
+  const baseUrl = '{{ collection_url }}/{{ collection.id }}';
+  return {
+    selectedId: null,
+    selectedPath: '',
+    content: '',
+    originalContent: '',
+    dirty: false,
+    loading: false,
+    saving: false,
+    creating: false,
+    newPath: '',
+
+    async selectFile(id, path) {
+      if (this.selectedId === id) return;
+      this.creating = false;
+      this.selectedId = id;
+      this.selectedPath = path;
+      this.dirty = false;
+      this.loading = true;
+      try {
+        const resp = await fetch(`${baseUrl}/files/${id}/`);
+        if (!resp.ok) throw new Error('Failed to load');
+        const data = await resp.json();
+        this.content = data.content;
+        this.originalContent = data.content;
+      } catch (e) {
+        this.content = '(error loading file)';
+        this.originalContent = '';
+      }
+      this.loading = false;
+    },
+
+    startNew() {
+      this.selectedId = null;
+      this.selectedPath = '';
+      this.content = '';
+      this.originalContent = '';
+      this.dirty = false;
+      this.creating = true;
+      this.$nextTick(() => {
+        if (this.$refs.newPathInput) this.$refs.newPathInput.focus();
+      });
+    },
+
+    async saveFile() {
+      if (this.saving || !this.dirty) return;
+      this.saving = true;
+      try {
+        const form = new FormData();
+        form.append('path', this.selectedPath);
+        form.append('content', this.content);
+        const resp = await fetch(`${baseUrl}/upload/`, {
+          method: 'POST',
+          headers: { 'HX-Request': 'true' },
+          body: form,
+        });
+        if (resp.ok) {
+          this.originalContent = this.content;
+          this.dirty = false;
+          Alpine.store('toasts').push('success', `Saved ${this.selectedPath}`);
+        } else {
+          Alpine.store('toasts').push('error', 'Save failed');
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    async createFile() {
+      if (this.saving || !this.newPath.trim()) return;
+      this.saving = true;
+      try {
+        const form = new FormData();
+        form.append('path', this.newPath.trim());
+        form.append('content', this.content);
+        const resp = await fetch(`${baseUrl}/upload/`, {
+          method: 'POST',
+          headers: { 'HX-Request': 'true' },
+          body: form,
+        });
+        if (resp.ok) {
+          Alpine.store('toasts').push('success', `Created ${this.newPath}`);
+          // Reload to reflect new file in tree
+          window.location.reload();
+        } else {
+          Alpine.store('toasts').push('error', 'Create failed');
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    async deleteFile() {
+      if (!this.selectedId) return;
+      if (!confirm(`Delete ${this.selectedPath}?`)) return;
+      this.saving = true;
+      try {
+        const resp = await fetch(`${baseUrl}/files/${this.selectedId}/delete/`, {
+          method: 'POST',
+          headers: { 'HX-Request': 'true' },
+        });
+        if (resp.ok) {
+          Alpine.store('toasts').push('success', `Deleted ${this.selectedPath}`);
+          window.location.reload();
+        } else {
+          Alpine.store('toasts').push('error', 'Delete failed');
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+  };
+}
+</script>

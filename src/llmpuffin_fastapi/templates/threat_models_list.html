@@ -1,45 +1,9 @@
 {% extends "base.html" %}
 {% block title %}threat models{% endblock %}
 {% block content %}
-<div class="row" style="justify-content: space-between; align-items: baseline;">
-  <h1>Threat Models</h1>
-</div>
-
-<div class="card" style="padding: 0;">
-<table>
-<thead>
-  <tr><th>Name</th><th>Description</th><th>Files</th><th>Updated</th><th></th></tr>
-</thead>
-<tbody>
-{% for tm in threat_models %}
-<tr>
-  <td><a href="/threat-models/{{ tm.id }}/">{{ tm.name }}</a></td>
-  <td class="text-muted text-sm">{{ tm.description | truncatechars(60) or "—" }}</td>
-  <td>{{ tm.files | length }}</td>
-  <td class="text-muted text-xs">{{ tm.updated_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
-  <td>
-    <form hx-post="/threat-models/{{ tm.id }}/delete/" hx-confirm="Delete threat model {{ tm.name }}?" hx-disabled-elt="find button" class="inline">
-      <button type="submit" class="destructive">delete</button>
-    </form>
-  </td>
-</tr>
-{% else %}
-<tr><td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">No threat models yet.</td></tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-
-<h3>Create threat model</h3>
-<form hx-post="/threat-models/create/" hx-disabled-elt="find button" class="card col gap-2" style="max-width: 32rem;">
-  <div>
-    <label class="text-sm">Name</label>
-    <input type="text" name="name" required placeholder="vulnerable-app">
-  </div>
-  <div>
-    <label class="text-sm">Description</label>
-    <input type="text" name="description" placeholder="Optional description">
-  </div>
-  <div><button type="submit" class="primary">Create</button></div>
-</form>
+{% set items = threat_models %}
+{% set collection_label = "threat model" %}
+{% set collection_url = "/threat-models" %}
+{% set create_placeholder = "vulnerable-app" %}
+{% include "_file_collection_list.html" %}
 {% endblock %}

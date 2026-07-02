@@ -1,66 +1,11 @@
 {% extends "base.html" %}
 {% block title %}skill — {{ skill.name }}{% endblock %}
 {% block content %}
-<p><a href="/skills/">← all skills</a></p>
-
-<div class="row" style="justify-content: space-between; align-items: baseline;">
-  <h1>{{ skill.name }}</h1>
-  <form hx-post="/skills/{{ skill.id }}/delete/" hx-confirm="Delete this skill?" hx-disabled-elt="find button" class="inline">
-    <button type="submit" class="destructive">delete</button>
-  </form>
-</div>
-
-{% if skill.description %}
-<p class="text-muted">{{ skill.description }}</p>
-{% endif %}
-
-{# ─── Files ─── #}
-<h3>Files ({{ skill.files | length }})</h3>
-
-<div class="card" style="padding: 0;">
-<table>
-<thead>
-  <tr><th>Path</th><th>Size</th><th></th></tr>
-</thead>
-<tbody>
-{% for f in skill.files %}
-<tr>
-  <td><code class="mono text-sm">{{ f.path }}</code></td>
-  <td class="text-muted text-xs">{{ f.content | length }} chars</td>
-  <td>
-    <form hx-post="/skills/{{ skill.id }}/files/{{ f.id }}/delete/" hx-confirm="Delete {{ f.path }}?" hx-disabled-elt="find button" class="inline">
-      <button type="submit" class="destructive">delete</button>
-    </form>
-  </td>
-</tr>
-{% else %}
-<tr><td colspan="3" class="text-muted" style="text-align: center; padding: 2rem;">No files yet.</td></tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-
-{# ─── Add file ─── #}
-<h3>Add file</h3>
-<form hx-post="/skills/{{ skill.id }}/upload/" hx-disabled-elt="find button" class="card col gap-2" style="max-width: 48rem;">
-  <div>
-    <label class="text-sm">Path</label>
-    <input type="text" name="path" required placeholder="SKILL.md or resources/CHECKLIST.md">
-  </div>
-  <div>
-    <label class="text-sm">Content</label>
-    <textarea name="content" rows="12" required style="font-family: monospace; font-size: 0.85rem;"></textarea>
-  </div>
-  <div><button type="submit" class="primary">Save file</button></div>
-</form>
-
-{# ─── Import from directory ─── #}
-<h3>Import from directory</h3>
-<form hx-post="/skills/{{ skill.id }}/import/" hx-disabled-elt="find button" class="card col gap-2" style="max-width: 32rem;">
-  <div>
-    <label class="text-sm">Local directory path</label>
-    <input type="text" name="directory" required placeholder="skills/audit-context-building">
-  </div>
-  <div><button type="submit">Import all files</button></div>
-</form>
+{% set collection = skill %}
+{% set collection_label = "skill" %}
+{% set collection_url = "/skills" %}
+{% set list_url = "/skills/" %}
+{% set path_placeholder = "SKILL.md or resources/CHECKLIST.md" %}
+{% set import_placeholder = "skills/audit-context-building" %}
+{% include "_file_collection_detail.html" %}
 {% endblock %}

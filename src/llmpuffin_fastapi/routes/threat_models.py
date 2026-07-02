@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -59,6 +59,25 @@ async def threat_model_detail(
     return templates.TemplateResponse(
         request, "threat_model_detail.html", {"threat_model": tm}
     )
+
+
+@router.get("/threat-models/{tm_id}/files/{file_id}/")
+async def threat_model_file_content(
+    tm_id: int,
+    file_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    tmf = (
+        await db.execute(
+            select(ThreatModelFile).where(
+                ThreatModelFile.id == file_id,
+                ThreatModelFile.threat_model_id == tm_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if tmf is None:
+        raise HTTPException(404)
+    return JSONResponse({"id": tmf.id, "path": tmf.path, "content": tmf.content})
 
 
 @router.post("/threat-models/create/")

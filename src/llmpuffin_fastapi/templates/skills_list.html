@@ -1,45 +1,9 @@
 {% extends "base.html" %}
 {% block title %}skills{% endblock %}
 {% block content %}
-<div class="row" style="justify-content: space-between; align-items: baseline;">
-  <h1>Skills</h1>
-</div>
-
-<div class="card" style="padding: 0;">
-<table>
-<thead>
-  <tr><th>Name</th><th>Description</th><th>Files</th><th>Updated</th><th></th></tr>
-</thead>
-<tbody>
-{% for s in skills %}
-<tr>
-  <td><a href="/skills/{{ s.id }}/">{{ s.name }}</a></td>
-  <td class="text-muted text-sm">{{ s.description | truncatechars(60) or "—" }}</td>
-  <td>{{ s.files | length }}</td>
-  <td class="text-muted text-xs">{{ s.updated_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
-  <td>
-    <form hx-post="/skills/{{ s.id }}/delete/" hx-confirm="Delete skill {{ s.name }}?" hx-disabled-elt="find button" class="inline">
-      <button type="submit" class="destructive">delete</button>
-    </form>
-  </td>
-</tr>
-{% else %}
-<tr><td colspan="5" class="text-muted" style="text-align: center; padding: 2rem;">No skills yet.</td></tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-
-<h3>Create skill</h3>
-<form hx-post="/skills/create/" hx-disabled-elt="find button" class="card col gap-2" style="max-width: 32rem;">
-  <div>
-    <label class="text-sm">Name</label>
-    <input type="text" name="name" required placeholder="audit-context-building">
-  </div>
-  <div>
-    <label class="text-sm">Description</label>
-    <input type="text" name="description" placeholder="Optional description">
-  </div>
-  <div><button type="submit" class="primary">Create</button></div>
-</form>
+{% set items = skills %}
+{% set collection_label = "skill" %}
+{% set collection_url = "/skills" %}
+{% set create_placeholder = "audit-context-building" %}
+{% include "_file_collection_list.html" %}
 {% endblock %}

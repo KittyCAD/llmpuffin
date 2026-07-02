@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -51,6 +51,24 @@ async def skill_detail(
     if skill is None:
         raise HTTPException(404)
     return templates.TemplateResponse(request, "skill_detail.html", {"skill": skill})
+
+
+@router.get("/skills/{skill_id}/files/{file_id}/")
+async def skill_file_content(
+    skill_id: int,
+    file_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    sf = (
+        await db.execute(
+            select(SkillFile).where(
+                SkillFile.id == file_id, SkillFile.skill_id == skill_id
+            )
+        )
+    ).scalar_one_or_none()
+    if sf is None:
+        raise HTTPException(404)
+    return JSONResponse({"id": sf.id, "path": sf.path, "content": sf.content})
 
 
 @router.post("/skills/create/")
