@@ -123,10 +123,11 @@ class DB:
                 .values(status="aborted", error="Aborted: process restarted")
             )
             await s.commit()
-            if result.rowcount:
+            rowcount = getattr(result, "rowcount", 0)
+            if rowcount:
                 log.info(
                     "Marked %d orphaned running thread(s) as aborted",
-                    result.rowcount,
+                    rowcount,
                 )
 
     async def _setup_langgraph_tables(self) -> None:

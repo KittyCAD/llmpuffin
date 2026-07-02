@@ -59,7 +59,7 @@ src = ["src"]
 
 
 [dependency-groups]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "pyright"]
 
 [tool.uv.build-backend]
 module-name = ["llmpuffin", "llmpuffin_fastapi", "llmpuffin_microvm_agent", ]

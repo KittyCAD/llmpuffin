@@ -19,6 +19,7 @@ def _make_tools() -> dict:
     return make_tools(
         threat_model=threat_model,
         audit_run_id=1,
+        db=MagicMock(),
     )
 
 

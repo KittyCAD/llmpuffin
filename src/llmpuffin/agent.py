@@ -35,7 +35,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
 from deepagents.backends.utils import create_file_data
 from langchain_core.messages import AIMessage
-from langchain_core.stores import BaseStore
+from typing import Any
 from langchain_quickjs import CodeInterpreterMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -83,7 +83,7 @@ def _build_agent(
     audit_run_id: int,
     repo_path: str,
     checkpointer: BaseCheckpointSaver,
-    store: BaseStore,
+    store: Any,
     *,
     db: DB,
     github_client: GitHubClient | None = None,
@@ -182,8 +182,10 @@ def _build_agent(
     if provider == "anthropic" and p.anthropic.effort:
         from langchain_anthropic import ChatAnthropic
 
-        model_name = agent_cfg.model.removeprefix("anthropic:")
-        model = ChatAnthropic(model=model_name, effort=p.anthropic.effort)
+        anthropic_model_name = agent_cfg.model.removeprefix("anthropic:")
+        model = ChatAnthropic(
+            model_name=anthropic_model_name, effort=p.anthropic.effort
+        )  # pyright: ignore[reportCallIssue]
     elif provider == "openai":
         openai_cfg = p.openai
         kwargs: dict = {}
@@ -192,9 +194,9 @@ def _build_agent(
         if kwargs or not openai_cfg.use_responses_api:
             from langchain_openai import ChatOpenAI
 
-            model_name = agent_cfg.model.removeprefix("openai:")
+            openai_model_name = agent_cfg.model.removeprefix("openai:")
             kwargs["use_responses_api"] = openai_cfg.use_responses_api
-            model = ChatOpenAI(model=model_name, **kwargs)
+            model = ChatOpenAI(model=openai_model_name, **kwargs)
 
     return create_deep_agent(
         model=model,
@@ -202,10 +204,10 @@ def _build_agent(
         backend=backend,
         store=store,
         checkpointer=checkpointer,
-        middleware=middleware,
-        interrupt_on=interrupt_on_config,
+        middleware=middleware,  # pyright: ignore[reportArgumentType]
+        interrupt_on=interrupt_on_config,  # pyright: ignore[reportArgumentType]
         skills=skills_list or None,
-        subagents=subagents,
+        subagents=subagents,  # pyright: ignore[reportArgumentType]
         system_prompt=config.profile.agent.system_prompt,
     )
 
@@ -307,7 +309,7 @@ async def _execute_pipeline(
     config: HarnessConfig,
     threat_model: ThreatModel,
     checkpointer: BaseCheckpointSaver,
-    store: BaseStore,
+    store: Any,
     *,
     db: DB,
     thread_id: str | None = None,
@@ -474,7 +476,7 @@ async def _run_audit_inner(
     threat_model: ThreatModel,
     thread_id: str | None,
     checkpointer: BaseCheckpointSaver,
-    store: BaseStore,
+    store: Any,
     user_message: str | None = None,
     *,
     db: DB,

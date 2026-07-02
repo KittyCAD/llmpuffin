@@ -11,7 +11,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.stores import BaseStore
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy import update
 
@@ -84,6 +83,7 @@ async def environment_context(
     db: DB,
 ) -> EnvironmentContext:
     """Start the container."""
+    assert harness.config is not None
     await _set_pipeline_state(resolved.tid, "starting", db=db)
 
     execution = await harness.start_environment(container_id=existing_container_id)
@@ -222,7 +222,7 @@ async def agent(
     threat_model: ThreatModel,
     resolved: ResolvedThread,
     checkpointer: BaseCheckpointSaver,
-    store: BaseStore,
+    store: Any,
     db: DB,
     github_client: GitHubClient | None,
 ) -> Any:

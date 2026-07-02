@@ -57,15 +57,16 @@ async def runs_list(request: Request, db: Annotated[AsyncSession, Depends(get_db
     )
 
     # Annotate finding counts (non-deleted)
-    finding_counts = dict(
-        (
+    finding_counts: dict[int, int] = {
+        row[0]: row[1]
+        for row in (
             await db.execute(
                 select(Finding.audit_run_id, func.count(Finding.id))
                 .where(Finding.status != "deleted")
                 .group_by(Finding.audit_run_id)
             )
         ).all()
-    )
+    }
 
     runs = []
     for r in rows:
@@ -382,7 +383,7 @@ async def run_unlink_finding(
         .values(fork_thread_id="")
     )
     await db.commit()
-    if result.rowcount == 0:
+    if getattr(result, "rowcount", 0) == 0:
         return toast(request, "error", "No linked finding found", redirect_to=redirect)
     return toast(
         request, "success", "Finding unlinked", redirect_to=redirect, refresh=True

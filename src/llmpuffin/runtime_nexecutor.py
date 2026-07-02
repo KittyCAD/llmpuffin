@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 from types import TracebackType
 
+import httpx
 from nexecutor_client import AuthenticatedClient
 from nexecutor_client.api.workloads import (
     destroy_workload,
@@ -59,8 +60,8 @@ def _resolve_token(token: str) -> str:
 def _make_client(base_url: str, token: str) -> AuthenticatedClient:
     """Create an AuthenticatedClient, skipping the auth header if token is empty."""
     if token:
-        return AuthenticatedClient(base_url=base_url, token=token, timeout=3000.0)
-    return AuthenticatedClient(base_url=base_url, token="", prefix="", timeout=3000.0)
+        return AuthenticatedClient(base_url=base_url, token=token)
+    return AuthenticatedClient(base_url=base_url, token="", prefix="")
 
 
 @dataclass
@@ -123,7 +124,7 @@ class NexecutorRuntime:
             client=self._client,
             body=CreateWorkloadRequest(**kwargs),
         )
-        if resp is None or not hasattr(resp, "id"):
+        if not isinstance(resp, WorkloadResponse):
             raise RuntimeError(f"Failed to create nexecutor workload: {resp}")
         self._workload_id = resp.id
         log.info("Created nexecutor workload %s", self._workload_id[:12])
@@ -192,7 +193,7 @@ class NexecutorRuntime:
             timeout_secs=timeout,
         )
         log.debug("nexecutor exec: %s", body.to_dict())
-        client = self._client.with_timeout(timeout=float(timeout + 10))
+        client = self._client.with_timeout(timeout=httpx.Timeout(float(timeout + 10)))
 
         resp = await exec_command.asyncio(
             id=self._workload_id,
@@ -207,7 +208,9 @@ class NexecutorRuntime:
         ):
             log.warning("Auth error, refreshing token and retrying")
             self._refresh_client()
-            client = self._client.with_timeout(timeout=float(timeout + 10))
+            client = self._client.with_timeout(
+                timeout=httpx.Timeout(float(timeout + 10))
+            )
             resp = await exec_command.asyncio(
                 id=self._workload_id, client=client, body=body
             )

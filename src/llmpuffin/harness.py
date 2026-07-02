@@ -99,6 +99,8 @@ class Harness:
 
     def load_threat_model(self) -> ThreatModel:
         """Load the threat model from TOML — the declarative spec driving the audit."""
+        if self.config is None:
+            raise RuntimeError("HarnessConfig is required to load a threat model")
         tm = ThreatModel.from_dir(self.config.profile.threat_model_dir)
         self.threat_model = tm
         return tm
@@ -117,6 +119,8 @@ class Harness:
             with harness.start_environment() as execution:
                 ...
         """
+        if self.config is None:
+            raise RuntimeError("HarnessConfig is required to start an environment")
         p = self.config.profile
         if not self.global_config:
             raise RuntimeError("global_config is required to start an environment")
@@ -130,7 +134,7 @@ class Harness:
                     "Install with: pip install llmpuffin[nexecutor]"
                 ) from exc
 
-            return await NexecutorRuntime.start(
+            return await NexecutorRuntime.start(  # pyright: ignore[reportReturnType]
                 image=p.image,
                 code_dir=p.code_dir,
                 base_url=cfg.nexecutor.url,

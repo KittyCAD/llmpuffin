@@ -365,7 +365,7 @@ class ValidationNote(Base):
     finding: Mapped[Finding] = relationship(back_populates="validation_notes")
 
     def __str__(self) -> str:
-        return self.filename
+        return self.evidence
 
 
 class GitHubLink(Base):

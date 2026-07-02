@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 from types import TracebackType
 
 import boto3
@@ -33,7 +34,7 @@ class MicrovmRuntime:
 
     image_arn: str
     _code_dir: str
-    _client: object  # boto3 lambda-microvms client
+    _client: Any  # boto3 lambda-microvms client
     _microvm_id: str = ""
     _endpoint: str = ""
     _auth_token: str = ""

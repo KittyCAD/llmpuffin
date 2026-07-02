@@ -172,7 +172,7 @@ async def token(request: Request):
         form = await request.form()
         data = dict(form)
 
-    code = data.get("code", "")
+    code = str(data.get("code", ""))
     code_data = _codes.pop(code, None)
     if not code_data:
         return JSONResponse({"error": "invalid_grant"}, status_code=400)

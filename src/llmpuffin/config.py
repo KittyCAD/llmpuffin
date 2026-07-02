@@ -221,6 +221,7 @@ class ProfileAgent(BaseModel):
     max_iterations: int = 200
     interrupt_on: list[str] = []
     skills: list[str] = []
+    skills_dir: str = ""  # TODO backwards compatability for old profiles, remove
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
 
 

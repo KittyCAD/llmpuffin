@@ -175,7 +175,7 @@ def _persist_finding_to_db(
     locations: list[dict] | None,
     tool_call_id: str = "",
     *,
-    db: DB | None = None,
+    db: DB,
 ) -> tuple[int, int]:
     """Allocate local_id in SQL and insert a finding in one transaction.
 
@@ -239,7 +239,7 @@ def make_tools(
     github_client: GitHubClient | None = None,
     container_backend: ContainerBackend | None = None,
     *,
-    db: DB | None = None,
+    db: DB,
 ) -> dict[str, Callable]:
     """Create threat model and finding tools."""
 
@@ -323,7 +323,7 @@ Existing mitigations to verify:
         exploit_scenario: str,
         recommendations: str,
         locations: list[LocationInput] | None = None,
-        runtime: ToolRuntime = None,
+        runtime: ToolRuntime = None,  # pyright: ignore[reportArgumentType]  # injected by framework
     ) -> str:
         """Record a security finding. Call this for each vulnerability you discover.
 
@@ -452,7 +452,7 @@ Existing mitigations to verify:
     def validate_finding(
         finding_id: int,
         evidence: str,
-        runtime: ToolRuntime = None,
+        runtime: ToolRuntime = None,  # pyright: ignore[reportArgumentType]  # injected by framework
     ) -> str:
         """Mark a finding as validated with exploit evidence.
 
@@ -576,7 +576,7 @@ Existing mitigations to verify:
         finding_id: int,
         file_path: str,
         description: str = "",
-        runtime: ToolRuntime = None,
+        runtime: ToolRuntime = None,  # pyright: ignore[reportArgumentType]  # injected by framework
     ) -> str:
         """Export a file from the container and attach it to a finding.
 
