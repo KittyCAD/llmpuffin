@@ -26,7 +26,6 @@ dependencies = [
     "nh3>=0.3.5",
     "pygithub>=2.9.1",
     "python-multipart>=0.0.29",
-    "apache-hamilton",
     "authlib>=1.7.2",
     "httpx>=0.28.1",
     "itsdangerous>=2.2.0",

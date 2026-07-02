@@ -6,6 +6,7 @@ host in a temp directory instead of inside a container.
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from unittest.mock import MagicMock
 
@@ -18,12 +19,17 @@ def _make_backend(cwd: str, max_output_bytes: int = 100_000) -> ContainerBackend
     execution = MagicMock()
     backend = ContainerBackend(execution, max_output_bytes=max_output_bytes)
 
-    def _local_run(cmd: list[str], timeout: int | None = None):
+    async def _local_run(cmd: list[str], timeout: int | None = None):
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
         return result.returncode, result.stdout, result.stderr
 
     backend._run = _local_run
     return backend
+
+
+def _run_sync(coro):
+    """Run an async function synchronously for tests."""
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 
 @pytest.fixture

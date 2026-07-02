@@ -67,7 +67,7 @@ class AuditExecution(Protocol):
         """Working directory inside the container."""
         ...
 
-    def exec(
+    async def exec(
         self, command: list[str], timeout: int = 300, workdir: str | None = None
     ) -> ExecResult:
         """Execute a command inside the container.
@@ -77,7 +77,7 @@ class AuditExecution(Protocol):
         """
         ...
 
-    def capture_git_info(self) -> GitInfo | None:
+    async def capture_git_info(self) -> GitInfo | None:
         """Extract git remote URL and HEAD commit from the container.
 
         Returns None if git info cannot be determined (e.g. no git repo,
@@ -93,7 +93,7 @@ class AuditExecution(Protocol):
     def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
 
 
-def _capture_git_info(execution: AuditExecution) -> GitInfo | None:
+async def _capture_git_info(execution: AuditExecution) -> GitInfo | None:
     """Shared implementation: extract git info by running commands.
 
     Returns None on any failure instead of raising.
@@ -101,7 +101,7 @@ def _capture_git_info(execution: AuditExecution) -> GitInfo | None:
     from urllib.parse import urlparse
 
     try:
-        remote_result = execution.exec(
+        remote_result = await execution.exec(
             ["git", "remote", "get-url", "origin"], timeout=5
         )
         if not remote_result.ok:
@@ -116,7 +116,7 @@ def _capture_git_info(execution: AuditExecution) -> GitInfo | None:
 
         repo_path = parsed.path.removesuffix(".git").strip("/")
 
-        head_result = execution.exec(["git", "rev-parse", "HEAD"], timeout=5)
+        head_result = await execution.exec(["git", "rev-parse", "HEAD"], timeout=5)
         if not head_result.ok:
             log.info("Failed to get git HEAD: %s", head_result.stderr.strip())
             return None

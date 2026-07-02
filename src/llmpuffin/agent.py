@@ -320,77 +320,63 @@ async def _execute_pipeline(
     profile_id: int | None = None,
     audit_run_id: int | None = None,
 ) -> AuditResult:
-    """Execute the audit pipeline as a Hamilton DAG.
+    """Execute the audit pipeline.
 
     Shared implementation for both fresh audits and forks.
     """
-    from hamilton import async_driver
+    from llmpuffin.harness_steps import (
+        resolved_thread,
+        environment_context,
+        clone_repos,
+        file_tree,
+        agent as build_agent_step,
+        input_messages,
+        agent_run_result,
+    )
 
-    import llmpuffin.harness_steps as steps_module
-
-    dr = await async_driver.Builder().with_modules(steps_module).build()
-
-    inputs: dict[str, Any] = {
-        "harness": harness,
-        "config": config,
-        "threat_model": threat_model,
-        "checkpointer": checkpointer,
-        "store": store,
-        "db": db,
-        "thread_id": thread_id,
-        "source_thread_id": source_thread_id,
-        "user_message": user_message,
-        "existing_container_id": existing_container_id,
-        "is_fork": is_fork,
-        "github_client": github_client,
-        "profile_id": profile_id,
-        "audit_run_id": audit_run_id,
-    }
+    # Step 1: resolve thread
+    resolved = await resolved_thread(
+        config, thread_id, source_thread_id, is_fork, db, profile_id, audit_run_id
+    )
 
     env_ctx = None
     try:
-        result = await dr.execute(
-            ["agent_run_result", "resolved_thread", "environment_context"],
-            inputs=inputs,
+        # Step 2: start environment
+        env_ctx = await environment_context(
+            harness, resolved, existing_container_id, db
         )
-        env_ctx = result["environment_context"]
-        run_result = result["agent_run_result"]
-        resolved = result["resolved_thread"]
+
+        # Step 3: clone repos
+        await clone_repos(config, env_ctx, resolved, github_client, db)
+
+        # Step 3b: populate file tree for coverage
+        await file_tree(env_ctx, resolved, db)
+
+        # Step 4: build agent
+        agent = await build_agent_step(
+            config, env_ctx, threat_model, resolved,
+            checkpointer, store, db, github_client,
+        )
+
+        # Step 5: prepare input messages
+        messages = await input_messages(
+            agent, config, resolved, source_thread_id,
+            user_message, is_fork, thread_id,
+        )
+
+        # Step 6: run agent
+        run_result = await agent_run_result(
+            agent, messages, config, resolved, db
+        )
         status = run_result.status
         error = run_result.error
     except (KeyboardInterrupt, asyncio.CancelledError):
-        # Try to extract already-computed nodes for finalization
-        try:
-            partial = await dr.execute(
-                ["resolved_thread", "environment_context"], inputs=inputs
-            )
-            resolved = partial["resolved_thread"]
-            env_ctx = partial.get("environment_context")
-        except Exception:
-            try:
-                partial = await dr.execute(["resolved_thread"], inputs=inputs)
-                resolved = partial["resolved_thread"]
-            except Exception:
-                raise
         status = AuditStatus.ABORTED
         error = "Aborted by user"
         log.warning("Aborted: %s", error)
         await _finalize_audit_run(resolved.tid, status, error, db=db)
         raise
     except Exception as exc:
-        # Try to extract already-computed nodes for finalization
-        try:
-            partial = await dr.execute(
-                ["resolved_thread", "environment_context"], inputs=inputs
-            )
-            resolved = partial["resolved_thread"]
-            env_ctx = partial.get("environment_context")
-        except Exception:
-            try:
-                partial = await dr.execute(["resolved_thread"], inputs=inputs)
-                resolved = partial["resolved_thread"]
-            except Exception:
-                raise exc from None
         status = AuditStatus.ERROR
         error = str(exc)
         log.exception("Audit failed: %s", error)

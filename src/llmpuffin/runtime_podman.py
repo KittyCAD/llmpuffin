@@ -5,6 +5,7 @@ Talks to the Podman daemon via its Docker-compatible API using docker-py.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -58,8 +59,12 @@ class PodmanEnvironment:
     code_dir: str = "/src"
     base_url: str | None = None
 
-    def start(self, container_id: str | None = None) -> PodmanExecution:
+    async def start(self, container_id: str | None = None) -> PodmanExecution:
         """Start a container from this environment's image, or resume an existing one."""
+        return await asyncio.to_thread(self._start_sync, container_id)
+
+    def _start_sync(self, container_id: str | None = None) -> PodmanExecution:
+        """Synchronous start implementation (runs in a thread)."""
         base_url = self.base_url or _get_podman_socket()
         if not base_url:
             raise RuntimeError(
@@ -123,10 +128,18 @@ class PodmanExecution:
     ) -> None:
         self.stop()
 
-    def exec(
+    async def exec(
         self, command: list[str], timeout: int = 300, workdir: str | None = None
     ) -> ExecResult:
         """Execute a command inside the container."""
+        return await asyncio.to_thread(
+            self._exec_sync, command, timeout, workdir
+        )
+
+    def _exec_sync(
+        self, command: list[str], timeout: int, workdir: str | None
+    ) -> ExecResult:
+        """Synchronous exec implementation (runs in a thread)."""
         api = self.client.api
         exec_id = api.exec_create(
             self.container.id,
@@ -173,8 +186,8 @@ class PodmanExecution:
             stderr=stderr,
         )
 
-    def capture_git_info(self) -> GitInfo | None:
-        return _capture_git_info(self)
+    async def capture_git_info(self) -> GitInfo | None:
+        return await _capture_git_info(self)
 
     def stop(self, timeout: int = 30, remove: bool = False) -> None:
         """Stop the container (preserving it for later restart)."""

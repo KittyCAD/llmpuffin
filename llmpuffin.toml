@@ -1,5 +1,5 @@
-runtime = "podman"
-#runtime = "nexecutor"
+#runtime = "podman"
+runtime = "nexecutor"
 #runtime = "microvm"
 
 [postgres]

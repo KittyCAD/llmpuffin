@@ -19,9 +19,7 @@ def _make_backend(cwd: str) -> ContainerBackend:
     backend = ContainerBackend(execution)
 
     # Patch _run to execute commands locally in `cwd` instead of inside a container.
-    _original_run = backend._run
-
-    def _local_run(cmd: list[str], timeout: int | None = None):
+    async def _local_run(cmd: list[str], timeout: int | None = None):
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
         return result.returncode, result.stdout, result.stderr
 

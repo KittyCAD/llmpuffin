@@ -103,7 +103,7 @@ class Harness:
         self.threat_model = tm
         return tm
 
-    def start_environment(self, container_id: str | None = None) -> AuditExecution:
+    async def start_environment(self, container_id: str | None = None) -> AuditExecution:
         """Start the containerized audit environment.
 
         Args:
@@ -128,7 +128,7 @@ class Harness:
                     "Install it with: pip install llmpuffin[nexecutor]"
                 ) from None
 
-            return NexecutorRuntime.start(
+            return await NexecutorRuntime.start(
                 image=p.image,
                 code_dir=p.code_dir,
                 base_url=cfg.nexecutor_url,
@@ -149,7 +149,7 @@ class Harness:
                     "Set it in llmpuffin.toml or LLMPUFFIN_MICROVM_IMAGE_ARN."
                 )
 
-            return MicrovmRuntime.start(
+            return await MicrovmRuntime.start(
                 image_arn=cfg.microvm_image_arn,
                 code_dir=p.code_dir,
                 region=cfg.microvm_region,
@@ -159,7 +159,7 @@ class Harness:
         else:
             from llmpuffin.runtime_podman import PodmanEnvironment
 
-            return PodmanEnvironment(
+            return await PodmanEnvironment(
                 image=p.image,
                 code_dir=p.code_dir,
             ).start(container_id=container_id)

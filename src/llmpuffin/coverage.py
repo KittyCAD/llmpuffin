@@ -125,7 +125,7 @@ class CoverageTracker:
             self.record(p, "exec")
 
 
-def populate_file_tree(
+async def populate_file_tree(
     execution: AuditExecution, code_dir: str, *, audit_run_id: int, db: DB
 ) -> int:
     """Run find on code_dir and insert 'tree' entries into the DB.
@@ -136,7 +136,7 @@ def populate_file_tree(
     from llmpuffin.models import FileCoverage
 
     try:
-        result = execution.exec(
+        result = await execution.exec(
             ["find", code_dir, "-type", "f", "-not", "-path", "*/.git/*"],
             timeout=60,
         )

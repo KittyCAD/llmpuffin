@@ -5,6 +5,7 @@ Talks to a remote nexecutor service via the nexecutor-client SDK.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -17,6 +18,7 @@ from nexecutor_client.api.workloads import (
     exec_command,
     get_workload,
     run_workload,
+    start_workload,
     stop_workload,
 )
 from nexecutor_client.models.create_workload_request import CreateWorkloadRequest
@@ -75,7 +77,7 @@ class NexecutorRuntime:
     _base_url: str = ""
 
     @classmethod
-    def start(
+    async def start(
         cls,
         image: str,
         code_dir: str,
@@ -93,16 +95,31 @@ class NexecutorRuntime:
             _base_url=base_url,
         )
 
-        if container_id:
-            log.info("Resuming nexecutor workload %s", container_id[:12])
-            rt._workload_id = container_id
-        else:
-            rt._create_workload()
+        await rt._create_workload()
 
         return rt
 
-    def _create_workload(self) -> None:
-        resp = run_workload.sync(
+        if container_id:
+            log.info("Resuming nexecutor workload %s", container_id[:12])
+            rt._workload_id = container_id
+            await rt._start_workload()
+        else:
+            await rt._create_workload()
+
+        return rt
+
+    async def _start_workload(self) -> None:
+        """Start a previously stopped workload."""
+        resp = await start_workload.asyncio(
+            id=self._workload_id, client=self._client
+        )
+        if isinstance(resp, Error):
+            raise RuntimeError(f"Failed to start workload: {resp.message}")
+        log.info("Started nexecutor workload %s", self._workload_id[:12])
+        await self._wait_until_running()
+
+    async def _create_workload(self) -> None:
+        resp = await run_workload.asyncio(
             client=self._client,
             body=CreateWorkloadRequest(
                 image=self.image,
@@ -113,15 +130,17 @@ class NexecutorRuntime:
             raise RuntimeError(f"Failed to create nexecutor workload: {resp}")
         self._workload_id = resp.id
         log.info("Created nexecutor workload %s", self._workload_id[:12])
-        self._wait_until_running()
+        await self._wait_until_running()
 
-    def _wait_until_running(
+    async def _wait_until_running(
         self, poll_interval: float = 1.0, timeout: float = 120.0
     ) -> None:
         """Poll until the workload reaches 'running' status."""
         deadline = time.monotonic() + timeout
         while True:
-            resp = get_workload.sync(id=self._workload_id, client=self._client)
+            resp = await get_workload.asyncio(
+                id=self._workload_id, client=self._client
+            )
             if isinstance(resp, WorkloadResponse):
                 if resp.status == WorkloadStatus.RUNNING:
                     log.info("Workload %s is running", self._workload_id[:12])
@@ -134,7 +153,7 @@ class NexecutorRuntime:
                 raise TimeoutError(
                     f"Workload {self._workload_id[:12]} not running after {timeout}s"
                 )
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
 
     @property
     def container_id(self) -> str:
@@ -159,9 +178,13 @@ class NexecutorRuntime:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        self.stop()
+        # Best-effort sync stop for context manager cleanup.
+        try:
+            stop_workload.sync(id=self._workload_id, client=self._client)
+        except Exception as exc:
+            log.debug("stop in __exit__ failed: %s", exc)
 
-    def exec(
+    async def exec(
         self, command: list[str], timeout: int = 300, workdir: str | None = None
     ) -> ExecResult:
         """Execute a command inside the workload.
@@ -176,7 +199,7 @@ class NexecutorRuntime:
         log.debug("nexecutor exec: %s", body.to_dict())
         client = self._client.with_timeout(timeout=float(timeout + 10))
 
-        resp = exec_command.sync(
+        resp = await exec_command.asyncio(
             id=self._workload_id,
             client=client,
             body=body,
@@ -190,13 +213,17 @@ class NexecutorRuntime:
             log.warning("Auth error, refreshing token and retrying")
             self._refresh_client()
             client = self._client.with_timeout(timeout=float(timeout + 10))
-            resp = exec_command.sync(id=self._workload_id, client=client, body=body)
+            resp = await exec_command.asyncio(
+                id=self._workload_id, client=client, body=body
+            )
 
         # Workload gone — recreate and retry once.
         if isinstance(resp, Error) and "not found" in resp.message.lower():
             log.warning("Workload %s gone, recreating", self._workload_id[:12])
-            self._create_workload()
-            resp = exec_command.sync(id=self._workload_id, client=client, body=body)
+            await self._create_workload()
+            resp = await exec_command.asyncio(
+                id=self._workload_id, client=client, body=body
+            )
 
         if resp is None or not isinstance(resp, ExecResponse):
             raise RuntimeError(f"Exec failed: {resp}")
@@ -211,18 +238,20 @@ class NexecutorRuntime:
             stderr=resp.stderr,
         )
 
-    def capture_git_info(self) -> GitInfo | None:
-        return _capture_git_info(self)
+    async def capture_git_info(self) -> GitInfo | None:
+        return await _capture_git_info(self)
 
-    def stop(self, timeout: int = 30, remove: bool = False) -> None:
+    async def stop(self, timeout: int = 30, remove: bool = False) -> None:
         """Stop the workload."""
         try:
-            stop_workload.sync(id=self._workload_id, client=self._client)
+            await stop_workload.asyncio(id=self._workload_id, client=self._client)
         except Exception as exc:
             log.debug("stop failed (workload may already be stopped): %s", exc)
 
         if remove:
             try:
-                destroy_workload.sync(id=self._workload_id, client=self._client)
+                await destroy_workload.asyncio(
+                    id=self._workload_id, client=self._client
+                )
             except Exception as exc:
                 log.debug("destroy failed: %s", exc)

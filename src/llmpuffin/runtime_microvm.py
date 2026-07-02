@@ -40,13 +40,28 @@ class MicrovmRuntime:
     _region: str = "us-east-1"
 
     @classmethod
-    def start(
+    async def start(
         cls,
         image_arn: str,
         code_dir: str,
         region: str = "us-east-1",
         profile: str = "",
         container_id: str | None = None,
+    ) -> MicrovmRuntime:
+        import asyncio
+
+        return await asyncio.to_thread(
+            cls._start_sync, image_arn, code_dir, region, profile, container_id
+        )
+
+    @classmethod
+    def _start_sync(
+        cls,
+        image_arn: str,
+        code_dir: str,
+        region: str,
+        profile: str,
+        container_id: str | None,
     ) -> MicrovmRuntime:
         session = boto3.Session(profile_name=profile) if profile else boto3.Session()
         client = session.client("lambda-microvms", region_name=region)
@@ -151,7 +166,7 @@ class MicrovmRuntime:
     ) -> None:
         self.stop()
 
-    def exec(
+    async def exec(
         self, command: list[str], timeout: int = 300, workdir: str | None = None
     ) -> ExecResult:
         """Execute a command inside the MicroVM via the agent HTTP API."""
@@ -163,31 +178,23 @@ class MicrovmRuntime:
             "timeout_secs": timeout,
         }
 
-        try:
-            resp = httpx.post(
-                url,
-                json=body,
-                headers={
-                    "X-aws-proxy-auth": self._auth_token,
-                    "X-aws-proxy-port": "8080",
-                },
-                timeout=float(timeout + 30),
+        headers = {
+            "X-aws-proxy-auth": self._auth_token,
+            "X-aws-proxy-port": "8080",
+        }
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                url, json=body, headers=headers, timeout=float(timeout + 30)
             )
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 401:
+
+            if resp.status_code == 401:
                 # Token expired, refresh and retry
                 self._refresh_auth_token()
-                resp = httpx.post(
-                    url,
-                    json=body,
-                    headers={
-                        "X-aws-proxy-auth": self._auth_token,
-                        "X-aws-proxy-port": "8080",
-                    },
-                    timeout=float(timeout + 30),
+                headers["X-aws-proxy-auth"] = self._auth_token
+                resp = await client.post(
+                    url, json=body, headers=headers, timeout=float(timeout + 30)
                 )
-            else:
-                raise
 
         data = resp.json()
         if resp.status_code != 200:
@@ -203,8 +210,8 @@ class MicrovmRuntime:
             stderr=data.get("stderr", ""),
         )
 
-    def capture_git_info(self) -> GitInfo | None:
-        return _capture_git_info(self)
+    async def capture_git_info(self) -> GitInfo | None:
+        return await _capture_git_info(self)
 
     def stop(self, timeout: int = 30, remove: bool = False) -> None:
         """Suspend the MicroVM (or terminate if remove=True).

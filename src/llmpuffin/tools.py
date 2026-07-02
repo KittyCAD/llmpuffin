@@ -124,7 +124,7 @@ def _resolve_finding(audit_run_id: int, local_id: int, *, db: DB):
         return None
 
 
-def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
+async def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
     """Query the container for git info (origin remote + HEAD) for a file path.
 
     Resolves the file to its git repo root, then gets the origin remote URL
@@ -132,14 +132,14 @@ def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
     """
     try:
         # Resolve to absolute path.
-        ec, abs_path, _ = backend._run(["sh", "-c", f"realpath {file_path}"])
+        ec, abs_path, _ = await backend._run(["sh", "-c", f"realpath {file_path}"])
         if ec != 0:
             return GitInfo()
         abs_path = abs_path.strip()
         parent = abs_path.rsplit("/", 1)[0]
 
         # Find git repo root.
-        ec, repo_root, _ = backend._run(
+        ec, repo_root, _ = await backend._run(
             ["git", "-C", parent, "rev-parse", "--show-toplevel"]
         )
         if ec != 0:
@@ -147,14 +147,14 @@ def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
         repo_root = repo_root.strip()
 
         # Origin remote URL.
-        ec, remote, _ = backend._run(
+        ec, remote, _ = await backend._run(
             ["git", "-C", repo_root, "remote", "get-url", "origin"]
         )
         if ec != 0:
             return GitInfo()
 
         # HEAD commit.
-        ec, head, _ = backend._run(["git", "-C", repo_root, "rev-parse", "HEAD"])
+        ec, head, _ = await backend._run(["git", "-C", repo_root, "rev-parse", "HEAD"])
         if ec != 0:
             return GitInfo()
 
@@ -315,7 +315,7 @@ Relevant connections:
 Existing mitigations to verify:
 {mitigations}"""
 
-    def report_finding(
+    async def report_finding(
         title: str,
         severity: Literal["high", "medium", "low", "informational"],
         difficulty: Literal["high", "medium", "low"],
@@ -344,7 +344,7 @@ Existing mitigations to verify:
             for loc in locations:
                 d: dict = {"file": loc.file, "line": loc.line}
                 if container_backend:
-                    gi = _query_git_info(container_backend, loc.file)
+                    gi = await _query_git_info(container_backend, loc.file)
                     d["origin_remote"] = gi.origin_remote
                     d["head"] = gi.head
                 loc_dicts.append(d)
@@ -572,7 +572,7 @@ Existing mitigations to verify:
             log.warning("Failed to fetch commit %s@%s: %s", repo, sha, exc)
             return f"Error fetching commit: {exc}"
 
-    def finding_attach_file(
+    async def finding_attach_file(
         finding_id: int,
         file_path: str,
         description: str = "",
@@ -600,7 +600,7 @@ Existing mitigations to verify:
         # Read file raw via base64 to handle binary content safely.
         import base64
 
-        exit_code, stdout, stderr = container_backend._run(["base64", file_path])
+        exit_code, stdout, stderr = await container_backend._run(["base64", file_path])
         if exit_code != 0:
             return f"Error reading file: {stderr.strip() or 'file not found'}"
 

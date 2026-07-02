@@ -36,6 +36,11 @@ class ContainerBackend(SandboxBackendProtocol):
 
     All file and shell operations are delegated to the container via
     `AuditExecution.exec()`. The host filesystem is never accessed.
+
+    The async `a*` methods are the primary implementations — they call
+    the async `exec()` directly. The sync methods exist for the protocol
+    but should not be called in production (deepagents prefers the async
+    variants).
     """
 
     def __init__(
@@ -56,21 +61,21 @@ class ContainerBackend(SandboxBackendProtocol):
     def id(self) -> str:
         return self._sandbox_id
 
-    def _run(self, cmd: list[str], timeout: int | None = None) -> tuple[int, str, str]:
+    async def _run(self, cmd: list[str], timeout: int | None = None) -> tuple[int, str, str]:
         """Run a command in the container, return (exit_code, stdout, stderr)."""
         t = timeout if timeout is not None else self._default_timeout
-        result = self._exec.exec(cmd, timeout=t)
+        result = await self._exec.exec(cmd, timeout=t)
         return result.exit_code, result.stdout, result.stderr
 
-    # -- SandboxBackendProtocol --
+    # -- Async implementations (primary) --
 
-    def execute(
+    async def aexecute(
         self,
         command: str,
         *,
         timeout: int | None = None,
     ) -> ExecuteResponse:
-        exit_code, stdout, stderr = self._run(
+        exit_code, stdout, stderr = await self._run(
             ["/bin/sh", "-c", command],
             timeout=timeout,
         )
@@ -102,17 +107,15 @@ class ContainerBackend(SandboxBackendProtocol):
             truncated=truncated,
         )
 
-    # -- BackendProtocol --
-
-    def ls(self, path: str) -> LsResult:
-        exit_code, stdout, stderr = self._run(
+    async def als(self, path: str) -> LsResult:
+        exit_code, stdout, stderr = await self._run(
             ["ls", "-1apL", "--time-style=+%s", path],
         )
         if exit_code != 0:
             return LsResult(error=f"Error: {stderr.strip() or 'Cannot list ' + path}")
 
         # Use stat for richer info
-        exit_code2, stdout2, _ = self._run(
+        exit_code2, stdout2, _ = await self._run(
             [
                 "stat",
                 "--printf",
@@ -151,7 +154,7 @@ class ContainerBackend(SandboxBackendProtocol):
 
         return LsResult(entries=sorted(entries, key=lambda e: e["path"]))
 
-    def read(
+    async def aread(
         self,
         file_path: str,
         offset: int = 0,
@@ -160,7 +163,7 @@ class ContainerBackend(SandboxBackendProtocol):
         # Use sed for offset/limit
         start = offset + 1
         end = offset + limit
-        exit_code, stdout, stderr = self._run(
+        exit_code, stdout, stderr = await self._run(
             ["sed", "-n", f"{start},{end}p", file_path],
         )
         if exit_code != 0:
@@ -176,7 +179,7 @@ class ContainerBackend(SandboxBackendProtocol):
             )
         )
 
-    def grep(
+    async def agrep(
         self,
         pattern: str,
         path: str | None = None,
@@ -190,7 +193,7 @@ class ContainerBackend(SandboxBackendProtocol):
         # with '-' (e.g. "->foo") from being interpreted as options.
         cmd.extend(["-e", pattern, search_path])
 
-        exit_code, stdout, stderr = self._run(cmd)
+        exit_code, stdout, stderr = await self._run(cmd)
         if exit_code == 2:
             return GrepResult(error=f"Error: {stderr.strip()}")
 
@@ -223,10 +226,10 @@ class ContainerBackend(SandboxBackendProtocol):
 
         return GrepResult(matches=matches)
 
-    def glob(self, pattern: str, path: str = "/") -> GlobResult:
+    async def aglob(self, pattern: str, path: str = "/") -> GlobResult:
         # Use find + fnmatch
         search_path = path or "/"
-        exit_code, stdout, _ = self._run(
+        exit_code, stdout, _ = await self._run(
             ["find", search_path, "-type", "f", "-o", "-type", "d"],
         )
         if exit_code != 0:
@@ -242,19 +245,19 @@ class ContainerBackend(SandboxBackendProtocol):
 
         return GlobResult(matches=matches)
 
-    def write(self, file_path: str, content: str) -> WriteResult:
+    async def awrite(self, file_path: str, content: str) -> WriteResult:
         # Check if file exists
-        exit_code, _, _ = self._run(["test", "-e", file_path])
+        exit_code, _, _ = await self._run(["test", "-e", file_path])
         if exit_code == 0:
             return WriteResult(error=f"Error: File '{file_path}' already exists")
 
         # Ensure parent dir exists
         parent = file_path.rsplit("/", 1)[0] if "/" in file_path else "."
-        self._run(["mkdir", "-p", parent])
+        await self._run(["mkdir", "-p", parent])
 
         # Write via stdin-like approach using sh -c with heredoc
         escaped = content.replace("'", "'\\''")
-        exit_code, _, stderr = self._run(
+        exit_code, _, stderr = await self._run(
             ["sh", "-c", f"printf '%s' '{escaped}' > {file_path}"],
         )
         if exit_code != 0:
@@ -262,7 +265,7 @@ class ContainerBackend(SandboxBackendProtocol):
 
         return WriteResult(path=file_path)
 
-    def edit(
+    async def aedit(
         self,
         file_path: str,
         old_string: str,
@@ -270,7 +273,7 @@ class ContainerBackend(SandboxBackendProtocol):
         replace_all: bool = False,
     ) -> EditResult:
         # Read current content
-        exit_code, content, stderr = self._run(["cat", file_path])
+        exit_code, content, stderr = await self._run(["cat", file_path])
         if exit_code != 0:
             return EditResult(error=f"Error: File '{file_path}' not found")
 
@@ -290,7 +293,7 @@ class ContainerBackend(SandboxBackendProtocol):
 
         # Write back
         escaped = new_content.replace("'", "'\\''")
-        exit_code, _, stderr = self._run(
+        exit_code, _, stderr = await self._run(
             ["sh", "-c", f"printf '%s' '{escaped}' > {file_path}"],
         )
         if exit_code != 0:
@@ -300,3 +303,43 @@ class ContainerBackend(SandboxBackendProtocol):
             self.coverage.record_edit(file_path)
 
         return EditResult(path=file_path, occurrences=count)
+
+    # -- Sync fallbacks (used by deepagents if async not available) --
+    # These delegate to the async versions via asyncio. In practice,
+    # deepagents will call the a* methods directly.
+
+    def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
+        import asyncio
+        return asyncio.run(
+            self.aexecute(command, timeout=timeout)
+        )
+
+    def ls(self, path: str) -> LsResult:
+        import asyncio
+        return asyncio.run(self.als(path))
+
+    def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+        import asyncio
+        return asyncio.run(
+            self.aread(file_path, offset, limit)
+        )
+
+    def grep(self, pattern: str, path: str | None = None, glob: str | None = None) -> GrepResult:
+        import asyncio
+        return asyncio.run(
+            self.agrep(pattern, path, glob)
+        )
+
+    def glob(self, pattern: str, path: str = "/") -> GlobResult:
+        import asyncio
+        return asyncio.run(self.aglob(pattern, path))
+
+    def write(self, file_path: str, content: str) -> WriteResult:
+        import asyncio
+        return asyncio.run(self.awrite(file_path, content))
+
+    def edit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> EditResult:
+        import asyncio
+        return asyncio.run(
+            self.aedit(file_path, old_string, new_string, replace_all)
+        )

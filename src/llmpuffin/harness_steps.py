@@ -1,13 +1,8 @@
 """
-Hamilton DAG defining the audit pipeline as a graph of steps.
+Audit pipeline steps.
 
-Each function is a node in the DAG. Dependencies between steps are expressed
-via function parameter names matching other function names (or external inputs).
-
-External inputs (provided at execution time):
-    harness, config, threat_model, checkpointer, store, db,
-    thread_id, github_client, source_thread_id, user_message,
-    existing_container_id, is_fork
+Each function is one step of the pipeline, called sequentially
+by ``_execute_pipeline`` in ``agent.py``.
 """
 
 from __future__ import annotations
@@ -79,32 +74,32 @@ async def resolved_thread(
     return ResolvedThread(tid=tid, audit_run_id=audit_run_id)
 
 
-# ── Step 2: Start environment and capture git info ──
+# ── Step 2: Start environment ──
 
 
 async def environment_context(
     harness: Harness,
-    resolved_thread: ResolvedThread,
+    resolved: ResolvedThread,
     existing_container_id: str | None,
     db: DB,
 ) -> EnvironmentContext:
-    """Start the container (git info is captured later, after cloning)."""
-    await _set_pipeline_state(resolved_thread.tid, "starting", db=db)
+    """Start the container."""
+    await _set_pipeline_state(resolved.tid, "starting", db=db)
 
-    execution = harness.start_environment(container_id=existing_container_id)
+    execution = await harness.start_environment(container_id=existing_container_id)
     execution.__enter__()
 
     try:
-        cwd = execution.exec(["pwd"], timeout=120)
+        cwd = await execution.exec(["pwd"], timeout=120)
         code_dir = cwd.stdout.strip() or harness.config.profile.code_dir
         log.info("Container cwd: %s", code_dir)
-        await _save_container_id(resolved_thread.tid, execution.container_id, db=db)
+        await _save_container_id(resolved.tid, execution.container_id, db=db)
         # Use /src as coverage root when multiple repos are configured,
         # so files in sibling repos (e.g. /src/api and /src/modeling-api)
         # are all tracked.
         coverage_root = "/src" if harness.config.profile.repos else code_dir
         coverage = CoverageTracker(
-            audit_run_id=resolved_thread.audit_run_id,
+            audit_run_id=resolved.audit_run_id,
             code_dir=coverage_root,
             db=db,
         )
@@ -119,27 +114,18 @@ async def environment_context(
 
 async def clone_repos(
     config: HarnessConfig,
-    environment_context: EnvironmentContext,
-    resolved_thread: ResolvedThread,
+    env_ctx: EnvironmentContext,
+    resolved: ResolvedThread,
     github_client: GitHubClient | None,
     db: DB,
-) -> bool:
-    """Clone git repositories specified in the profile into the container.
-
-    If a GitHubClient is configured, a short-lived installation token is
-    generated and injected into clone URLs for private repo access.
-
-    If a repo's target directory already exists (e.g. when resuming a run
-    with an existing container), the clone is skipped. Note that on resume
-    the git HEAD may differ from the original run — we always clone the
-    latest, not the commit that was used when the audit started.
-    """
+) -> None:
+    """Clone git repositories specified in the profile into the container."""
     repos = config.profile.repos
     if not repos:
-        return True
+        return
 
-    await _set_pipeline_state(resolved_thread.tid, "cloning", db=db)
-    execution = environment_context.execution
+    await _set_pipeline_state(resolved.tid, "cloning", db=db)
+    execution = env_ctx.execution
 
     # Generate a single token for all clones in this run
     token = _get_clone_token(github_client)
@@ -151,9 +137,7 @@ async def clone_repos(
         clone_path = f"/src/{repo_name}"
 
         # Skip if already cloned (e.g. resuming with an existing container).
-        # Check for .git to distinguish a real clone from an empty dir
-        # created by the container runtime as working_dir.
-        check = execution.exec(
+        check = await execution.exec(
             ["test", "-d", f"{clone_path}/.git"], timeout=5, workdir="/"
         )
         if check.ok:
@@ -163,7 +147,7 @@ async def clone_repos(
         clone_url = _inject_token(repo.url, token) if token else repo.url
 
         log.info("Cloning %s → %s", repo.url, clone_path)
-        result = execution.exec(
+        result = await execution.exec(
             ["git", "clone", "--depth", "1", clone_url, clone_path],
             timeout=600,
             workdir="/",
@@ -174,14 +158,14 @@ async def clone_repos(
 
         if repo.lfs:
             log.info("Setting up git LFS for %s", clone_path)
-            lfs_install = execution.exec(
+            lfs_install = await execution.exec(
                 ["git", "-C", clone_path, "lfs", "install", "--local"],
                 timeout=30,
             )
             if not lfs_install.ok:
                 log.warning("git lfs install failed: %s", lfs_install.stderr.strip())
             else:
-                lfs_pull = execution.exec(
+                lfs_pull = await execution.exec(
                     ["git", "-C", clone_path, "lfs", "pull"],
                     timeout=600,
                 )
@@ -190,48 +174,43 @@ async def clone_repos(
                 else:
                     log.info("LFS pull complete for %s", clone_path)
 
-    # Capture git info from the first repo. We run git commands with -C
-    # because the container cwd may be /src (not a git repo itself).
+    # Capture git info from the first repo.
     first_repo = repos[0]
     first_name = first_repo.name or first_repo.url.rstrip("/").rsplit("/", 1)[
         -1
     ].removesuffix(".git")
     first_path = f"/src/{first_name}"
 
-    git_info = _capture_git_info_at(execution, first_path)
+    git_info = await _capture_git_info_at(execution, first_path)
     if git_info:
-        await _save_git_info(resolved_thread.audit_run_id, git_info, db=db)
+        await _save_git_info(resolved.audit_run_id, git_info, db=db)
         log.info("Git info: %s @ %s", git_info.repo_url, git_info.commit[:12])
-        environment_context.repo_path = git_info.repo_path
+        env_ctx.repo_path = git_info.repo_path
     else:
         log.info("No git info available, continuing without")
-
-    return True
 
 
 # ── Step 3b: Populate file tree for coverage ──
 
 
 async def file_tree(
-    environment_context: EnvironmentContext,
-    clone_repos: bool,
-    resolved_thread: ResolvedThread,
+    env_ctx: EnvironmentContext,
+    resolved: ResolvedThread,
     db: DB,
-) -> bool:
+) -> None:
     """Populate the file tree in the DB for coverage tracking."""
-    coverage = environment_context.coverage
+    coverage = env_ctx.coverage
     if coverage is None:
-        return True
+        return
 
     from llmpuffin.coverage import populate_file_tree
 
-    populate_file_tree(
-        environment_context.execution,
+    await populate_file_tree(
+        env_ctx.execution,
         coverage.code_dir,
-        audit_run_id=resolved_thread.audit_run_id,
+        audit_run_id=resolved.audit_run_id,
         db=db,
     )
-    return True
 
 
 # ── Step 4: Build the agent ──
@@ -239,29 +218,27 @@ async def file_tree(
 
 async def agent(
     config: HarnessConfig,
-    environment_context: EnvironmentContext,
-    clone_repos: bool,
-    file_tree: bool,
+    env_ctx: EnvironmentContext,
     threat_model: ThreatModel,
-    resolved_thread: ResolvedThread,
+    resolved: ResolvedThread,
     checkpointer: BaseCheckpointSaver,
     store: BaseStore,
     db: DB,
     github_client: GitHubClient | None,
 ) -> Any:
     """Build the deep agent with all backends, tools, and middleware."""
-    await _set_pipeline_state(resolved_thread.tid, "building", db=db)
+    await _set_pipeline_state(resolved.tid, "building", db=db)
     return _build_agent(
         config,
-        environment_context.execution,
+        env_ctx.execution,
         threat_model,
-        resolved_thread.audit_run_id,
-        environment_context.repo_path,
+        resolved.audit_run_id,
+        env_ctx.repo_path,
         checkpointer,
         store,
         db=db,
         github_client=github_client,
-        coverage=environment_context.coverage,
+        coverage=env_ctx.coverage,
     )
 
 
@@ -271,7 +248,7 @@ async def agent(
 async def input_messages(
     agent: Any,
     config: HarnessConfig,
-    resolved_thread: ResolvedThread,
+    resolved: ResolvedThread,
     source_thread_id: str | None,
     user_message: str | None,
     is_fork: bool,
@@ -301,33 +278,33 @@ async def input_messages(
 
 async def agent_run_result(
     agent: Any,
-    input_messages: list,
+    messages: list,
     config: HarnessConfig,
-    resolved_thread: ResolvedThread,
+    resolved: ResolvedThread,
     db: DB,
 ) -> AgentRunResult:
     """Stream the agent execution."""
-    await _set_pipeline_state(resolved_thread.tid, "running", db=db)
+    await _set_pipeline_state(resolved.tid, "running", db=db)
     p = config.profile
     run_config: dict = {
         "recursion_limit": p.agent.max_iterations,
-        "configurable": {"thread_id": resolved_thread.tid},
+        "configurable": {"thread_id": resolved.tid},
     }
     status, error = await _stream_agent(
-        agent, input_messages, run_config, p.agent.max_iterations
+        agent, messages, run_config, p.agent.max_iterations
     )
     return AgentRunResult(status=status, error=error)
 
 
-# ── Helpers (not Hamilton nodes — underscore-prefixed) ──
+# ── Helpers ──
 
 
-def _capture_git_info_at(execution: AuditExecution, repo_path: str) -> GitInfo | None:
+async def _capture_git_info_at(execution: AuditExecution, repo_path: str) -> GitInfo | None:
     """Capture git info from a specific directory inside the container."""
     from urllib.parse import urlparse
 
     try:
-        remote_result = execution.exec(
+        remote_result = await execution.exec(
             ["git", "-C", repo_path, "remote", "get-url", "origin"], timeout=5
         )
         if not remote_result.ok:
@@ -342,7 +319,7 @@ def _capture_git_info_at(execution: AuditExecution, repo_path: str) -> GitInfo |
 
         path = parsed.path.removesuffix(".git").strip("/")
 
-        head_result = execution.exec(
+        head_result = await execution.exec(
             ["git", "-C", repo_path, "rev-parse", "HEAD"], timeout=5
         )
         if not head_result.ok:
@@ -373,11 +350,7 @@ def _get_clone_token(github_client: GitHubClient | None) -> str | None:
 
 
 def _inject_token(url: str, token: str) -> str:
-    """Inject an access token into an HTTPS git URL.
-
-    https://github.com/org/repo.git
-      → https://x-access-token:<token>@github.com/org/repo.git
-    """
+    """Inject an access token into an HTTPS git URL."""
     if url.startswith("https://"):
         return url.replace("https://", f"https://x-access-token:{token}@", 1)
     return url
