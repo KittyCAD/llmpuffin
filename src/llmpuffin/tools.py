@@ -132,34 +132,45 @@ async def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
     """
     try:
         # Resolve to absolute path.
-        ec, abs_path, _ = await backend._run(["sh", "-c", f"realpath {file_path}"])
+        ec, abs_path, stderr = await backend._run(["sh", "-c", f"realpath {file_path}"])
         if ec != 0:
+            log.debug("git_info: realpath failed for %s: %s", file_path, stderr.strip())
             return GitInfo()
         abs_path = abs_path.strip()
         parent = abs_path.rsplit("/", 1)[0]
 
         # Find git repo root.
-        ec, repo_root, _ = await backend._run(
+        ec, repo_root, stderr = await backend._run(
             ["git", "-C", parent, "rev-parse", "--show-toplevel"]
         )
         if ec != 0:
+            log.debug("git_info: no git root for %s: %s", parent, stderr.strip())
             return GitInfo()
         repo_root = repo_root.strip()
 
         # Origin remote URL.
-        ec, remote, _ = await backend._run(
+        ec, remote, stderr = await backend._run(
             ["git", "-C", repo_root, "remote", "get-url", "origin"]
         )
         if ec != 0:
+            log.debug("git_info: no origin remote in %s: %s", repo_root, stderr.strip())
             return GitInfo()
 
         # HEAD commit.
-        ec, head, _ = await backend._run(["git", "-C", repo_root, "rev-parse", "HEAD"])
+        ec, head, stderr = await backend._run(
+            ["git", "-C", repo_root, "rev-parse", "HEAD"]
+        )
         if ec != 0:
+            log.debug("git_info: no HEAD in %s: %s", repo_root, stderr.strip())
             return GitInfo()
 
-        return GitInfo(origin_remote=remote.strip(), head=head.strip())
-    except Exception:
+        result = GitInfo(origin_remote=remote.strip(), head=head.strip())
+        log.debug(
+            "git_info: %s → %s @ %s", file_path, result.origin_remote, result.head[:12]
+        )
+        return result
+    except Exception as exc:
+        log.debug("git_info: exception for %s: %s", file_path, exc)
         return GitInfo()
 
 
@@ -347,7 +358,10 @@ Existing mitigations to verify:
                     gi = await _query_git_info(container_backend, loc.file)
                     d["origin_remote"] = gi.origin_remote
                     d["head"] = gi.head
+                log.debug("report_finding location: %s", d)
                 loc_dicts.append(d)
+        else:
+            log.debug("report_finding: no locations provided")
 
         _, local_id = _persist_finding_to_db(
             audit_run_id,

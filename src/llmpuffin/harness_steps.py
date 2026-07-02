@@ -130,55 +130,63 @@ async def clone_repos(
     # Generate a single token for all clones in this run
     token = _get_clone_token(github_client)
 
-    for repo in repos:
-        repo_name = repo.name or repo.url.rstrip("/").rsplit("/", 1)[-1].removesuffix(
-            ".git"
-        )
-        clone_path = f"/src/{repo_name}"
+    # Configure git credentials via http.extraheader (like actions/checkout)
+    # so the token never appears in remote URLs.
+    if token:
+        await _setup_git_credentials(execution, token)
 
-        # Skip if already cloned (e.g. resuming with an existing container).
-        check = await execution.exec(
-            ["test", "-d", f"{clone_path}/.git"], timeout=5, workdir="/"
-        )
-        if check.ok:
-            log.info("Repo already cloned at %s, skipping", clone_path)
-            continue
+    try:
+        for repo in repos:
+            repo_name = _resolve_repo_name(repo.name, repo.url)
+            clone_path = f"/src/{repo_name}"
 
-        clone_url = _inject_token(repo.url, token) if token else repo.url
-
-        log.info("Cloning %s → %s", repo.url, clone_path)
-        result = await execution.exec(
-            ["git", "clone", "--depth", "1", clone_url, clone_path],
-            timeout=600,
-            workdir="/",
-        )
-        if not result.ok:
-            raise RuntimeError(f"Failed to clone {repo.url}: {result.stderr.strip()}")
-        log.info("Cloned %s", repo.url)
-
-        if repo.lfs:
-            log.info("Setting up git LFS for %s", clone_path)
-            lfs_install = await execution.exec(
-                ["git", "-C", clone_path, "lfs", "install", "--local"],
-                timeout=30,
+            # Skip if already cloned (e.g. resuming with an existing container).
+            check = await execution.exec(
+                ["test", "-d", f"{clone_path}/.git"], timeout=5, workdir="/"
             )
-            if not lfs_install.ok:
-                log.warning("git lfs install failed: %s", lfs_install.stderr.strip())
-            else:
-                lfs_pull = await execution.exec(
-                    ["git", "-C", clone_path, "lfs", "pull"],
-                    timeout=600,
+            if check.ok:
+                log.info("Repo already cloned at %s, skipping", clone_path)
+                continue
+
+            log.info("Cloning %s → %s", repo.url, clone_path)
+            result = await execution.exec(
+                ["git", "clone", "--depth", "1", repo.url, clone_path],
+                timeout=600,
+                workdir="/",
+            )
+            if not result.ok:
+                raise RuntimeError(
+                    f"Failed to clone {repo.url}: {result.stderr.strip()}"
                 )
-                if not lfs_pull.ok:
-                    log.warning("git lfs pull failed: %s", lfs_pull.stderr.strip())
+            log.info("Cloned %s", repo.url)
+
+            if repo.lfs:
+                log.info("Setting up git LFS for %s", clone_path)
+                lfs_install = await execution.exec(
+                    ["git", "-C", clone_path, "lfs", "install", "--local"],
+                    timeout=30,
+                )
+                if not lfs_install.ok:
+                    log.warning(
+                        "git lfs install failed: %s", lfs_install.stderr.strip()
+                    )
                 else:
-                    log.info("LFS pull complete for %s", clone_path)
+                    lfs_pull = await execution.exec(
+                        ["git", "-C", clone_path, "lfs", "pull"],
+                        timeout=600,
+                    )
+                    if not lfs_pull.ok:
+                        log.warning("git lfs pull failed: %s", lfs_pull.stderr.strip())
+                    else:
+                        log.info("LFS pull complete for %s", clone_path)
+    finally:
+        # Remove credentials after cloning so they don't leak.
+        if token:
+            await _teardown_git_credentials(execution)
 
     # Capture git info from the first repo.
     first_repo = repos[0]
-    first_name = first_repo.name or first_repo.url.rstrip("/").rsplit("/", 1)[
-        -1
-    ].removesuffix(".git")
+    first_name = _resolve_repo_name(first_repo.name, first_repo.url)
     first_path = f"/src/{first_name}"
 
     git_info = await _capture_git_info_at(execution, first_path)
@@ -299,6 +307,11 @@ async def agent_run_result(
 # ── Helpers ──
 
 
+def _resolve_repo_name(name: str | None, url: str) -> str:
+    """Return explicit repo name, or derive one from the clone URL."""
+    return name or url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+
+
 async def _capture_git_info_at(
     execution: AuditExecution, repo_path: str
 ) -> GitInfo | None:
@@ -351,11 +364,69 @@ def _get_clone_token(github_client: GitHubClient | None) -> str | None:
         return None
 
 
-def _inject_token(url: str, token: str) -> str:
-    """Inject an access token into an HTTPS git URL."""
-    if url.startswith("https://"):
-        return url.replace("https://", f"https://x-access-token:{token}@", 1)
-    return url
+# NOTE: The credentials file lives on the container's filesystem, which is
+# not ephemeral — it persists for the lifetime of the pod/container.  The
+# teardown removes it after cloning, but a crash before teardown would leave
+# the token on disk.  To be revisited: mount the path as a tmpfs / secrets
+# volume so the token never hits persistent storage.
+_GIT_CREDENTIALS_PATH = "/tmp/git-credentials.config"
+
+
+async def _setup_git_credentials(execution: AuditExecution, token: str) -> None:
+    """Configure git to authenticate via a credentials file + include.path.
+
+    Follows the same approach as actions/checkout:
+      1. Write a git config file to a temp path with the Authorization header.
+      2. Point the global git config at it via include.path.
+
+    The remote URL stays clean, so `git remote get-url origin` returns the
+    original HTTPS URL without embedded credentials.  Using a separate file
+    (rather than inlining the header in ~/.gitconfig) means the credential
+    path can be moved to a secrets mount or tmpfs later.
+    """
+    import base64
+
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    header = f"AUTHORIZATION: basic {basic}"
+
+    # Write credentials to a separate git config file.
+    write = await execution.exec(
+        [
+            "git",
+            "config",
+            "--file",
+            _GIT_CREDENTIALS_PATH,
+            "http.https://github.com/.extraheader",
+            header,
+        ],
+        timeout=5,
+    )
+    if not write.ok:
+        log.warning("Failed to write git credentials file: %s", write.stderr.strip())
+        return
+
+    # Include that file from global config.
+    include = await execution.exec(
+        [
+            "git",
+            "config",
+            "--global",
+            "include.path",
+            _GIT_CREDENTIALS_PATH,
+        ],
+        timeout=5,
+    )
+    if not include.ok:
+        log.warning("Failed to set git include.path: %s", include.stderr.strip())
+
+
+async def _teardown_git_credentials(execution: AuditExecution) -> None:
+    """Remove the credentials file and global include after cloning."""
+    await execution.exec(["rm", "-f", _GIT_CREDENTIALS_PATH], timeout=5)
+    await execution.exec(
+        ["git", "config", "--global", "--unset-all", "include.path"],
+        timeout=5,
+    )
 
 
 async def _set_pipeline_state(tid: str, state: str, *, db: DB) -> None:
