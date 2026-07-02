@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from typing import Any
 from types import TracebackType
 
 from nexecutor_client import AuthenticatedClient
@@ -21,6 +22,8 @@ from nexecutor_client.api.workloads import (
     start_workload,
     stop_workload,
 )
+from nexecutor_client.models.backend_type_type_0 import BackendTypeType0
+from nexecutor_client.models.backend_type_type_1 import BackendTypeType1
 from nexecutor_client.models.create_workload_request import CreateWorkloadRequest
 from nexecutor_client.models.error import Error
 from nexecutor_client.models.exec_request import ExecRequest
@@ -75,6 +78,7 @@ class NexecutorRuntime:
     _workload_id: str = ""
     _token_source: str = ""
     _base_url: str = ""
+    _backend: str | None = None
 
     @classmethod
     async def start(
@@ -84,6 +88,7 @@ class NexecutorRuntime:
         base_url: str,
         token: str = "",
         container_id: str | None = None,
+        backend: str | None = None,
     ) -> NexecutorRuntime:
         resolved_token = _resolve_token(token)
         client = _make_client(base_url, resolved_token)
@@ -93,18 +98,10 @@ class NexecutorRuntime:
             _code_dir=code_dir,
             _token_source=token,
             _base_url=base_url,
+            _backend=backend,
         )
 
         await rt._create_workload()
-
-        return rt
-
-        if container_id:
-            log.info("Resuming nexecutor workload %s", container_id[:12])
-            rt._workload_id = container_id
-            await rt._start_workload()
-        else:
-            await rt._create_workload()
 
         return rt
 
@@ -118,13 +115,24 @@ class NexecutorRuntime:
         log.info("Started nexecutor workload %s", self._workload_id[:12])
         await self._wait_until_running()
 
+    def _resolve_backend(self) -> BackendTypeType0 | BackendTypeType1 | None:
+        if self._backend == "microvm":
+            return BackendTypeType1.MICROVM
+        if self._backend == "k8s":
+            return BackendTypeType0.K8S
+        return None
+
     async def _create_workload(self) -> None:
+        kwargs: dict[str, Any] = {
+            "image": self.image,
+            "command": ["sleep", "infinity"],
+        }
+        backend = self._resolve_backend()
+        if backend is not None:
+            kwargs["backend"] = backend
         resp = await run_workload.asyncio(
             client=self._client,
-            body=CreateWorkloadRequest(
-                image=self.image,
-                command=["sleep", "infinity"],
-            ),
+            body=CreateWorkloadRequest(**kwargs),
         )
         if resp is None or not hasattr(resp, "id"):
             raise RuntimeError(f"Failed to create nexecutor workload: {resp}")

@@ -131,9 +131,10 @@ class Harness:
             return await NexecutorRuntime.start(
                 image=p.image,
                 code_dir=p.code_dir,
-                base_url=cfg.nexecutor_url,
-                token=cfg.nexecutor_token,
+                base_url=cfg.nexecutor.url,
+                token=cfg.nexecutor.token,
                 container_id=container_id,
+                backend=cfg.nexecutor.backend or None,
             )
         elif cfg.runtime == "microvm":
             try:
@@ -143,17 +144,17 @@ class Harness:
                     "boto3 is not installed. Install it with: pip install boto3"
                 ) from None
 
-            if not cfg.microvm_image_arn:
+            if not cfg.microvm.image_arn:
                 raise RuntimeError(
-                    "microvm_image_arn is not configured. "
-                    "Set it in llmpuffin.toml or LLMPUFFIN_MICROVM_IMAGE_ARN."
+                    "microvm.image_arn is not configured. "
+                    "Set it in llmpuffin.toml under [microvm]."
                 )
 
             return await MicrovmRuntime.start(
-                image_arn=cfg.microvm_image_arn,
+                image_arn=cfg.microvm.image_arn,
                 code_dir=p.code_dir,
-                region=cfg.microvm_region,
-                profile=cfg.microvm_profile,
+                region=cfg.microvm.region,
+                profile=cfg.microvm.profile,
                 container_id=container_id,
             )
         else:

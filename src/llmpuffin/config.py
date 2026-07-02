@@ -120,6 +120,19 @@ class LoggingConfig(BaseModel):
     level: str = "INFO"
 
 
+class NexecutorConfig(BaseModel):
+    url: str = "http://localhost:8080"
+    token: str = ""
+    backend: Literal["k8s", "microvm", ""] = ""
+    """Backend type. Empty string = server default (microvm)."""
+
+
+class MicrovmConfig(BaseModel):
+    image_arn: str = ""
+    region: str = "us-east-1"
+    profile: str = ""
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     """Merge override into base, recursing into nested dicts."""
     result = dict(base)
@@ -146,11 +159,8 @@ class Config(BaseSettings):
     )
 
     runtime: Literal["podman", "nexecutor", "microvm"] = "podman"
-    nexecutor_url: str = "http://localhost:8080"
-    nexecutor_token: str = ""
-    microvm_image_arn: str = ""
-    microvm_region: str = "us-east-1"
-    microvm_profile: str = ""
+    nexecutor: NexecutorConfig = NexecutorConfig()
+    microvm: MicrovmConfig = MicrovmConfig()
     postgres: PostgresConfig = PostgresConfig()
     web: WebConfig = WebConfig()
     github: GitHubConfig = GitHubConfig()
@@ -187,9 +197,12 @@ class Config(BaseSettings):
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
-        """Load config from path, or search for llmpuffin.toml in cwd."""
+        """Load config from path, or search for llmpuffin.local.toml / llmpuffin.toml in cwd."""
         if path:
             return cls.from_toml(path)
+        local = Path("llmpuffin.local.toml")
+        if local.exists():
+            return cls.from_toml(local)
         default = Path("llmpuffin.toml")
         if default.exists():
             return cls.from_toml(default)

@@ -2,6 +2,9 @@
 runtime = "nexecutor"
 #runtime = "microvm"
 
+[nexecutor]
+backend = "microvm"
+
 [postgres]
 url = "postgresql://localhost:5434/llmpuffin"
 
