@@ -223,9 +223,6 @@ class ContainerBackend(SandboxBackendProtocol):
             )
             return GrepResult(error=hint)
 
-        if self.coverage and matches:
-            self.coverage.record_grep([m["path"] for m in matches])
-
         return GrepResult(matches=matches)
 
     async def aglob(self, pattern: str, path: str = "/") -> GlobResult:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -241,9 +238,6 @@ class ContainerBackend(SandboxBackendProtocol):
         for entry in sorted(stdout.strip().split("\n")):
             if entry and fnmatch.fnmatch(entry, pattern):
                 matches.append(FileInfo(path=entry))
-
-        if self.coverage and matches:
-            self.coverage.record_glob([m["path"] for m in matches])
 
         return GlobResult(matches=matches)
 

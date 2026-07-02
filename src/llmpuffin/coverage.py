@@ -107,14 +107,6 @@ class CoverageTracker:
     def record_read(self, file_path: str) -> None:
         self.record(file_path, "read")
 
-    def record_grep(self, paths: list[str]) -> None:
-        for p in paths:
-            self.record(p, "grep")
-
-    def record_glob(self, paths: list[str]) -> None:
-        for p in paths:
-            self.record(p, "glob")
-
     def record_edit(self, file_path: str) -> None:
         self.record(file_path, "edit")
 
