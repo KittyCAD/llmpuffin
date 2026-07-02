@@ -255,6 +255,7 @@ label { display: block; font-size: 0.8125rem; color: hsl(var(--muted-foreground)
 /* ───────── Tables ───────── */
 table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 th, td { text-align: left; padding: 0.625rem 0.75rem; border-bottom: 1px solid hsl(var(--border)); }
+tr:last-child td { border-bottom: none; }
 th { font-weight: 500; color: hsl(var(--muted-foreground)); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
 tr:hover td { background: hsl(var(--muted) / 0.4); }
 tr[hx-get] { cursor: pointer; }

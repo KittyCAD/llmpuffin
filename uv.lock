@@ -1119,7 +1119,7 @@ wheels = [
 [[package]]
 name = "nexecutor-client"
 version = "0.1.0"
-source = { git = "https://github.com/KittyCAD/nexecutor.git?subdirectory=clients%2Fpython#4019cfc49cd746f00c4df72766f545cbead4c8b3" }
+source = { git = "https://github.com/KittyCAD/nexecutor.git?subdirectory=clients%2Fpython#063ff9a2ec375a73826d0537a2461f00c0fa8431" }
 dependencies = [
     { name = "attrs" },
     { name = "httpx" },
