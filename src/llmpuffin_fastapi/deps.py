@@ -92,3 +92,100 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     db: DB = request.app.state.db
     async with db.async_session() as s:
         yield s
+
+
+def dispatch_audit(
+    request: Request,
+    thread_id: str,
+    profile_toml: str,
+    coro,
+    *,
+    user_message: str | None = None,
+    profile_id: int | None = None,
+    audit_run_id: int | None = None,
+) -> None:
+    """Dispatch an audit via Temporal (if enabled) or in-process spawn."""
+    temporal_client = request.app.state.temporal_client
+    if temporal_client is not None:
+        import asyncio
+
+        from llmpuffin.temporal import AuditParams, start_audit
+
+        # Close the unused coroutine to avoid warnings.
+        coro.close()
+        config: Config = request.app.state.config
+        asyncio.ensure_future(
+            start_audit(
+                temporal_client,
+                AuditParams(
+                    profile_toml=profile_toml,
+                    thread_id=thread_id,
+                    user_message=user_message,
+                    profile_id=profile_id,
+                    audit_run_id=audit_run_id,
+                ),
+                task_queue=config.temporal.task_queue,
+            )
+        )
+    else:
+        harness: Harness = request.app.state.harness
+        harness.spawn(thread_id, coro)
+
+
+async def dispatch_cancel(request: Request, thread_id: str) -> bool:
+    """Cancel a running audit via Temporal or in-process. Returns True if found."""
+    temporal_client = request.app.state.temporal_client
+    if temporal_client is not None:
+        from llmpuffin.temporal import cancel_workflow
+
+        try:
+            await cancel_workflow(temporal_client, f"audit-{thread_id}")
+            return True
+        except Exception:
+            try:
+                await cancel_workflow(temporal_client, f"fork-{thread_id}")
+                return True
+            except Exception:
+                return False
+    else:
+        harness: Harness = request.app.state.harness
+        return harness.cancel(thread_id)
+
+
+def dispatch_fork(
+    request: Request,
+    new_thread_id: str,
+    profile_toml: str,
+    coro,
+    *,
+    source_thread_id: str,
+    user_message: str,
+    profile_id: int | None = None,
+    audit_run_id: int | None = None,
+) -> None:
+    """Dispatch a fork via Temporal (if enabled) or in-process spawn."""
+    temporal_client = request.app.state.temporal_client
+    if temporal_client is not None:
+        import asyncio
+
+        from llmpuffin.temporal import ForkParams, start_fork
+
+        coro.close()
+        config: Config = request.app.state.config
+        asyncio.ensure_future(
+            start_fork(
+                temporal_client,
+                ForkParams(
+                    profile_toml=profile_toml,
+                    source_thread_id=source_thread_id,
+                    new_thread_id=new_thread_id,
+                    user_message=user_message,
+                    profile_id=profile_id,
+                    audit_run_id=audit_run_id,
+                ),
+                task_queue=config.temporal.task_queue,
+            )
+        )
+    else:
+        harness: Harness = request.app.state.harness
+        harness.spawn(new_thread_id, coro)

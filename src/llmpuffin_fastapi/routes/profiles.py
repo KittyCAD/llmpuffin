@@ -21,6 +21,7 @@ from llmpuffin.models import AuditProfile, AuditRun
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
+    dispatch_audit,
     get_config,
     get_db,
     get_github_client,
@@ -170,8 +171,10 @@ async def profile_run(
     run_id = await create_audit_run(
         harness_config, tid, db=llmpuffin_db, profile_id=profile.id
     )
-    harness.spawn(
+    dispatch_audit(
+        request,
         tid,
+        profile.profile_toml,
         run_audit(
             harness_config,
             db=llmpuffin_db,
@@ -181,6 +184,8 @@ async def profile_run(
             profile_id=profile.id,
             audit_run_id=run_id,
         ),
+        profile_id=profile.id,
+        audit_run_id=run_id,
     )
     return toast(
         request,

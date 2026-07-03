@@ -31,6 +31,7 @@ from llmpuffin.models import (
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
+    dispatch_fork,
     get_base_url,
     get_config,
     get_db,
@@ -664,7 +665,14 @@ async def finding_fork(
         except Exception:
             log.exception("Background finding fork failed")
 
-    harness.spawn(new_thread_id, _do_fork())
+    dispatch_fork(
+        request,
+        new_thread_id,
+        toml_str,
+        _do_fork(),
+        source_thread_id=source_thread_id,
+        user_message=user_message,
+    )
 
     # Re-fetch to get updated fork_thread_id, load fork session/thread for the
     # conversation partial (may be empty — messages div will start polling immediately).

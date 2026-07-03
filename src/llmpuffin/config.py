@@ -118,6 +118,14 @@ class AuthConfig(BaseModel):
         )
 
 
+class TemporalConfig(BaseModel):
+    enabled: bool = False
+    """Use Temporal for audit execution instead of in-process asyncio tasks."""
+    url: str = "localhost:7233"
+    namespace: str = "default"
+    task_queue: str = "llmpuffin-audits"
+
+
 class LoggingConfig(BaseModel):
     level: str = "INFO"
 
@@ -167,6 +175,7 @@ class Config(BaseSettings):
     web: WebConfig = WebConfig()
     github: GitHubConfig = GitHubConfig()
     auth: AuthConfig = AuthConfig()
+    temporal: TemporalConfig = TemporalConfig()
     logging: LoggingConfig = LoggingConfig()
 
     @classmethod

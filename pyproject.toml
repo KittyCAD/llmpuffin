@@ -35,6 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 nexecutor = ["nexecutor-client"]
 microvm = ["boto3", "awscli"]
+temporal = ["temporalio>=1.9"]
 
 [tool.uv.sources]
 nexecutor-client = { git = "https://github.com/KittyCAD/nexecutor.git", subdirectory = "clients/python" }
@@ -46,6 +47,7 @@ llmpuffin-check = "llmpuffin_dev.check:main"
 llmpuffin-pg = "llmpuffin_dev.postgres:main"
 llmpuffin-oidc = "llmpuffin_dev.oidc_server:main"
 llmpuffin-fastapi = "llmpuffin_fastapi.main:main"
+llmpuffin-worker = "llmpuffin.temporal:main"
 llmpuffin-microvm-agent = "llmpuffin_microvm_agent.main:main"
 
 [tool.pyright]

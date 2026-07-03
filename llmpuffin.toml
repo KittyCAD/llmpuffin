@@ -26,5 +26,11 @@ provider_url = "http://localhost:9090"
 client_id = "llmpuffin"
 client_secret = "dev-oidc-secret-not-for-production"
 
+#[temporal]
+#enabled = false
+#url = "localhost:7233"
+#namespace = "default"
+#task_queue = "llmpuffin-audits"
+
 [logging]
 level = "INFO"

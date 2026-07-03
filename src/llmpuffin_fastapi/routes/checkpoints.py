@@ -21,6 +21,8 @@ from llmpuffin.checkpoint import get_session, list_sessions
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
+    dispatch_audit,
+    dispatch_cancel,
     get_config,
     get_db,
     get_github_client,
@@ -153,8 +155,10 @@ async def checkpoint_resume(
 
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    harness.spawn(
+    dispatch_audit(
+        request,
         thread_id,
+        toml_str,
         run_audit(
             harness_config,
             db=llmpuffin_db,
@@ -163,6 +167,7 @@ async def checkpoint_resume(
             user_message=msg,
             github_client=gh,
         ),
+        user_message=msg,
     )
     return toast(request, "success", "Resumed", redirect_to=redirect)
 
@@ -173,6 +178,6 @@ async def checkpoint_stop(
     request: Request,
     harness: Annotated[Harness, Depends(get_harness)],
 ):
-    if harness.cancel(thread_id):
+    if await dispatch_cancel(request, thread_id):
         return Response(status_code=204)
     return Response(status_code=404)

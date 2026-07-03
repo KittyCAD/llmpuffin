@@ -44,6 +44,16 @@ async def _lifespan(app: FastAPI):
     await app.state.db.setup()
     set_github_client(client_from_config(config.github))
 
+    if config.temporal.enabled:
+        from llmpuffin.temporal import connect as temporal_connect
+
+        app.state.temporal_client = await temporal_connect(
+            config.temporal.url, config.temporal.namespace
+        )
+        log.info("Temporal client connected to %s", config.temporal.url)
+    else:
+        app.state.temporal_client = None
+
     try:
         yield
     finally:

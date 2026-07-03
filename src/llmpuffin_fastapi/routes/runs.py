@@ -21,6 +21,9 @@ from llmpuffin.sarif import export_sarif_for_run
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
 from llmpuffin_fastapi.deps import (
+    dispatch_audit,
+    dispatch_cancel,
+    dispatch_fork,
     get_config,
     get_db,
     get_github_client,
@@ -246,8 +249,10 @@ async def run_resume(
 
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    harness.spawn(
+    dispatch_audit(
+        request,
         thread_id,
+        toml_str,
         run_audit(
             harness_config,
             db=llmpuffin_db,
@@ -256,6 +261,7 @@ async def run_resume(
             user_message=message.strip() or None,
             github_client=gh,
         ),
+        user_message=message.strip() or None,
     )
     return toast(
         request,
@@ -319,8 +325,10 @@ async def run_fork(
     new_tid = _uuid.uuid4().hex[:12]
     profile = Profile.from_toml_string(toml_str)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-    harness.spawn(
+    dispatch_fork(
+        request,
         new_tid,
+        toml_str,
         fork_audit(
             harness_config,
             source_thread_id=thread_id,
@@ -329,6 +337,8 @@ async def run_fork(
             global_config=config,
             thread_id=new_tid,
         ),
+        source_thread_id=thread_id,
+        user_message=msg,
     )
     return toast(
         request,
@@ -348,7 +358,7 @@ async def run_stop(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     redirect = f"/runs/{run_id}/"
-    if harness.cancel(thread_id):
+    if await dispatch_cancel(request, thread_id):
         return toast(
             request,
             "success",
