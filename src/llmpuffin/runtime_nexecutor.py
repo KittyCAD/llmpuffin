@@ -14,22 +14,22 @@ from typing import Any
 from types import TracebackType
 
 import httpx
-from nexecutor_client import AuthenticatedClient
-from nexecutor_client.api.workloads import (
+from nexecutor_client import AuthenticatedClient  # pyright: ignore[reportMissingImports]
+from nexecutor_client.api.workloads import (  # pyright: ignore[reportMissingImports]
     destroy_workload,
     exec_command,
     get_workload,
     run_workload,
     stop_workload,
 )
-from nexecutor_client.models.backend_type_type_0 import BackendTypeType0
-from nexecutor_client.models.backend_type_type_1 import BackendTypeType1
-from nexecutor_client.models.create_workload_request import CreateWorkloadRequest
-from nexecutor_client.models.error import Error
-from nexecutor_client.models.exec_request import ExecRequest
-from nexecutor_client.models.exec_response import ExecResponse
-from nexecutor_client.models.workload_response import WorkloadResponse
-from nexecutor_client.models.workload_status import WorkloadStatus
+from nexecutor_client.models.backend_type_type_0 import BackendTypeType0  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.backend_type_type_1 import BackendTypeType1  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.create_workload_request import CreateWorkloadRequest  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.error import Error  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.exec_request import ExecRequest  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.exec_response import ExecResponse  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.workload_response import WorkloadResponse  # pyright: ignore[reportMissingImports]
+from nexecutor_client.models.workload_status import WorkloadStatus  # pyright: ignore[reportMissingImports]
 
 from llmpuffin.audit_environment import ExecResult, GitInfo, _capture_git_info
 

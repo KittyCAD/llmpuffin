@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 from types import TracebackType
 
-import boto3
+import boto3  # pyright: ignore[reportMissingImports]
 import httpx
 
 from llmpuffin.audit_environment import ExecResult, GitInfo, _capture_git_info
