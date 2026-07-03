@@ -14,4 +14,5 @@ MAIN_AGENT_TOOLS = (
     "delete_finding",
     "finding_attach_file",
     "finding_list_attached_files",
+    "get_coverage"
 )
