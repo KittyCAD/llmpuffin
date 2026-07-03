@@ -117,6 +117,15 @@ async def delete_item(prefix: str, key: str, postgres_url: str) -> None:
             )
 
 
+async def delete_all(postgres_url: str) -> int:
+    async with await psycopg.AsyncConnection.connect(
+        postgres_url, autocommit=True
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("DELETE FROM store")
+            return cur.rowcount or 0
+
+
 async def list_items(prefix: str, postgres_url: str) -> list[StoreItem]:
     async with await psycopg.AsyncConnection.connect(
         postgres_url, autocommit=True

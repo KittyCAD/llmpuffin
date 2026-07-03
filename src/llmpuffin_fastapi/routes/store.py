@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from llmpuffin.db import DB
 from llmpuffin_fastapi.deps import get_llmpuffin_db, toast
 from llmpuffin_fastapi.store import (
+    delete_all,
     delete_item,
     list_items,
     list_namespaces,
@@ -77,5 +78,20 @@ async def store_item_delete(
         "success",
         f"Deleted {key}",
         redirect_to=f"/store/{prefix}/",
+        refresh=True,
+    )
+
+
+@router.post("/store/clear-all/")
+async def store_clear_all(
+    request: Request,
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+):
+    count = await delete_all(llmpuffin_db.url)
+    return toast(
+        request,
+        "success",
+        f"Deleted {count} item(s) from store",
+        redirect_to="/store/",
         refresh=True,
     )

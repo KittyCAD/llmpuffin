@@ -192,9 +192,7 @@ class DirNode:
             return "coverage-high"
         if pct >= 40:
             return "coverage-medium"
-        if pct > 0:
-            return "coverage-low"
-        return "coverage-none"
+        return "coverage-low"
 
 
 def build_coverage_tree(all_files: list[str], accessed: set[str]) -> DirNode:

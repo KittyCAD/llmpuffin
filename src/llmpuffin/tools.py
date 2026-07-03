@@ -685,6 +685,41 @@ Existing mitigations to verify:
             log.warning("Failed to list exported files: %s", exc)
             return "Error listing files."
 
+    def get_coverage() -> str:
+        """Get file coverage summary for this audit run.
+
+        Shows which directories and files have been reached during the audit,
+        with coverage percentages. Use this to identify areas of the codebase
+        that have not been examined yet.
+        """
+        from llmpuffin.coverage import load_coverage_for_run, build_coverage_tree
+
+        all_files, accessed = load_coverage_for_run(audit_run_id, db=db)
+        if not all_files:
+            return "No coverage data available."
+
+        tree = build_coverage_tree(all_files, accessed)
+        lines = [
+            f"Overall: {tree.accessed_files}/{tree.total_files} files ({tree.coverage_pct:.0f}%)",
+            "",
+        ]
+
+        def _fmt(node, prefix: str = "", depth: int = 0) -> None:
+            dirs = sorted(
+                [(k, v) for k, v in node.children.items() if v.is_dir],
+                key=lambda x: x[0],
+            )
+            for name, child in dirs:
+                pct = child.coverage_pct
+                indent = "  " * depth
+                lines.append(
+                    f"{indent}{name}/ — {child.accessed_files}/{child.total_files} ({pct:.0f}%)"
+                )
+                _fmt(child, f"{prefix}{name}/", depth + 1)
+
+        _fmt(tree)
+        return "\n".join(lines)
+
     return {
         "get_threat_model": get_threat_model,
         "get_threat_scenario": get_threat_scenario,
@@ -697,4 +732,5 @@ Existing mitigations to verify:
         "get_commit": get_commit,
         "finding_attach_file": finding_attach_file,
         "finding_list_attached_files": finding_list_attached_files,
+        "get_coverage": get_coverage,
     }

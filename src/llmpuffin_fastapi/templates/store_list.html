@@ -1,7 +1,14 @@
 {% extends "base.html" %}
 {% block title %}store{% endblock %}
 {% block content %}
-<h1>Store</h1>
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>Store</h1>
+  {% if namespaces %}
+  <form hx-post="/store/clear-all/" hx-confirm="Delete ALL store entries? This removes all memories across all profiles." hx-disabled-elt="find button" class="inline">
+    <button type="submit" class="destructive">Clear all</button>
+  </form>
+  {% endif %}
+</div>
 
 <div class="card mt-4" style="padding: 0;">
 <table>

@@ -6,7 +6,14 @@
   <a href="#create" class="btn primary">+ New profile</a>
 </div>
 
-<div class="card mt-4" style="padding: 0;">
+<div x-data="{ showJit: false }" class="mt-4">
+<div class="row mb-2" style="justify-content: flex-end;">
+  <label class="row gap-1 text-sm" style="cursor: pointer;">
+    <input type="checkbox" x-model="showJit" style="width: auto;">
+    Show JIT profiles
+  </label>
+</div>
+<div class="card" style="padding: 0;">
 <table x-data="sortable">
 <thead>
   <tr>
@@ -18,7 +25,7 @@
 </thead>
 <tbody>
 {% for p in profiles %}
-<tr>
+<tr {% if p.jit %}x-show="showJit" x-cloak{% endif %}>
   <td data-sort-name="{{ p.name }}">
     <a href="/profiles/{{ p.id }}/">{{ p.name }}</a>
     {% if p.jit %}<span class="text-muted text-xs" title="Created automatically from CLI run">(jit)</span>{% endif %}
@@ -36,6 +43,7 @@
 {% endfor %}
 </tbody>
 </table>
+</div>
 </div>
 
 <h2 id="create">Create profile</h2>

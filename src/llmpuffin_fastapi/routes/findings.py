@@ -217,7 +217,7 @@ async def _find_similar(
     )
 
     # Subquery: candidate finding IDs with their best combined score.
-    candidates = (
+    candidate_q = (
         select(
             FindingLocation.finding_id,
             func.max(best_score).label("score"),
@@ -227,8 +227,19 @@ async def _find_similar(
             best_score >= threshold,
         )
         .group_by(FindingLocation.finding_id)
-        .subquery()
     )
+
+    # Scope to same repo when git info is available.
+    if finding.audit_run and finding.audit_run.github_repo_url:
+        candidate_q = candidate_q.join(
+            Finding, Finding.id == FindingLocation.finding_id
+        ).join(
+            AuditRun, AuditRun.id == Finding.audit_run_id
+        ).where(
+            AuditRun.github_repo_url == finding.audit_run.github_repo_url
+        )
+
+    candidates = candidate_q.subquery()
 
     rows = (
         await db.execute(
