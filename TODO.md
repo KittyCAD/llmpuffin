@@ -1,4 +1,5 @@
 ## Open questions
+- Where are todo notes stored? do they survive restarts?
 - What about memories? - I think we store them in the db now, validate
 - How to do validation? make sure it does what it can
 - Should we introduce the term "projects" to bundle profiles and findings? Project -> profiles -> findings
@@ -12,11 +13,14 @@
 - Allow amd64 execution of images
 - Restrict reading AGENT.md files as they might inject arbitrary instructions
 
+## Resilience:
+- On shutdown, mark running audits as "interrupted" instead of "aborted" and persist their checkpoint state. On startup, auto-resume any interrupted threads so a new instance picks up where the old one left off.
+
 ## Harness:
 - Multi-step flows:
   0) Discover the checked out code:
-    - Is LFS required? Warn
-    - Which ecosystems do we use?
+  - Is LFS required? Warn
+  - Which ecosystems do we use?
   1) create script to setup env. Run and optionally persist it for future "cold start runs"
   2) Audit and report findings.
   3) Validation of all.
@@ -55,7 +59,7 @@
 - use git blame
 
 
-## Misc: 
+## Misc:
 - pausable chats and web ui to continue them
 
 ## Publication/Export:
