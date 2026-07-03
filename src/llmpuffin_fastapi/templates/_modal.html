@@ -28,7 +28,7 @@
        @keydown.escape.window="modal.open = false">
     <div class="modal-panel" @click.outside="modal.open = false"
          x-data="{ submitting: false }"
-         x-effect="if (modal.open) { submitting = false; $nextTick(() => { if ($refs.modalTextarea) $refs.modalTextarea.focus(); }); }">
+         x-effect="if (typeof modal !== 'undefined' && modal.open) { submitting = false; $nextTick(() => { if ($refs.modalTextarea) $refs.modalTextarea.focus(); }); }">
       <div class="modal-header">
         <h3 class="modal-title" x-text="modal.title"></h3>
         <button type="button" class="ghost modal-close" @click="modal.open = false" aria-label="Close">&times;</button>
