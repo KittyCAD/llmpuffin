@@ -222,6 +222,12 @@ class Harness:
                 len(self._tasks),
             )
 
+    async def wait_all(self) -> None:
+        """Wait for all in-flight tasks to complete without cancelling them."""
+        if not self._tasks:
+            return
+        await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+
     @property
     def running_threads(self) -> set[str]:
         """Thread IDs of currently running audit tasks."""

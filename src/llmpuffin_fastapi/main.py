@@ -32,8 +32,6 @@ from llmpuffin_fastapi.routes import store as store_routes
 
 log = logging.getLogger("llmpuffin")
 
-_SHUTDOWN_TIMEOUT = 30.0
-
 # Paths that don't require authentication.
 _PUBLIC_PATHS = frozenset({"/auth/login", "/auth/callback", "/auth/logout", "/healthz"})
 
@@ -49,7 +47,14 @@ async def _lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await app.state.harness.cancel_all(timeout=_SHUTDOWN_TIMEOUT)
+        harness: Harness = app.state.harness
+        running = harness.running_threads
+        if running and config.web.wait_on_shutdown:
+            log.info("Waiting for %d audit(s) to finish…", len(running))
+            await harness.wait_all()
+            log.info("All audits finished")
+        else:
+            await harness.cancel_all()
 
 
 def create_app() -> FastAPI:

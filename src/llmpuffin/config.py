@@ -86,6 +86,8 @@ class WebConfig(BaseModel):
     allowed_hosts: list[str] = ["*"]
     base_url: str = ""
     """External base URL (e.g. https://llmpuffin.example.com). Used for backlinks in GitHub issues."""
+    wait_on_shutdown: bool = False
+    """Wait for running audits to finish before shutting down."""
 
 
 class GitHubConfig(BaseModel):
