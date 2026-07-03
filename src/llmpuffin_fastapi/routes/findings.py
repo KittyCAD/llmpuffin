@@ -619,7 +619,7 @@ async def finding_fork(
             select(AuditThread).where(AuditThread.thread_id == finding.thread_id)
         )
     ).scalar_one_or_none()
-    if source_thread and source_thread.status == "running":
+    if source_thread and source_thread.status == "running" and not config.features.enabled("fork_running_threads"):
         return _fork_error("Source thread is still running, cannot fork")
 
     toml_str = run.profile_toml or (run.profile.profile_toml if run.profile else "")

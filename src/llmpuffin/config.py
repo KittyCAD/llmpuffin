@@ -67,6 +67,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from llmpuffin.features import FeatureFlags
+
 from llmpuffin.system_prompt import DEFAULT_SYSTEM_PROMPT
 
 
@@ -167,6 +169,7 @@ class Config(BaseSettings):
     web: WebConfig = WebConfig()
     github: GitHubConfig = GitHubConfig()
     auth: AuthConfig = AuthConfig()
+    features: FeatureFlags = FeatureFlags()
     logging: LoggingConfig = LoggingConfig()
 
     @classmethod

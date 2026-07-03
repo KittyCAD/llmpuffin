@@ -62,4 +62,7 @@
 - confirmation about the action that will be performed when releasing on github
 - allow closing findings by tracking a GitHub issue
 
+Reasons for not finding a bug:
 
+- missing depth
+- lack of identifying relevant sinks (for billing its minting credits)
