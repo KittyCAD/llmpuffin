@@ -32,13 +32,14 @@ _model = None
 def _get_model():
     global _model
     if _model is None:
+        log.info("Loading sentence_transformers")
         from sentence_transformers import SentenceTransformer
 
-        # Enable huggingface_hub download progress logging.
-        logging.getLogger("huggingface_hub").setLevel(logging.DEBUG)
+        hf_logger = logging.getLogger("huggingface_hub")
+        hf_logger.setLevel(logging.DEBUG)
 
         log.info("Loading embedding model %s...", EMBEDDING_MODEL)
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        _model = SentenceTransformer(EMBEDDING_MODEL, backend="onnx")
         log.info("Embedding model loaded")
     return _model
 
