@@ -279,7 +279,7 @@ class Finding(Base):
             name="ck_finding_severity",
         ),
         CheckConstraint(
-            "status IN ('open', 'fixed', 'invalid', 'deleted')",
+            "status IN ('open', 'fixed', 'invalid', 'deleted', 'duplicate')",
             name="ck_finding_status",
         ),
     )

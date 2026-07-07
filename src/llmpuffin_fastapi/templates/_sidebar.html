@@ -40,12 +40,20 @@
       </svg>
       <span class="label">Runs</span>
     </a>
-    <a class="sidebar-item {% if path.startswith('/findings') %}active{% endif %}" href="/findings/">
+    <a class="sidebar-item {% if path.startswith('/findings') and path != '/findings/clusters/' %}active{% endif %}" href="/findings/">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 2h8"/><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2"/>
       </svg>
       <span class="label">Findings</span>
+    </a>
+    <a class="sidebar-item {% if path == '/findings/clusters/' %}active{% endif %}" href="/findings/clusters/" style="padding-left: 2.25rem;">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><circle cx="5" cy="19" r="2"/>
+        <path d="M14.5 9.5 17.5 7M9.5 9.5 6.5 7M14.5 14.5l3 2.5M9.5 14.5l-3 2.5"/>
+      </svg>
+      <span class="label">Clusters</span>
     </a>
     <a class="sidebar-item {% if path.startswith('/checkpoints') %}active{% endif %}" href="/checkpoints/">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"

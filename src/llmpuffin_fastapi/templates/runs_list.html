@@ -23,7 +23,7 @@
 </thead>
 <tbody>
 {% for r in runs %}
-<tr hx-get="/runs/{{ r.id }}/" hx-push-url="true" hx-target="body">
+<tr data-href="/runs/{{ r.id }}/">
   <td data-sort-id="{{ r.id }}">#{{ r.id }}</td>
   <td data-sort-profile="{{ r.profile.name if r.profile else '' }}">{% if r.profile %}<a href="/profiles/{{ r.profile.id }}/">{{ r.profile.name }}</a>{% else %}—{% endif %}</td>
   <td class="mono text-xs text-muted">{{ r.container_image | truncatechars(40) }}</td>

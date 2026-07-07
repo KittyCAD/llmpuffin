@@ -61,7 +61,7 @@ async def findings_list(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     profile_id: str = "",
-    status: str = "",  # "open" | "fixed" | "invalid" | "deleted" | ""
+    status: str = "",  # "open" | "fixed" | "invalid" | "deleted" | "duplicate" | ""
     severity: str = "",
     difficulty: str = "",
     validated: str = "",  # "yes" | "no" | ""
@@ -82,11 +82,11 @@ async def findings_list(
         )
         .order_by(Finding.created_at.desc())
     )
-    # By default hide deleted; explicit status filter overrides.
+    # By default hide deleted and duplicates; explicit status filter overrides.
     if status:
         stmt = stmt.where(Finding.status == status)
     else:
-        stmt = stmt.where(Finding.status != "deleted")
+        stmt = stmt.where(Finding.status.notin_(["deleted", "duplicate"]))
     if profile_id_int is not None:
         stmt = stmt.join(AuditRun, Finding.audit_run_id == AuditRun.id).where(
             AuditRun.profile_id == profile_id_int
@@ -168,6 +168,98 @@ async def findings_list(
             "show_profile": True,
             "show_run": True,
         },
+    )
+
+
+@router.get("/findings/clusters/", response_class=HTMLResponse)
+async def findings_clusters(
+    request: Request,
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    threshold: float = 0.8,
+):
+    from llmpuffin.embeddings import cluster_findings
+
+    clusters = cluster_findings(db=llmpuffin_db, threshold=threshold)
+
+    # Load full Finding objects for each cluster.
+    all_ids = [fid for c in clusters for fid in c.finding_ids]
+    findings_by_id: dict[int, Finding] = {}
+    if all_ids:
+        rows = (
+            (
+                await db.execute(
+                    select(Finding)
+                    .where(Finding.id.in_(all_ids))
+                    .options(
+                        selectinload(Finding.audit_run).selectinload(AuditRun.profile),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        findings_by_id = {f.id: f for f in rows}
+
+    enriched_clusters = []
+    for cluster in clusters:
+        findings = [
+            findings_by_id[fid] for fid in cluster.finding_ids if fid in findings_by_id
+        ]
+        if len(findings) >= 2:
+            enriched_clusters.append(findings)
+
+    return templates.TemplateResponse(
+        request,
+        "findings_clusters.html",
+        {
+            "clusters": enriched_clusters,
+            "threshold": threshold,
+            "total_findings": sum(len(c) for c in enriched_clusters),
+        },
+    )
+
+
+@router.post("/findings/merge/")
+async def findings_merge(
+    request: Request,
+    svc: Annotated[FindingService, Depends(get_finding_service)],
+):
+    """Merge findings: keep one as canonical, mark the rest as duplicate.
+
+    Expects form data with:
+      - keep_id: the finding ID to keep
+      - finding_ids: IDs of all selected findings (including keep_id)
+    """
+    form = await request.form()
+    keep_id = str(form.get("keep_id", ""))
+    finding_ids = [str(v) for v in form.getlist("finding_ids")]
+
+    if not keep_id or not finding_ids:
+        return toast(
+            request, "error", "No findings selected", redirect_to="/findings/clusters/"
+        )
+
+    keep_id_int = int(keep_id)
+    duplicate_ids = [int(fid) for fid in finding_ids if int(fid) != keep_id_int]
+
+    if not duplicate_ids:
+        return toast(
+            request,
+            "error",
+            "Select at least two findings",
+            redirect_to="/findings/clusters/",
+        )
+
+    for fid in duplicate_ids:
+        await svc.update_by_pk(fid, status="duplicate")
+
+    return toast(
+        request,
+        "success",
+        f"Merged {len(duplicate_ids)} finding(s) as duplicate",
+        redirect_to="/findings/clusters/",
+        refresh=True,
     )
 
 
@@ -273,7 +365,13 @@ async def finding_edit(
     values: dict = {}
     if title is not None:
         values["title"] = title
-    if status is not None and status in ("open", "fixed", "invalid", "deleted"):
+    if status is not None and status in (
+        "open",
+        "fixed",
+        "invalid",
+        "deleted",
+        "duplicate",
+    ):
         values["status"] = status
     if severity is not None and severity in ("high", "medium", "low", "informational"):
         values["severity"] = severity

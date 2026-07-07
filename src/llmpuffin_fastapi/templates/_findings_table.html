@@ -63,7 +63,7 @@
 
     <select name="status" onchange="this.form.submit()" style="max-width: 9rem;">
       <option value="">Any status</option>
-      {% for s in ['open', 'fixed', 'invalid', 'deleted'] %}
+      {% for s in ['open', 'fixed', 'invalid', 'deleted', 'duplicate'] %}
         <option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ s | capitalize }}</option>
       {% endfor %}
     </select>
@@ -131,7 +131,7 @@
 <tbody>
 {% for finding in findings %}
   {% set _sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4} %}
-  <tr hx-get="/findings/{{ finding.id }}/" hx-push-url="true" hx-target="body"{% if finding.status in ("deleted", "invalid") %} style="opacity:0.5"{% endif %}>
+  <tr data-href="/findings/{{ finding.id }}/"{% if finding.status in ("deleted", "invalid", "duplicate") %} style="opacity:0.5"{% endif %}>
     <td data-sort-id="{{ finding.local_id if finding.local_id is not none else finding.id }}">{{ finding.local_id if finding.local_id is not none else finding.id }}</td>
     <td data-sort-title="{{ (finding.title or finding.description) | truncatechars(80) }}">
       {{ (finding.title or finding.description) | truncatechars(80) }}
@@ -152,6 +152,7 @@
       {% if finding.status == "fixed" %}<span class="badge success">fixed</span>
       {% elif finding.status == "invalid" %}<span class="badge warning">invalid</span>
       {% elif finding.status == "deleted" %}<span class="badge outline">deleted</span>
+      {% elif finding.status == "duplicate" %}<span class="badge outline">duplicate</span>
       {% else %}<span class="badge primary">open</span>{% endif %}
     </td>
     <td data-sort-validated="{{ 1 if finding.validated else 0 }}">

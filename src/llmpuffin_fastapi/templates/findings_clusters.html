@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Finding Clusters{% endblock %}
+{% block content %}
+
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>Finding Clusters</h1>
+  <span class="text-muted text-sm">{{ clusters|length }} cluster{{ "s" if clusters|length != 1 else "" }}, {{ total_findings }} finding{{ "s" if total_findings != 1 else "" }}</span>
+</div>
+
+<p class="text-sm text-muted mt-2">
+  Findings grouped by semantic similarity (threshold: {{ (threshold * 100) | int }}%).
+  Select findings and click "Keep" on the canonical one to mark the rest as duplicates.
+</p>
+
+{% if not clusters %}
+<div class="card mt-4" style="text-align: center; padding: 2rem;">
+  <p class="text-muted">No clusters found. Make sure findings have embeddings generated.</p>
+</div>
+{% endif %}
+
+{% for findings in clusters %}
+<div class="card mt-4" style="padding: 0;" x-data="{ selected: new Set({{ findings | map(attribute='id') | list | tojson }}) }">
+  <div style="padding: 0.75rem 1rem; border-bottom: 1px solid hsl(var(--border)); display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-weight: 600;">Cluster #{{ loop.index }}</span>
+    <span class="text-sm text-muted">{{ findings|length }} finding{{ "s" if findings|length != 1 else "" }}</span>
+  </div>
+  <table>
+  <thead>
+    <tr>
+      <th style="width: 2rem;"><input type="checkbox" checked @change="if ($el.checked) { {{ findings | map(attribute='id') | list | tojson }}.forEach(id => selected.add(id)) } else { selected.clear() }" title="Select all"></th>
+      <th>#</th>
+      <th>Title</th>
+      <th>Severity</th>
+      <th>Profile</th>
+      <th>Run</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th style="width: 4rem;"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for f in findings %}
+    <tr data-href="/findings/{{ f.id }}/"{% if f.status in ("deleted", "invalid", "duplicate") %} style="opacity:0.5"{% endif %}>
+      <td @click.stop>
+        <input type="checkbox" :checked="selected.has({{ f.id }})"
+               @change="if ($el.checked) { selected.add({{ f.id }}) } else { selected.delete({{ f.id }}) }">
+      </td>
+      <td>{{ f.local_id if f.local_id is not none else f.id }}</td>
+      <td>{{ (f.title or f.description) | truncatechars(80) }}</td>
+      <td><span class="badge sev-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+      <td class="text-xs text-muted">{% if f.audit_run and f.audit_run.profile %}{{ f.audit_run.profile.name }}{% else %}---{% endif %}</td>
+      <td><a href="/runs/{{ f.audit_run_id }}/">#{{ f.audit_run_id }}</a></td>
+      <td>
+        {% if f.status == "fixed" %}<span class="badge success">fixed</span>
+        {% elif f.status == "invalid" %}<span class="badge warning">invalid</span>
+        {% elif f.status == "deleted" %}<span class="badge outline">deleted</span>
+        {% elif f.status == "duplicate" %}<span class="badge outline">duplicate</span>
+        {% else %}<span class="badge primary">open</span>{% endif %}
+      </td>
+      <td class="text-muted text-xs">{{ f.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
+      <td @click.stop>
+        <form method="post" action="/findings/merge/" @submit="selected.forEach(id => { const i = document.createElement('input'); i.type='hidden'; i.name='finding_ids'; i.value=id; $el.appendChild(i); })">
+          <input type="hidden" name="keep_id" value="{{ f.id }}">
+          <button type="submit" class="btn text-xs" style="padding: 0.25rem 0.5rem;"
+                  :disabled="selected.size < 2"
+                  title="Keep this finding, mark selected others as duplicate">Keep</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+</div>
+{% endfor %}
+
+{% endblock %}

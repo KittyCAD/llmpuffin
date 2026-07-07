@@ -11,7 +11,10 @@ exploit_scenario.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+import psycopg
 
 if TYPE_CHECKING:
     from llmpuffin.db import DB
@@ -130,6 +133,93 @@ def main() -> None:
     print(f"Embedded {count} finding(s)")
 
 
+@dataclass
+class FindingCluster:
+    """A group of similar findings."""
+
+    finding_ids: list[int]
+    """Primary key IDs of findings in this cluster, ordered by oldest first."""
+
+
+def cluster_findings(
+    *, db: DB, threshold: float = 0.8, max_neighbors: int = 20
+) -> list[FindingCluster]:
+    """Cluster all non-deleted findings with embeddings.
+
+    For each finding, queries the ``max_neighbors`` nearest neighbors
+    using pgvector's indexed cosine distance. Pairs above ``threshold``
+    become edges, then connected components are computed via union-find.
+
+    Returns clusters with 2+ findings, sorted largest-first.
+    """
+    # Step 1: fetch all finding IDs + embeddings that are eligible.
+    with psycopg.connect(db.url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, embedding::text
+                FROM finding
+                WHERE status != 'deleted'
+                  AND embedding IS NOT NULL
+                ORDER BY id
+                """
+            )
+            rows = cur.fetchall()
+
+    if len(rows) < 2:
+        return []
+
+    # Step 2: for each finding, query its nearest neighbors via pgvector.
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    with psycopg.connect(db.url) as conn:
+        with conn.cursor() as cur:
+            for fid, embedding_text in rows:
+                parent.setdefault(fid, fid)
+                cur.execute(
+                    """
+                    SELECT id, 1 - (embedding <=> %s::vector) AS similarity
+                    FROM finding
+                    WHERE id != %s
+                      AND status != 'deleted'
+                      AND embedding IS NOT NULL
+                    ORDER BY embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (embedding_text, fid, embedding_text, max_neighbors),
+                )
+                for neighbor_id, similarity in cur.fetchall():
+                    if float(similarity) >= threshold:
+                        parent.setdefault(neighbor_id, neighbor_id)
+                        union(fid, neighbor_id)
+
+    # Step 3: group by root.
+    groups: dict[int, list[int]] = {}
+    for node in parent:
+        root = find(node)
+        groups.setdefault(root, []).append(node)
+
+    # Only keep clusters with 2+ members, sort by size descending.
+    clusters = [
+        FindingCluster(finding_ids=sorted(ids))
+        for ids in groups.values()
+        if len(ids) >= 2
+    ]
+    clusters.sort(key=lambda c: len(c.finding_ids), reverse=True)
+    return clusters
+
+
 def find_similar_global(
     finding_id: int, *, db: DB, threshold: float = 0.8, limit: int = 10
 ) -> list[tuple[int, float]]:
@@ -144,8 +234,6 @@ def find_similar_global(
         finding = s.get(Finding, finding_id)
         if finding is None or finding.embedding is None:
             return []
-
-    import psycopg
 
     vec_literal = "[" + ",".join(str(float(v)) for v in finding.embedding) + "]"
 

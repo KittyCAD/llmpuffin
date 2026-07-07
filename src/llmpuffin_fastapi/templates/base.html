@@ -80,6 +80,26 @@
   {% include "_toasts.html" %}
 
   <script>
+    // Clickable table rows: use data-href on <tr> for navigation.
+    // Left-click navigates; middle-click / ctrl+click / cmd+click opens in new tab.
+    document.addEventListener("click", function(e) {
+      const tr = e.target.closest("tr[data-href]");
+      if (!tr) return;
+      if (e.target.closest("a, button, input, select, textarea, form")) return;
+      if (e.ctrlKey || e.metaKey) {
+        window.open(tr.dataset.href, "_blank");
+      } else {
+        window.location.href = tr.dataset.href;
+      }
+    });
+    document.addEventListener("auxclick", function(e) {
+      if (e.button !== 1) return;
+      const tr = e.target.closest("tr[data-href]");
+      if (!tr) return;
+      window.open(tr.dataset.href, "_blank");
+      e.preventDefault();
+    });
+
     // Sortable table: add x-data="sortable" to any <table>.
     // Headers use @click="sort('key')" and rows carry data-sort-<key>="value" on <td>s.
     document.addEventListener("alpine:init", () => {
