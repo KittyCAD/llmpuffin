@@ -207,7 +207,7 @@ class Harness:
         """Cancel all in-flight tasks and wait for them to finish."""
         if not self._tasks:
             return
-        log.info("Cancelling %d in-flight audit task(s)…", len(self._tasks))
+        log.info("Cancelling %d in-flight audit task(s)...", len(self._tasks))
         for t in self._tasks.values():
             t.cancel()
         try:

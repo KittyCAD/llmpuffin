@@ -49,7 +49,7 @@ def toast(
     For HTMX requests:
       - Always sends HX-Trigger with the toast event.
       - If refresh=True, also sends HX-Refresh so the page reloads (toast survives
-        via ?level=… query carried by the reload? — no, easier: store in
+        via ?level=... query carried by the reload? — no, easier: store in
         sessionStorage on the toast event handler so it persists across reload).
         Simpler: use HX-Location to navigate to redirect_to with the toast query.
       - Otherwise just 204 (caller's page stays as-is).

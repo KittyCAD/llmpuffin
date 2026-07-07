@@ -49,11 +49,11 @@ async def _lifespan(app: FastAPI):
         try:
             from llmpuffin.embeddings import backfill_embeddings
 
-            log.info("Backfilling finding embeddings…")
-            count = backfill_embeddings(db=app.state.db)
+            log.info("Backfilling finding embeddings...")
+            count = await backfill_embeddings(db=app.state.db)
             log.info("Embedding backfill complete: %d finding(s)", count)
         except Exception:
-            log.debug("Embedding backfill skipped", exc_info=True)
+            log.warning("Embedding backfill failed", exc_info=True)
 
     try:
         yield
@@ -61,7 +61,7 @@ async def _lifespan(app: FastAPI):
         harness: Harness = app.state.harness
         running = harness.running_threads
         if running and config.web.wait_on_shutdown:
-            log.info("Waiting for %d audit(s) to finish…", len(running))
+            log.info("Waiting for %d audit(s) to finish...", len(running))
             await harness.wait_all()
             log.info("All audits finished")
         else:

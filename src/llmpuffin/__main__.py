@@ -83,11 +83,11 @@ async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
         try:
             from llmpuffin.embeddings import backfill_embeddings
 
-            log.info("Backfilling finding embeddings…")
-            count = backfill_embeddings(db=db)
+            log.info("Backfilling finding embeddings...")
+            count = await backfill_embeddings(db=db)
             log.info("Embedding backfill complete: %d finding(s)", count)
         except Exception:
-            log.debug("Embedding backfill skipped", exc_info=True)
+            log.warning("Embedding backfill failed", exc_info=True)
 
     gh = client_from_config(config.github)
     return await run_audit(

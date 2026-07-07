@@ -34,7 +34,9 @@ def _get_model():
     if _model is None:
         from sentence_transformers import SentenceTransformer
 
+        log.info("Loading embedding model %s...", EMBEDDING_MODEL)
         _model = SentenceTransformer(EMBEDDING_MODEL)
+        log.info("Embedding model loaded")
     return _model
 
 
@@ -78,50 +80,72 @@ def embed_finding(finding_id: int, *, db: DB) -> bool:
             return False
 
 
-def backfill_embeddings(*, db: DB, batch_size: int = 50) -> int:
+async def backfill_embeddings(*, db: DB, batch_size: int = 50) -> int:
     """Generate embeddings for all findings that don't have one yet.
 
     Returns the number of findings embedded.
     """
+    import asyncio
+
     from sqlalchemy import select
+    from sqlalchemy import update as sa_update
 
     from llmpuffin.models import Finding
 
-    count = 0
-    with db.sync_session() as s:
+    # Fetch finding IDs + text to embed.
+    async with db.async_session() as s:
         findings = (
-            s.execute(
-                select(Finding)
+            await s.execute(
+                select(
+                    Finding.id,
+                    Finding.title,
+                    Finding.description,
+                    Finding.exploit_scenario,
+                )
                 .where(Finding.embedding.is_(None), Finding.status != "deleted")
                 .order_by(Finding.id)
             )
-            .scalars()
-            .all()
-        )
+        ).all()
 
-        for i in range(0, len(findings), batch_size):
-            batch = findings[i : i + batch_size]
-            texts = [_finding_text(f) for f in batch]
-            valid = [(f, t) for f, t in zip(batch, texts) if t.strip()]
-            if not valid:
-                continue
-            try:
-                vecs = _embed_texts([t for _, t in valid])
-                for (f, _), vec in zip(valid, vecs):
-                    f.embedding = vec
-                    count += 1
-                s.commit()
-                log.info("Embedded batch of %d findings", len(valid))
-            except Exception as exc:
-                log.warning("Failed to embed batch: %s", exc)
-                s.rollback()
+    total = len(findings)
+    if not total:
+        return 0
 
-    log.info("Backfill complete: %d findings embedded", count)
+    count = 0
+    for i in range(0, total, batch_size):
+        batch = findings[i : i + batch_size]
+        texts = []
+        ids = []
+        for fid, title, description, exploit_scenario in batch:
+            parts = [p for p in (title, description, exploit_scenario) if p]
+            text = "\n\n".join(parts)
+            if text.strip():
+                texts.append(text)
+                ids.append(fid)
+        if not texts:
+            continue
+        try:
+            vecs = await asyncio.to_thread(_embed_texts, texts)
+            async with db.async_session() as s:
+                for fid, vec in zip(ids, vecs):
+                    await s.execute(
+                        sa_update(Finding)
+                        .where(Finding.id == fid)
+                        .values(embedding=vec)
+                    )
+                await s.commit()
+            count += len(ids)
+            log.info("Embedded %d/%d findings", count, total)
+        except Exception as exc:
+            log.warning("Failed to embed batch: %s", exc)
+
     return count
 
 
 def main() -> None:
     """CLI entrypoint: backfill embeddings for all findings missing them."""
+    import asyncio
+
     from llmpuffin.config import Config
     from llmpuffin.db import DB
     from llmpuffin.log import setup as setup_logging
@@ -129,7 +153,7 @@ def main() -> None:
     config = Config.load()
     setup_logging(level=config.logging.level)
     db = DB(config.postgres)
-    count = backfill_embeddings(db=db)
+    count = asyncio.run(backfill_embeddings(db=db))
     print(f"Embedded {count} finding(s)")
 
 

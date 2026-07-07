@@ -78,12 +78,12 @@
                       @click="deleteFile()" :disabled="saving">delete</button>
               <button type="button" class="primary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
                       @click="saveFile()" :disabled="saving || !dirty">
-                <span x-text="saving ? 'Saving…' : 'Save'"></span>
+                <span x-text="saving ? 'Saving...' : 'Save'"></span>
               </button>
             </div>
           </div>
           <div class="file-editor-body">
-            <div x-show="loading" style="padding: 1rem; color: hsl(var(--muted-foreground)); font-size: 0.8125rem;">Loading…</div>
+            <div x-show="loading" style="padding: 1rem; color: hsl(var(--muted-foreground)); font-size: 0.8125rem;">Loading...</div>
             <textarea x-show="!loading"
                       x-ref="editor"
                       x-model="content"
@@ -106,12 +106,12 @@
                       @click="creating = false; newPath = ''; content = '';">Cancel</button>
               <button type="button" class="primary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;"
                       @click="createFile()" :disabled="saving || !newPath.trim()">
-                <span x-text="saving ? 'Saving…' : 'Create'"></span>
+                <span x-text="saving ? 'Saving...' : 'Create'"></span>
               </button>
             </div>
           </div>
           <div class="file-editor-body">
-            <textarea x-ref="newEditor" x-model="content" placeholder="File content…"></textarea>
+            <textarea x-ref="newEditor" x-model="content" placeholder="File content..."></textarea>
           </div>
         </div>
       </template>

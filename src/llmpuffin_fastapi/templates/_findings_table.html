@@ -59,7 +59,7 @@
 {# ─── Filter bar ─── #}
 <form method="get" action="{{ filter_action }}" class="card mt-4" style="padding: 0.875rem;">
   <div class="row gap-2" style="flex-wrap: wrap;">
-    <input type="search" name="q" value="{{ f.q | default('') }}" placeholder="search title / rule / scenario…" style="max-width: 22rem;">
+    <input type="search" name="q" value="{{ f.q | default('') }}" placeholder="search title / rule / scenario..." style="max-width: 22rem;">
 
     <select name="status" onchange="this.form.submit()" style="max-width: 9rem;">
       <option value="">Any status</option>

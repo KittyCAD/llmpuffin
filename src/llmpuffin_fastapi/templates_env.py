@@ -33,7 +33,7 @@ def _truncatechars(text: str | None, n: int) -> str:
         return ""
     if len(text) <= n:
         return text
-    return text[: max(0, n - 1)] + "…"
+    return text[: max(0, n - 1)] + "..."
 
 
 def _datetimefmt(value, fmt: str = "%Y-%m-%d %H:%M") -> str:
