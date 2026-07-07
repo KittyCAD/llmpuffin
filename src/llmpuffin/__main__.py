@@ -7,6 +7,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+import logging
+
 from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.db import DB
@@ -14,6 +16,8 @@ from llmpuffin.github import client_from_config
 from llmpuffin.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
 from llmpuffin.sarif import export_sarif_for_run
+
+log = logging.getLogger("llmpuffin")
 
 
 async def _async_abort_orphaned(config: Config):
@@ -74,6 +78,17 @@ async def _async_import_skill(config: Config, directory: Path, name: str | None)
 
 async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
     await db.setup()
+
+    if config.backfill_embeddings:
+        try:
+            from llmpuffin.embeddings import backfill_embeddings
+
+            count = backfill_embeddings(db=db)
+            if count:
+                log.info("Backfilled embeddings for %d finding(s)", count)
+        except Exception:
+            log.debug("Embedding backfill skipped", exc_info=True)
+
     gh = client_from_config(config.github)
     return await run_audit(
         harness_config, db=db, global_config=config, github_client=gh

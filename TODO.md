@@ -1,4 +1,11 @@
+attach file should link to the tool call/message
+
+
+## Bugs:
+- Clone always gets latest ref. But we want to use the one of the audit run.
+
 ## Open questions
+- Concept of projects to group profiles?
 - Where are todo notes stored? do they survive restarts?
 - What about memories? - I think we store them in the db now, validate
 - How to do validation? make sure it does what it can

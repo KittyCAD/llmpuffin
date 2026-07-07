@@ -50,6 +50,7 @@ from llmpuffin.backend import ContainerBackend
 from llmpuffin.config import Config
 from llmpuffin.coverage import CoverageTracker
 from llmpuffin.db import DB
+from llmpuffin.finding_service import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.log import log
@@ -88,6 +89,7 @@ def _build_agent(
     db: DB,
     github_client: GitHubClient | None = None,
     coverage: CoverageTracker | None = None,
+    finding_service: FindingService | None = None,
 ):
     """Build the deep agent with all backends, tools, and middleware."""
     p = config.profile
@@ -140,6 +142,7 @@ def _build_agent(
         github_client=github_client,
         container_backend=container_backend,
         db=db,
+        finding_service=finding_service,
     )
     main_tools: list = [tools[name] for name in MAIN_AGENT_TOOLS]
 
@@ -354,6 +357,7 @@ async def _execute_pipeline(
         await file_tree(env_ctx, resolved, db)
 
         # Step 4: build agent
+        finding_svc = FindingService(db)
         agent = await build_agent_step(
             config,
             env_ctx,
@@ -363,6 +367,7 @@ async def _execute_pipeline(
             store,
             db,
             github_client,
+            finding_service=finding_svc,
         )
 
         # Step 5: prepare input messages

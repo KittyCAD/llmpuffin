@@ -12,6 +12,9 @@
         pkgs = import nixpkgs { inherit system; };
         isDarwin = pkgs.stdenv.isDarwin;
       in
+      let
+        pg = pkgs.postgresql.withPackages (ps: [ ps.pgvector ]);
+      in
       {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
@@ -24,8 +27,8 @@
             # On Linux it's truly rootless with no daemon.
             podman
 
-            # Database (user-local, no daemon)
-            postgresql
+            # Database (user-local, no daemon, with pgvector)
+            pg
           ] ++ pkgs.lib.optionals isDarwin [
             # macOS needs qemu for the podman machine VM
             qemu

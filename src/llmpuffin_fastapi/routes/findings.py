@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import distinct, func, select, update as sa_update
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,14 +17,13 @@ from llmpuffin.agent import fork_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
+from llmpuffin.finding_service import FindingService
 from llmpuffin.models import (
     AuditProfile,
     AuditRun,
     AuditThread,
     Finding,
     FindingAttachment,
-    FindingComment,
-    FindingLocation,
     GitHubLink,
 )
 
@@ -34,6 +33,7 @@ from llmpuffin_fastapi.deps import (
     get_base_url,
     get_config,
     get_db,
+    get_finding_service,
     get_github_client,
     get_harness,
     get_llmpuffin_db,
@@ -188,76 +188,6 @@ async def _get_finding(db: AsyncSession, finding_id: int) -> Finding | None:
     ).scalar_one_or_none()
 
 
-async def _find_similar(
-    db: AsyncSession, finding: Finding, *, threshold: float = 0.3, limit: int = 10
-) -> list[tuple[Finding, float]]:
-    """Find other findings with at least one location whose file_path is
-    similar (trigram similarity) to any of this finding's locations.
-
-    The score combines file path similarity (70%) with line proximity (30%).
-    Line proximity is 1/(1 + abs(line_diff)/20), so lines within ~20 of each
-    other score high, and distant lines still get partial credit.
-
-    Returns (finding, best_score) pairs sorted by score descending.
-    """
-    if not finding.locations:
-        return []
-
-    # For each of our locations, build a combined score expression against
-    # each candidate location: path_sim * 0.7 + line_proximity * 0.3
-    score_exprs = []
-    for loc in finding.locations:
-        path_sim = func.similarity(FindingLocation.file_path, loc.file_path)
-        line_diff = func.abs(FindingLocation.start_line - loc.start_line)
-        line_prox = 1.0 / (1.0 + line_diff / 20.0)
-        score_exprs.append(path_sim * 0.7 + line_prox * 0.3)
-
-    best_score = (
-        score_exprs[0] if len(score_exprs) == 1 else func.greatest(*score_exprs)
-    )
-
-    # Subquery: candidate finding IDs with their best combined score.
-    candidate_q = (
-        select(
-            FindingLocation.finding_id,
-            func.max(best_score).label("score"),
-        )
-        .where(
-            FindingLocation.finding_id != finding.id,
-            best_score >= threshold,
-        )
-        .group_by(FindingLocation.finding_id)
-    )
-
-    # Scope to same repo when git info is available.
-    if finding.audit_run and finding.audit_run.github_repo_url:
-        candidate_q = candidate_q.join(
-            Finding, Finding.id == FindingLocation.finding_id
-        ).join(
-            AuditRun, AuditRun.id == Finding.audit_run_id
-        ).where(
-            AuditRun.github_repo_url == finding.audit_run.github_repo_url
-        )
-
-    candidates = candidate_q.subquery()
-
-    rows = (
-        await db.execute(
-            select(Finding, candidates.c.score)
-            .join(candidates, Finding.id == candidates.c.finding_id)
-            .where(Finding.status != "deleted")
-            .options(
-                selectinload(Finding.locations),
-                selectinload(Finding.audit_run).selectinload(AuditRun.profile),
-            )
-            .order_by(candidates.c.score.desc())
-            .limit(limit)
-        )
-    ).all()
-
-    return [(row[0], round(row[1], 2)) for row in rows]
-
-
 @router.get("/findings/{finding_id}/", response_class=HTMLResponse)
 async def finding_detail(
     finding_id: int,
@@ -284,7 +214,32 @@ async def finding_detail(
             )
         ).scalar_one_or_none()
 
-    similar_findings = await _find_similar(db, finding)
+    similar_findings: list[tuple[Finding, float]] = []
+
+    from llmpuffin.embeddings import find_similar_global
+
+    similar_ids = find_similar_global(finding_id, db=llmpuffin_db)
+    if similar_ids:
+        sf_ids = [gid for gid, _ in similar_ids]
+        sf_scores = {gid: score for gid, score in similar_ids}
+        sf_rows = (
+            (
+                await db.execute(
+                    select(Finding)
+                    .where(Finding.id.in_(sf_ids))
+                    .options(
+                        selectinload(Finding.audit_run).selectinload(AuditRun.profile),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        similar_findings = sorted(
+            [(f, sf_scores[f.id]) for f in sf_rows],
+            key=lambda x: x[1],
+            reverse=True,
+        )
 
     return templates.TemplateResponse(
         request,
@@ -307,16 +262,13 @@ async def finding_detail(
 async def finding_edit(
     finding_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[FindingService, Depends(get_finding_service)],
     title: Annotated[str | None, Form()] = None,
     status: Annotated[str | None, Form()] = None,
     severity: Annotated[str | None, Form()] = None,
     difficulty: Annotated[str | None, Form()] = None,
     validated: Annotated[str | None, Form()] = None,
 ):
-    finding = await _get_finding(db, finding_id)
-    if finding is None:
-        raise HTTPException(status_code=404)
     redirect = f"/findings/{finding_id}/"
     values: dict = {}
     if title is not None:
@@ -330,10 +282,8 @@ async def finding_edit(
     if validated is not None:
         values["validated"] = validated == "yes"
     if values:
-        await db.execute(
-            sa_update(Finding).where(Finding.id == finding_id).values(**values)
-        )
-        await db.commit()
+        if not await svc.update_by_pk(finding_id, **values):
+            raise HTTPException(status_code=404)
     return toast(
         request, "success", "Finding updated", redirect_to=redirect, refresh=True
     )
@@ -598,6 +548,7 @@ async def finding_fork(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    svc: Annotated[FindingService, Depends(get_finding_service)],
     harness: Annotated[Harness, Depends(get_harness)],
     config: Annotated[Config, Depends(get_config)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
@@ -630,7 +581,11 @@ async def finding_fork(
             select(AuditThread).where(AuditThread.thread_id == finding.thread_id)
         )
     ).scalar_one_or_none()
-    if source_thread and source_thread.status == "running" and not config.features.enabled("fork_running_threads"):
+    if (
+        source_thread
+        and source_thread.status == "running"
+        and not config.features.enabled("fork_running_threads")
+    ):
         return _fork_error("Source thread is still running, cannot fork")
 
     toml_str = run.profile_toml or (run.profile.profile_toml if run.profile else "")
@@ -652,12 +607,7 @@ async def finding_fork(
     source_thread_id = finding.thread_id
     new_thread_id = uuid.uuid4().hex[:12]
 
-    await db.execute(
-        sa_update(Finding)
-        .where(Finding.id == finding_id)
-        .values(fork_thread_id=new_thread_id)
-    )
-    await db.commit()
+    await svc.set_fork_thread(finding_id, new_thread_id)
 
     async def _do_fork():
         profile = Profile.from_toml_string(toml_str)
@@ -672,8 +622,8 @@ async def finding_fork(
                 thread_id=new_thread_id,
                 github_client=gh,
             )
-        except Exception:
-            log.exception("Background finding fork failed")
+        except Exception as exc:
+            log.exception("Background finding fork failed", exc)
 
     harness.spawn(new_thread_id, _do_fork())
 
@@ -742,14 +692,13 @@ async def finding_attachment_download(
 async def finding_comment_add(
     finding_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[FindingService, Depends(get_finding_service)],
     body: Annotated[str, Form()],
 ):
     redirect = f"/findings/{finding_id}/"
     if not body.strip():
         return toast(request, "error", "Comment cannot be empty", redirect_to=redirect)
-    db.add(FindingComment(finding_id=finding_id, body=body.strip()))
-    await db.commit()
+    await svc.add_comment(finding_id, body.strip())
     return toast(
         request, "success", "Comment added", redirect_to=redirect, refresh=True
     )
@@ -760,22 +709,12 @@ async def finding_comment_edit(
     finding_id: int,
     comment_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[FindingService, Depends(get_finding_service)],
     body: Annotated[str, Form()],
 ):
     redirect = f"/findings/{finding_id}/"
-    comment = (
-        await db.execute(
-            select(FindingComment).where(
-                FindingComment.id == comment_id,
-                FindingComment.finding_id == finding_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if comment is None:
+    if not await svc.update_comment(comment_id, finding_id, body.strip()):
         raise HTTPException(status_code=404)
-    comment.body = body.strip()
-    await db.commit()
     return toast(
         request, "success", "Comment updated", redirect_to=redirect, refresh=True
     )
@@ -786,21 +725,11 @@ async def finding_comment_delete(
     finding_id: int,
     comment_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[FindingService, Depends(get_finding_service)],
 ):
     redirect = f"/findings/{finding_id}/"
-    comment = (
-        await db.execute(
-            select(FindingComment).where(
-                FindingComment.id == comment_id,
-                FindingComment.finding_id == finding_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if comment is None:
+    if not await svc.delete_comment(comment_id, finding_id):
         raise HTTPException(status_code=404)
-    await db.delete(comment)
-    await db.commit()
     return toast(
         request, "success", "Comment deleted", redirect_to=redirect, refresh=True
     )

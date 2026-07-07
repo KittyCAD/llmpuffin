@@ -18,6 +18,7 @@ from llmpuffin.agent import AuditStatus, _build_agent, _stream_agent
 from llmpuffin.audit_environment import AuditExecution, GitInfo
 from llmpuffin.coverage import CoverageTracker
 from llmpuffin.db import DB
+from llmpuffin.finding_service import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness, HarnessConfig
 from llmpuffin.log import log
@@ -233,6 +234,7 @@ async def agent(
     store: Any,
     db: DB,
     github_client: GitHubClient | None,
+    finding_service: FindingService | None = None,
 ) -> Any:
     """Build the deep agent with all backends, tools, and middleware."""
     await _set_pipeline_state(resolved.tid, "building", db=db)
@@ -247,6 +249,7 @@ async def agent(
         db=db,
         github_client=github_client,
         coverage=env_ctx.coverage,
+        finding_service=finding_service,
     )
 
 

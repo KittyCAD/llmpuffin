@@ -90,5 +90,7 @@ class TestToolDocumentation:
             "get_commit",
             "finding_attach_file",
             "finding_list_attached_files",
+            "get_coverage",
+            "get_similar_findings",
         }
         assert set(tools.keys()) == expected

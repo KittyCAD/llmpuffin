@@ -11,6 +11,7 @@ import dataclasses
 import tomllib
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -244,6 +245,7 @@ class Finding(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    embedding: Mapped[list | None] = mapped_column(Vector(384), nullable=True)
 
     audit_run: Mapped[AuditRun] = relationship(back_populates="findings")
     locations: Mapped[list[FindingLocation]] = relationship(

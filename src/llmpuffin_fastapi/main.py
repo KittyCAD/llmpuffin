@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from llmpuffin.config import Config
 from llmpuffin.db import DB
+from llmpuffin.finding_service import FindingService
 from llmpuffin.github import client_from_config
 from llmpuffin.harness import Harness
 from llmpuffin.log import setup as setup_logging
@@ -44,6 +45,16 @@ async def _lifespan(app: FastAPI):
     await app.state.db.setup()
     set_github_client(client_from_config(config.github))
 
+    if config.backfill_embeddings:
+        try:
+            from llmpuffin.embeddings import backfill_embeddings
+
+            count = backfill_embeddings(db=app.state.db)
+            if count:
+                log.info("Backfilled embeddings for %d finding(s)", count)
+        except Exception:
+            log.debug("Embedding backfill skipped", exc_info=True)
+
     try:
         yield
     finally:
@@ -62,6 +73,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="llmpuffin", lifespan=_lifespan)
     app.state.config = config
     app.state.db = DB(config.postgres)
+    app.state.finding_service = FindingService(app.state.db)
     # Shared harness for task tracking. Individual audits create their own
     # Harness instances for config/threat-model, but this one owns the
     # task registry so we can cancel running audits from the web UI.

@@ -162,6 +162,8 @@ class Config(BaseSettings):
         env_nested_delimiter="__",
     )
 
+    backfill_embeddings: bool = False
+    """Generate missing finding embeddings on startup."""
     runtime: Literal["podman", "nexecutor", "microvm"] = "podman"
     nexecutor: NexecutorConfig = NexecutorConfig()
     microvm: MicrovmConfig = MicrovmConfig()

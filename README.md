@@ -117,6 +117,18 @@ uv run llmpuffin-check
 
 This is the canonical pre-commit gate. See `AGENTS.md` for contributor guidelines.
 
+## Embeddings
+
+Finding embeddings power the "similar findings" feature, which identifies duplicate or related findings across audit runs using semantic similarity.
+
+Embeddings are generated locally using [sentence-transformers](https://www.sbert.net/) (`all-MiniLM-L6-v2`, ~80MB model, runs on CPU). No API keys required.
+
+New findings are embedded automatically when reported. To backfill embeddings for existing findings:
+
+```
+uv run llmpuffin-embed
+```
+
 ## Caveats
 
 - **Subagent messages are not visible in checkpoints.** Subagents (threat-model-auditor, finding-validator, function-analyzer) run in their own internal state via deepagents. Only the final summary is returned to the parent thread's checkpoint. Internal subagent tool calls and reasoning are logged to the server console but do not appear in the checkpoint viewer.

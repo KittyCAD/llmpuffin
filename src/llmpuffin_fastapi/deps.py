@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from llmpuffin.config import Config
 from llmpuffin.db import DB
+from llmpuffin.finding_service import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness
 
@@ -85,6 +86,11 @@ def get_harness(request: Request) -> Harness:
 def get_llmpuffin_db(request: Request) -> DB:
     """FastAPI dependency returning the DB instance from app state."""
     return request.app.state.db
+
+
+def get_finding_service(request: Request) -> FindingService:
+    """FastAPI dependency returning the FindingService from app state."""
+    return request.app.state.finding_service
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:

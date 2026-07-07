@@ -13,19 +13,11 @@ from typing import Callable, Literal
 from langgraph.prebuilt.tool_node import ToolRuntime
 from pydantic import BaseModel, Field
 
-from sqlalchemy import func, select
-from sqlalchemy import update as sa_update
-
 from llmpuffin.backend import ContainerBackend
 from llmpuffin.db import DB
+from llmpuffin.finding_service import FindingService
 from llmpuffin.github import GitHubClient
-from llmpuffin.models import (
-    Finding,
-    FindingAttachment,
-    FindingLocation,
-    GitInfo,
-    ValidationNote,
-)
+from llmpuffin.models import Finding, GitInfo
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
 
 log = logging.getLogger("llmpuffin")
@@ -110,20 +102,6 @@ def _format_threat_model_view(view: ThreatModelView) -> str:
     return "\n".join(lines)
 
 
-def _resolve_finding(audit_run_id: int, local_id: int, *, db: DB):
-    """Look up a Finding by local_id within the audit run. Returns the Finding or None."""
-    try:
-        with db.sync_session() as s:
-            return s.execute(
-                select(Finding).where(
-                    Finding.audit_run_id == audit_run_id,
-                    Finding.local_id == local_id,
-                )
-            ).scalar_one_or_none()
-    except Exception:
-        return None
-
-
 async def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
     """Query the container for git info (origin remote + HEAD) for a file path.
 
@@ -174,72 +152,6 @@ async def _query_git_info(backend: ContainerBackend, file_path: str) -> GitInfo:
         return GitInfo()
 
 
-def _persist_finding_to_db(
-    audit_run_id: int,
-    thread_id: str,
-    title: str,
-    severity: str,
-    difficulty: str,
-    description: str,
-    exploit_scenario: str,
-    recommendations: str,
-    locations: list[dict] | None,
-    tool_call_id: str = "",
-    *,
-    db: DB,
-) -> tuple[int, int]:
-    """Allocate local_id in SQL and insert a finding in one transaction.
-
-    Concurrent transactions are serialized by a per-audit-run advisory lock
-    held until commit, so the MAX(local_id) read and the INSERT cannot
-    interleave. No retry needed.
-
-    Returns (finding_pk_id, local_id).
-    """
-    next_local_id = (
-        select(func.coalesce(func.max(Finding.local_id) + 1, 0))
-        .where(Finding.audit_run_id == audit_run_id)
-        .scalar_subquery()
-    )
-
-    try:
-        with db.sync_session() as s, s.begin():
-            # Serialize concurrent allocations for this audit_run. The lock
-            # is released automatically at COMMIT/ROLLBACK.
-            s.execute(select(func.pg_advisory_xact_lock(audit_run_id)))
-            finding = Finding(
-                audit_run_id=audit_run_id,
-                thread_id=thread_id,
-                local_id=next_local_id,
-                title=title,
-                severity=severity,
-                difficulty=difficulty,
-                description=description,
-                exploit_scenario=exploit_scenario,
-                recommendations=recommendations,
-                tool_call_id=tool_call_id,
-            )
-            s.add(finding)
-            s.flush()
-            s.refresh(finding, attribute_names=["local_id"])
-            for loc in locations or []:
-                s.add(
-                    FindingLocation(
-                        finding_id=finding.id,
-                        file_path=loc["file"],
-                        start_line=loc.get("line", 0),
-                        origin_remote=loc.get("origin_remote", ""),
-                        head=loc.get("head", ""),
-                    )
-                )
-            return finding.id, finding.local_id
-    except Exception as exc:
-        log.exception("Failed to insert finding in audit_run %s: %s", audit_run_id, exc)
-        raise RuntimeError(
-            f"Failed to insert finding in audit_run {audit_run_id}: {exc}"
-        ) from exc
-
-
 MAX_EXPORT_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
 
 
@@ -251,8 +163,11 @@ def make_tools(
     container_backend: ContainerBackend | None = None,
     *,
     db: DB,
+    finding_service: FindingService | None = None,
 ) -> dict[str, Callable]:
     """Create threat model and finding tools."""
+
+    svc = finding_service or FindingService(db)
 
     # Create a perspective view if we know the repo, otherwise show everything
     view = threat_model.view_for_repo(repo_path) if repo_path else None
@@ -363,23 +278,25 @@ Existing mitigations to verify:
         else:
             log.debug("report_finding: no locations provided")
 
-        _, local_id = _persist_finding_to_db(
+        finding_pk, local_id = await svc.create(
             audit_run_id,
-            rt_thread_id,
-            title,
-            severity,
-            difficulty,
-            description,
-            exploit_scenario,
-            recommendations,
-            loc_dicts,
+            thread_id=rt_thread_id,
+            title=title,
+            severity=severity,
+            difficulty=difficulty,
+            description=description,
+            exploit_scenario=exploit_scenario,
+            recommendations=recommendations,
+            locations=loc_dicts,
             tool_call_id=rt_tool_call_id,
-            db=db,
         )
+
+        # Best-effort: generate embedding for deduplication.
+        await svc._refresh_embedding(finding_pk)
 
         return f"Finding recorded. finding_id: {local_id}"
 
-    def update_finding(
+    async def update_finding(
         finding_id: int,
         title: str | None = None,
         severity: str | None = None,
@@ -399,41 +316,21 @@ Existing mitigations to verify:
             exploit_scenario: New exploit scenario (optional)
             recommendations: New recommendations (optional)
         """
-        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
-        if not db_finding:
+        result = await svc.update(
+            audit_run_id,
+            finding_id,
+            title=title,
+            severity=severity,
+            difficulty=difficulty,
+            description=description,
+            exploit_scenario=exploit_scenario,
+            recommendations=recommendations,
+        )
+        if not result:
             return f"Finding {finding_id} not found"
-
-        # Update DB
-        try:
-            values = {
-                k: v
-                for k, v in {
-                    "title": title,
-                    "severity": severity,
-                    "difficulty": difficulty,
-                    "description": description,
-                    "exploit_scenario": exploit_scenario,
-                    "recommendations": recommendations,
-                }.items()
-                if v is not None
-            }
-            if values:
-                with db.sync_session() as s:
-                    s.execute(
-                        sa_update(Finding)
-                        .where(
-                            Finding.id == db_finding.id,
-                            Finding.audit_run_id == audit_run_id,
-                        )
-                        .values(**values)
-                    )
-                    s.commit()
-        except Exception as exc:
-            log.warning("Failed to update finding in DB: %s", exc)
-
         return f"Finding {finding_id} updated"
 
-    def delete_finding(finding_id: int) -> str:
+    async def delete_finding(finding_id: int) -> str:
         """Delete a finding. Use if a finding should never have been reported
         (e.g. reported in error, duplicate, or completely wrong).
 
@@ -443,27 +340,11 @@ Existing mitigations to verify:
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
         """
-        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
-        if not db_finding:
+        if not await svc.delete(audit_run_id, finding_id):
             return f"Finding {finding_id} not found"
-
-        try:
-            with db.sync_session() as s:
-                s.execute(
-                    sa_update(Finding)
-                    .where(
-                        Finding.id == db_finding.id,
-                        Finding.audit_run_id == audit_run_id,
-                    )
-                    .values(status="deleted")
-                )
-                s.commit()
-        except Exception as exc:
-            log.warning("Failed to delete finding in DB: %s", exc)
-
         return f"Finding {finding_id} deleted"
 
-    def validate_finding(
+    async def validate_finding(
         finding_id: int,
         evidence: str,
         runtime: ToolRuntime = None,  # pyright: ignore[reportArgumentType]  # injected by framework
@@ -486,71 +367,39 @@ Existing mitigations to verify:
         rt_tool_call_id = runtime.tool_call_id or ""
         rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
 
-        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
-        if not db_finding:
+        if not await svc.validate(
+            audit_run_id,
+            finding_id,
+            evidence=evidence,
+            thread_id=rt_thread_id,
+            tool_call_id=rt_tool_call_id,
+        ):
             return f"Finding {finding_id} not found"
-
-        # Create immutable validation note + mark finding as validated.
-        try:
-            with db.sync_session() as s:
-                s.add(
-                    ValidationNote(
-                        finding_id=db_finding.id,
-                        thread_id=rt_thread_id,
-                        tool_call_id=rt_tool_call_id or "",
-                        evidence=evidence,
-                    )
-                )
-                s.execute(
-                    sa_update(Finding)
-                    .where(
-                        Finding.id == db_finding.id,
-                        Finding.audit_run_id == audit_run_id,
-                    )
-                    .values(validated=True)
-                )
-                s.commit()
-        except Exception as exc:
-            log.warning("Failed to validate finding in DB: %s", exc)
-
         return f"Finding {finding_id} validated"
 
-    def list_findings() -> str:
+    async def list_findings() -> str:
         """List all reported findings with their IDs, titles, severity, and status.
 
         Use this to see what has been reported so far and which findings
         need validation.
         """
-        try:
-            with db.sync_session() as s:
-                findings = (
-                    s.execute(
-                        select(Finding)
-                        .where(Finding.audit_run_id == audit_run_id)
-                        .order_by(Finding.local_id)
-                    )
-                    .scalars()
-                    .all()
-                )
-            if not findings:
-                return "No findings reported yet."
-            lines = []
-            for f in findings:
-                if f.status == "deleted":
-                    lines.append(
-                        f"- {f.local_id}: (deleted) {f.title or f.description[:60]}"
-                    )
-                    continue
-                validated = "validated" if f.validated else "unvalidated"
-                status_label = f" [{f.status}]" if f.status != "open" else ""
+        findings = await svc.list_all(audit_run_id)
+        if not findings:
+            return "No findings reported yet."
+        lines = []
+        for f in findings:
+            if f.status == "deleted":
                 lines.append(
-                    f"- {f.local_id}: {f.title or f.description[:60]} | "
-                    f"{f.severity}/{f.difficulty} | {validated}{status_label}"
+                    f"- {f.local_id}: (deleted) {f.title or f.description[:60]}"
                 )
-            return "\n".join(lines)
-        except Exception as exc:
-            log.warning("Failed to list findings: %s", exc)
-            return "Error listing findings."
+                continue
+            validated = "validated" if f.validated else "unvalidated"
+            status_label = f" [{f.status}]" if f.status != "open" else ""
+            lines.append(
+                f"- {f.local_id}: {f.title or f.description[:60]} | "
+                f"{f.severity}/{f.difficulty} | {validated}{status_label}"
+            )
+        return "\n".join(lines)
 
     def get_pull_request(repo: str, number: int) -> str:
         """Fetch a GitHub pull request or issue with its title, description, comments, and diff.
@@ -607,9 +456,6 @@ Existing mitigations to verify:
         """
         if not container_backend:
             return "Error: no container available"
-        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
-        if not db_finding:
-            return f"Finding {finding_id} not found"
 
         # Read file raw via base64 to handle binary content safely.
         import base64
@@ -628,62 +474,45 @@ Existing mitigations to verify:
                 f"Error: file too large (max {MAX_EXPORT_FILE_SIZE // 1024 // 1024} MB)"
             )
 
-        try:
-            with db.sync_session() as s:
-                att = FindingAttachment(
-                    finding_id=db_finding.id,
-                    filename=file_path,
-                    description=description,
-                    content=raw,
-                    size=len(raw),
-                    thread_id=runtime.config.get("configurable", {}).get(
-                        "thread_id", ""
-                    )
-                    if runtime
-                    else "",
-                    tool_call_id=runtime.tool_call_id or "" if runtime else "",
-                )
-                s.add(att)
-                s.commit()
-        except Exception as exc:
-            log.warning("Failed to export file: %s", exc)
-            return f"Error saving file: {exc}"
+        rt_thread_id = (
+            runtime.config.get("configurable", {}).get("thread_id", "")
+            if runtime
+            else ""
+        )
+        rt_tool_call_id = runtime.tool_call_id or "" if runtime else ""
+
+        att = await svc.attach_file(
+            audit_run_id,
+            finding_id,
+            filename=file_path,
+            content=raw,
+            description=description,
+            thread_id=rt_thread_id,
+            tool_call_id=rt_tool_call_id,
+        )
+        if not att:
+            return f"Finding {finding_id} not found"
 
         return (
             f"Exported {file_path} ({len(raw)} bytes) attached to finding {finding_id}"
         )
 
-    def finding_list_attached_files(finding_id: int) -> str:
+    async def finding_list_attached_files(finding_id: int) -> str:
         """List files that have been exported and attached to a finding.
 
         Args:
             finding_id: The finding_id returned by report_finding (0-indexed)
         """
-        db_finding = _resolve_finding(audit_run_id, finding_id, db=db)
-        if not db_finding:
+        attachments = await svc.list_attachments(audit_run_id, finding_id)
+        if attachments is None:
             return f"Finding {finding_id} not found"
-
-        try:
-            with db.sync_session() as s:
-                attachments = (
-                    s.execute(
-                        select(FindingAttachment)
-                        .where(FindingAttachment.finding_id == db_finding.id)
-                        .order_by(FindingAttachment.created_at)
-                    )
-                    .scalars()
-                    .all()
-                )
-            if not attachments:
-                return "No files exported for this finding."
-            lines = []
-            for a in attachments:
-                desc = f" — {a.description}" if a.description else ""
-                lines.append(f"- {a.filename} ({a.size} bytes){desc}")
-            return "\n".join(lines)
-        except Exception as exc:
-            log.warning("Failed to list exported files: %s", exc)
-            return "Error listing files."
+        if not attachments:
+            return "No files exported for this finding."
+        lines = []
+        for a in attachments:
+            desc = f" — {a.description}" if a.description else ""
+            lines.append(f"- {a.filename} ({a.size} bytes){desc}")
+        return "\n".join(lines)
 
     def get_coverage() -> str:
         """Get file coverage summary for this audit run.
@@ -720,6 +549,44 @@ Existing mitigations to verify:
         _fmt(tree)
         return "\n".join(lines)
 
+    async def get_similar_findings(finding_id: int, threshold: float = 0.8) -> str:
+        """Find findings from other audit runs that are similar to the given finding.
+
+        Uses vector similarity on finding embeddings to find duplicates or
+        related findings across all audit runs. Useful for checking if a
+        vulnerability has already been reported in a previous audit.
+
+        Args:
+            finding_id: The finding_id returned by report_finding (0-indexed)
+            threshold: Minimum similarity score (0-1, default 0.8)
+        """
+        db_finding = await svc.resolve(audit_run_id, finding_id)
+        if not db_finding:
+            return f"Finding {finding_id} not found"
+
+        try:
+            from llmpuffin.embeddings import find_similar_global
+
+            results = find_similar_global(db_finding.id, db=db, threshold=threshold)
+        except Exception as exc:
+            log.warning("Failed to find similar findings: %s", exc)
+            return f"Error searching for similar findings: {exc}"
+
+        if not results:
+            return "No similar findings found."
+
+        lines = []
+        async with db.async_session() as s:
+            for fid, score in results:
+                f = await s.get(Finding, fid)
+                if f is None:
+                    continue
+                lines.append(
+                    f"- [{score:.3f}] #{f.local_id} (run {f.audit_run_id}): "
+                    f"{f.title or f.description[:60]} | {f.severity}"
+                )
+        return "\n".join(lines) if lines else "No similar findings found."
+
     return {
         "get_threat_model": get_threat_model,
         "get_threat_scenario": get_threat_scenario,
@@ -733,4 +600,5 @@ Existing mitigations to verify:
         "finding_attach_file": finding_attach_file,
         "finding_list_attached_files": finding_list_attached_files,
         "get_coverage": get_coverage,
+        "get_similar_findings": get_similar_findings,
     }

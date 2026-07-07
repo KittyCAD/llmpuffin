@@ -297,7 +297,9 @@ async def run_fork(
     if thread is None:
         raise HTTPException(status_code=404)
     redirect = f"/runs/{run_id}/"
-    if thread.status == "running" and not config.features.enabled("fork_running_threads"):
+    if thread.status == "running" and not config.features.enabled(
+        "fork_running_threads"
+    ):
         return toast(
             request,
             "error",
