@@ -49,9 +49,9 @@ async def _lifespan(app: FastAPI):
         try:
             from llmpuffin.embeddings import backfill_embeddings
 
+            log.info("Backfilling finding embeddings…")
             count = backfill_embeddings(db=app.state.db)
-            if count:
-                log.info("Backfilled embeddings for %d finding(s)", count)
+            log.info("Embedding backfill complete: %d finding(s)", count)
         except Exception:
             log.debug("Embedding backfill skipped", exc_info=True)
 

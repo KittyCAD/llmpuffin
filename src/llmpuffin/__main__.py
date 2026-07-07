@@ -83,9 +83,9 @@ async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
         try:
             from llmpuffin.embeddings import backfill_embeddings
 
+            log.info("Backfilling finding embeddings…")
             count = backfill_embeddings(db=db)
-            if count:
-                log.info("Backfilled embeddings for %d finding(s)", count)
+            log.info("Embedding backfill complete: %d finding(s)", count)
         except Exception:
             log.debug("Embedding backfill skipped", exc_info=True)
 
