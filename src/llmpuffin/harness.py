@@ -97,11 +97,11 @@ class Harness:
         self.threat_model: ThreatModel | None = None
         self._tasks: dict[str, asyncio.Task] = {}
 
-    def load_threat_model(self) -> ThreatModel:
-        """Load the threat model from TOML — the declarative spec driving the audit."""
+    def load_threat_model(self, *, db) -> ThreatModel:
+        """Load the threat model from the database."""
         if self.config is None:
             raise RuntimeError("HarnessConfig is required to load a threat model")
-        tm = ThreatModel.from_dir(self.config.profile.threat_model_dir)
+        tm = ThreatModel.from_db(self.config.profile.threat_model, db=db)
         self.threat_model = tm
         return tm
 

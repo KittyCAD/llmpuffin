@@ -85,7 +85,7 @@ _MINIMAL_PROFILE = """\
 [audit]
 name = "test-audit"
 image = "ghcr.io/org/repo:latest"
-threat_model_dir = "threat_model/"
+threat_model = "threat_model/"
 """
 
 
@@ -101,7 +101,7 @@ class TestProfileFromToml:
 [audit]
 name = "full"
 image = "img:v1"
-threat_model_dir = "tm/"
+threat_model = "tm/"
 code_dir = "/app"
 
 [agent]

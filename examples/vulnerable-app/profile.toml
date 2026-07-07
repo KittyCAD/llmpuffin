@@ -1,7 +1,7 @@
 [audit]
 name = "vulnerable-app"
 image = "llmpuffin-vulnerable-app"
-threat_model_dir = "examples/vulnerable-app/threat_model"
+threat_model = "vulnerable-app"
 code_dir = "/src"
 
 [agent]

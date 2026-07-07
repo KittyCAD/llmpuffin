@@ -56,7 +56,7 @@ Audit profiles live in separate `profile.toml` files:
 [audit]
 name = "my-audit"
 image = "my-image:latest"
-threat_model_dir = "threat_model/"
+threat_model = "my-audit"
 
 [agent]
 model = "claude-sonnet-4-20250514"

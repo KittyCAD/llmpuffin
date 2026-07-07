@@ -154,6 +154,43 @@ class ThreatModel(BaseModel):
             model.threat_scenarios.extend(partial.threat_scenarios)
         return model
 
+    @classmethod
+    def from_db(cls, name: str, *, db) -> Self:
+        """Load a threat model from the database by name.
+
+        Reads all ThreatModelFile rows for the named ThreatModelDB entry,
+        parses each as TOML, and merges them.
+        """
+        from sqlalchemy import select
+
+        from llmpuffin.models import ThreatModelDB, ThreatModelFile
+
+        with db.sync_session() as s:
+            tm_db = s.execute(
+                select(ThreatModelDB).where(ThreatModelDB.name == name)
+            ).scalar_one_or_none()
+            if tm_db is None:
+                raise ValueError(f"Threat model {name!r} not found in database")
+            files = (
+                s.execute(
+                    select(ThreatModelFile)
+                    .where(ThreatModelFile.threat_model_id == tm_db.id)
+                    .order_by(ThreatModelFile.path)
+                )
+                .scalars()
+                .all()
+            )
+
+        model = cls()
+        for f in files:
+            data = tomllib.loads(f.content)
+            partial = cls(**data)
+            model.components.extend(partial.components)
+            model.trust_zones.extend(partial.trust_zones)
+            model.connections.extend(partial.connections)
+            model.threat_scenarios.extend(partial.threat_scenarios)
+        return model
+
     def get_component(self, component_id: str) -> Component | None:
         """Recursively find a component by ID."""
         return _find_component(self.components, component_id)

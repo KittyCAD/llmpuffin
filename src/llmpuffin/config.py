@@ -36,7 +36,7 @@ Example profile.toml:
     [audit]
     name = "my-audit"
     image = "ghcr.io/org/repo:latest"
-    threat_model_dir = "threat_model/"
+    threat_model = "my-threat-model"
     code_dir = "/src"
 
     [agent]
@@ -270,7 +270,7 @@ class _AuditSection(BaseModel):
 
     name: str
     image: str
-    threat_model_dir: str
+    threat_model: str
     code_dir: str = "/src"
 
 
@@ -291,7 +291,7 @@ class Profile(BaseModel):
 
     name: str
     image: str
-    threat_model_dir: Path
+    threat_model: str
     code_dir: str = "/src"
     repos: list[ProfileRepo] = []
     agent: ProfileAgent = ProfileAgent()
@@ -329,7 +329,7 @@ class Profile(BaseModel):
         return cls(
             name=parsed.audit.name,
             image=parsed.audit.image,
-            threat_model_dir=Path(parsed.audit.threat_model_dir),
+            threat_model=parsed.audit.threat_model,
             code_dir=parsed.audit.code_dir,
             repos=parsed.repo,
             agent=parsed.agent,

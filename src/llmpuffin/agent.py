@@ -284,7 +284,7 @@ async def fork_audit(
 ) -> AuditResult:
     """Fork from an existing thread and continue with a new message."""
     harness = Harness(config, global_config=global_config)
-    threat_model = harness.load_threat_model()
+    threat_model = harness.load_threat_model(db=db)
 
     async with (
         AsyncPostgresSaver.from_conn_string(db.url) as checkpointer,
@@ -446,7 +446,7 @@ async def run_audit(
 ) -> AuditResult:
     """Run a full security audit driven by the threat model."""
     harness = Harness(config, global_config=global_config)
-    threat_model = harness.load_threat_model()
+    threat_model = harness.load_threat_model(db=db)
 
     log.info(
         "Loaded threat model: %d components, %d scenarios",

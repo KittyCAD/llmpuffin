@@ -1,7 +1,7 @@
 [audit]
 name = "minimal"
 image = "ubuntu:latest"
-threat_model_dir = "examples/minimal/threat_model"
+threat_model = "minimal"
 code_dir = "/src"
 
 [agent]

@@ -169,7 +169,7 @@ class TestProfiles:
             "/profiles/create/",
             data={
                 "name": "test-profile",
-                "profile_toml": '[audit]\nname = "test"\nimage = "img:v1"\nthreat_model_dir = "tm/"',
+                "profile_toml": '[audit]\nname = "test"\nimage = "img:v1"\nthreat_model = "tm/"',
             },
         )
         assert resp.status_code in (204, 303)
@@ -198,7 +198,7 @@ class TestProfiles:
         pid = _insert(
             AuditProfile,
             name="detail-test",
-            profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model_dir = "t"',
+            profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model = "t"',
         )
         resp = client.get(f"/profiles/{pid}/")
         assert resp.status_code == 200
@@ -214,13 +214,13 @@ class TestProfiles:
         pid = _insert(
             AuditProfile,
             name="update-me",
-            profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model_dir = "t"',
+            profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model = "t"',
         )
         resp = client.post(
             f"/profiles/{pid}/",
             data={
                 "name": "updated-name",
-                "profile_toml": '[audit]\nname = "y"\nimage = "i2"\nthreat_model_dir = "t"',
+                "profile_toml": '[audit]\nname = "y"\nimage = "i2"\nthreat_model = "t"',
             },
         )
         assert resp.status_code in (204, 303)

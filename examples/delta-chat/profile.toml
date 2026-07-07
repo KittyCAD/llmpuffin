@@ -1,7 +1,7 @@
 [audit]
 name = "delta-chat"
 image = "llmpuffin-delta-chat"
-threat_model_dir = "examples/delta-chat/threat_model"
+threat_model = "delta-chat"
 code_dir = "/src"
 
 [agent]
