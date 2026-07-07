@@ -151,7 +151,7 @@ async def clone_repos(
 
             log.info("Cloning %s → %s", repo.url, clone_path)
             result = await execution.exec(
-                ["git", "clone", "--depth", "1", repo.url, clone_path],
+                ["git", "clone", "--recurse-submodules", repo.url, clone_path],
                 timeout=600,
                 workdir="/",
             )
