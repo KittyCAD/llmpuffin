@@ -34,6 +34,9 @@ def _get_model():
     if _model is None:
         from sentence_transformers import SentenceTransformer
 
+        # Enable huggingface_hub download progress logging.
+        logging.getLogger("huggingface_hub").setLevel(logging.DEBUG)
+
         log.info("Loading embedding model %s...", EMBEDDING_MODEL)
         _model = SentenceTransformer(EMBEDDING_MODEL)
         log.info("Embedding model loaded")
@@ -54,6 +57,7 @@ def _finding_text(finding) -> str:
 
 def _embed_texts(texts: list[str]) -> list[list[float]]:
     """Encode texts using the local sentence-transformers model."""
+    log.info("Preparing model")
     model = _get_model()
     embeddings = model.encode(texts, normalize_embeddings=True)
     return [e.tolist() for e in embeddings]
