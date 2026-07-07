@@ -111,6 +111,8 @@ async def backfill_embeddings(*, db: DB, batch_size: int = 50) -> int:
     if not total:
         return 0
 
+    logging.info("Found %d findings to backfill", total)
+
     count = 0
     for i in range(0, total, batch_size):
         batch = findings[i : i + batch_size]
