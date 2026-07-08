@@ -1,4 +1,4 @@
-"""Langgraph store browse routes."""
+"""LLM memory browser routes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from llmpuffin.db import DB
 from llmpuffin_fastapi.deps import get_llmpuffin_db, toast
-from llmpuffin_fastapi.store import (
+from llmpuffin_fastapi.memory import (
     delete_all,
     delete_item,
     list_items,
@@ -22,37 +22,37 @@ from llmpuffin_fastapi.templates_env import templates
 router = APIRouter()
 
 
-@router.get("/store/", response_class=HTMLResponse)
-async def store_list(
+@router.get("/memory/", response_class=HTMLResponse)
+async def memory_list(
     request: Request, llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)]
 ):
     namespaces = await list_namespaces(llmpuffin_db.url)
     return templates.TemplateResponse(
-        request, "store_list.html", {"namespaces": namespaces}
+        request, "memory_list.html", {"namespaces": namespaces}
     )
 
 
-@router.get("/store/{prefix:path}/", response_class=HTMLResponse)
-async def store_namespace(
+@router.get("/memory/{prefix:path}/", response_class=HTMLResponse)
+async def memory_namespace(
     prefix: str,
     request: Request,
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
     items = await list_items(prefix, llmpuffin_db.url)
     return templates.TemplateResponse(
-        request, "store_namespace.html", {"prefix": prefix, "items": items}
+        request, "memory_namespace.html", {"prefix": prefix, "items": items}
     )
 
 
-@router.post("/store/{prefix:path}/edit/")
-async def store_item_edit(
+@router.post("/memory/{prefix:path}/edit/")
+async def memory_item_edit(
     prefix: str,
     request: Request,
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     key: Annotated[str, Form()],
     value_json: Annotated[str, Form()],
 ):
-    redirect = f"/store/{prefix}/"
+    redirect = f"/memory/{prefix}/"
     try:
         value = json.loads(value_json)
     except json.JSONDecodeError as exc:
@@ -65,8 +65,8 @@ async def store_item_edit(
     return toast(request, "success", f"Saved {key}", redirect_to=redirect, refresh=True)
 
 
-@router.post("/store/{prefix:path}/delete/")
-async def store_item_delete(
+@router.post("/memory/{prefix:path}/delete/")
+async def memory_item_delete(
     prefix: str,
     request: Request,
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
@@ -77,13 +77,13 @@ async def store_item_delete(
         request,
         "success",
         f"Deleted {key}",
-        redirect_to=f"/store/{prefix}/",
+        redirect_to=f"/memory/{prefix}/",
         refresh=True,
     )
 
 
-@router.post("/store/clear-all/")
-async def store_clear_all(
+@router.post("/memory/clear-all/")
+async def memory_clear_all(
     request: Request,
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
@@ -91,7 +91,7 @@ async def store_clear_all(
     return toast(
         request,
         "success",
-        f"Deleted {count} item(s) from store",
-        redirect_to="/store/",
+        f"Deleted {count} item(s) from memory",
+        redirect_to="/memory/",
         refresh=True,
     )

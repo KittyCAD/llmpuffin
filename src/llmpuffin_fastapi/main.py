@@ -29,7 +29,7 @@ from llmpuffin_fastapi.routes import (
     skills,
     threat_models,
 )
-from llmpuffin_fastapi.routes import store as store_routes
+from llmpuffin_fastapi.routes import memory as memory_routes
 
 log = logging.getLogger("llmpuffin")
 
@@ -86,7 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(findings.router)
     app.include_router(skills.router)
     app.include_router(threat_models.router)
-    app.include_router(store_routes.router)
+    app.include_router(memory_routes.router)
     app.include_router(about.router)
 
     @app.get("/healthz")

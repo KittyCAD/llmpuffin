@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}store{% endblock %}
+{% block title %}memory{% endblock %}
 {% block content %}
 <div class="row" style="justify-content: space-between; align-items: baseline;">
-  <h1>Store</h1>
+  <h1>Memory</h1>
   {% if namespaces %}
-  <form hx-post="/store/clear-all/" hx-confirm="Delete ALL store entries? This removes all memories across all profiles." hx-disabled-elt="find button" class="inline">
+  <form hx-post="/memory/clear-all/" hx-confirm="Delete ALL memory entries? This removes all memories across all profiles." hx-disabled-elt="find button" class="inline">
     <button type="submit" class="destructive">Clear all</button>
   </form>
   {% endif %}
@@ -16,11 +16,11 @@
 <tbody>
 {% for ns in namespaces %}
 <tr>
-  <td><a href="/store/{{ ns.prefix }}/" class="mono text-xs">{{ ns.prefix }}</a></td>
+  <td><a href="/memory/{{ ns.prefix }}/" class="mono text-xs">{{ ns.prefix }}</a></td>
   <td>{{ ns.count }}</td>
 </tr>
 {% else %}
-<tr><td colspan="2" class="text-muted" style="text-align: center; padding: 2rem;">Store is empty.</td></tr>
+<tr><td colspan="2" class="text-muted" style="text-align: center; padding: 2rem;">Memory is empty.</td></tr>
 {% endfor %}
 </tbody>
 </table>

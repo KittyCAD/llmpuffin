@@ -103,7 +103,7 @@ uv run llmpuffin-fastapi
 - http://localhost:8000/ — audit runs and findings
 - http://localhost:8000/profiles/ — audit profiles (create, run)
 - http://localhost:8000/checkpoints/ — checkpoint viewer (conversation history)
-- http://localhost:8000/store/ — langgraph store browser
+- http://localhost:8000/memory/ — LLM memory browser
 
 Override the connection string with `LLMPUFFIN_POSTGRES` env var, or set it in `llmpuffin.toml`.
 

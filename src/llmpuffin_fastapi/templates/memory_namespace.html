@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}store — {{ prefix }}{% endblock %}
+{% block title %}memory — {{ prefix }}{% endblock %}
 {% block content %}
-<p><a href="/store/">← all namespaces</a></p>
+<p><a href="/memory/">← all namespaces</a></p>
 
 <div class="row" style="justify-content: space-between; align-items: baseline;">
   <h1>
@@ -55,14 +55,14 @@
       {% endif %}
       <div class="row gap-2 mt-3">
         <button type="button" class="btn" onclick="storeToggleEdit(this)">edit</button>
-        <form hx-post="/store/{{ prefix }}/delete/" hx-confirm="Delete this item?" hx-disabled-elt="find button" class="inline">
+        <form hx-post="/memory/{{ prefix }}/delete/" hx-confirm="Delete this item?" hx-disabled-elt="find button" class="inline">
           <input type="hidden" name="key" value="{{ item.key }}">
           <button type="submit" class="destructive">delete</button>
         </form>
       </div>
     </div>
 
-    <form hx-post="/store/{{ prefix }}/edit/" hx-disabled-elt="find button, find textarea" class="store-item-edit col gap-2" style="display: none;">
+    <form hx-post="/memory/{{ prefix }}/edit/" hx-disabled-elt="find button, find textarea" class="store-item-edit col gap-2" style="display: none;">
       <input type="hidden" name="key" value="{{ item.key }}">
       <textarea name="value_json" rows="14" class="mono text-xs" required>{{ item.value_json }}</textarea>
       <div class="row gap-2">
