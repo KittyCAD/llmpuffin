@@ -12,8 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from llmpuffin.db import DB
 from llmpuffin.models import Skill, SkillFile
-from llmpuffin_fastapi.deps import get_db, toast
+from llmpuffin_fastapi.deps import get_db, get_llmpuffin_db, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -139,6 +140,7 @@ async def skill_import_directory(
     request: Request,
     skill_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     directory: str = Form(...),
 ):
     """Import all files from a local directory into a skill."""
@@ -157,30 +159,10 @@ async def skill_import_directory(
             redirect_to=f"/skills/{skill_id}/",
         )
 
-    count = 0
-    for file_path in sorted(dir_path.rglob("*")):
-        if not file_path.is_file():
-            continue
-        try:
-            content = file_path.read_text()
-        except (UnicodeDecodeError, OSError):
-            continue
+    from llmpuffin.skill_service import SkillService
 
-        rel = str(file_path.relative_to(dir_path))
-        existing = (
-            await db.execute(
-                select(SkillFile).where(
-                    SkillFile.skill_id == skill_id, SkillFile.path == rel
-                )
-            )
-        ).scalar_one_or_none()
-        if existing:
-            existing.content = content
-        else:
-            db.add(SkillFile(skill_id=skill_id, path=rel, content=content))
-        count += 1
-
-    await db.commit()
+    svc = SkillService(llmpuffin_db)
+    count = await svc.import_directory(skill_id, dir_path)
     return toast(
         request,
         "success",

@@ -12,8 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from llmpuffin.db import DB
 from llmpuffin.models import ThreatModelDB, ThreatModelFile
-from llmpuffin_fastapi.deps import get_db, toast
+from llmpuffin_fastapi.deps import get_db, get_llmpuffin_db, toast
 from llmpuffin_fastapi.templates_env import templates
 
 log = logging.getLogger("llmpuffin")
@@ -151,6 +152,7 @@ async def threat_model_import_directory(
     request: Request,
     tm_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     directory: str = Form(...),
 ):
     """Import all files from a local directory into a threat model."""
@@ -169,31 +171,10 @@ async def threat_model_import_directory(
             redirect_to=f"/threat-models/{tm_id}/",
         )
 
-    count = 0
-    for file_path in sorted(dir_path.rglob("*")):
-        if not file_path.is_file():
-            continue
-        try:
-            content = file_path.read_text()
-        except (UnicodeDecodeError, OSError):
-            continue
+    from llmpuffin.threat_model_service import ThreatModelService
 
-        rel = str(file_path.relative_to(dir_path))
-        existing = (
-            await db.execute(
-                select(ThreatModelFile).where(
-                    ThreatModelFile.threat_model_id == tm_id,
-                    ThreatModelFile.path == rel,
-                )
-            )
-        ).scalar_one_or_none()
-        if existing:
-            existing.content = content
-        else:
-            db.add(ThreatModelFile(threat_model_id=tm_id, path=rel, content=content))
-        count += 1
-
-    await db.commit()
+    svc = ThreatModelService(llmpuffin_db)
+    count = await svc.import_directory(tm_id, dir_path)
     return toast(
         request,
         "success",
