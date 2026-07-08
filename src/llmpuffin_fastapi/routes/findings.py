@@ -241,9 +241,9 @@ async def findings_merge(
         )
 
     keep_id_int = int(keep_id)
-    duplicate_ids = [int(fid) for fid in finding_ids if int(fid) != keep_id_int]
+    all_ids = [int(fid) for fid in finding_ids]
 
-    if not duplicate_ids:
+    if len(all_ids) < 2:
         return toast(
             request,
             "error",
@@ -251,13 +251,12 @@ async def findings_merge(
             redirect_to="/findings/clusters/",
         )
 
-    for fid in duplicate_ids:
-        await svc.update_by_pk(fid, status="duplicate")
+    count = await svc.merge_duplicates(keep_id_int, all_ids)
 
     return toast(
         request,
         "success",
-        f"Merged {len(duplicate_ids)} finding(s) as duplicate",
+        f"Merged {count} finding(s) as duplicate",
         redirect_to="/findings/clusters/",
         refresh=True,
     )
@@ -306,32 +305,9 @@ async def finding_detail(
             )
         ).scalar_one_or_none()
 
-    similar_findings: list[tuple[Finding, float]] = []
+    from llmpuffin.embeddings import find_similar_findings
 
-    from llmpuffin.embeddings import find_similar_global
-
-    similar_ids = find_similar_global(finding_id, db=llmpuffin_db)
-    if similar_ids:
-        sf_ids = [gid for gid, _ in similar_ids]
-        sf_scores = {gid: score for gid, score in similar_ids}
-        sf_rows = (
-            (
-                await db.execute(
-                    select(Finding)
-                    .where(Finding.id.in_(sf_ids))
-                    .options(
-                        selectinload(Finding.audit_run).selectinload(AuditRun.profile),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        similar_findings = sorted(
-            [(f, sf_scores[f.id]) for f in sf_rows],
-            key=lambda x: x[1],
-            reverse=True,
-        )
+    similar_findings = await find_similar_findings(finding_id, db=llmpuffin_db)
 
     return templates.TemplateResponse(
         request,

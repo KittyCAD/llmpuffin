@@ -289,3 +289,47 @@ def find_similar_global(
                     results.append((row[0], round(sim, 3)))
 
     return results
+
+
+async def find_similar_findings(
+    finding_id: int, *, db: DB, threshold: float = 0.8, limit: int = 10
+) -> list[tuple]:
+    """Find similar findings with full Finding objects loaded.
+
+    Returns list of (Finding, similarity_score) pairs, highest first.
+    Each Finding has audit_run and profile eagerly loaded.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from llmpuffin.models import AuditRun, Finding
+
+    similar_ids = find_similar_global(
+        finding_id, db=db, threshold=threshold, limit=limit
+    )
+    if not similar_ids:
+        return []
+
+    sf_ids = [gid for gid, _ in similar_ids]
+    sf_scores = {gid: score for gid, score in similar_ids}
+
+    async with db.async_session() as s:
+        rows = (
+            (
+                await s.execute(
+                    select(Finding)
+                    .where(Finding.id.in_(sf_ids))
+                    .options(
+                        selectinload(Finding.audit_run).selectinload(AuditRun.profile),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    return sorted(
+        [(f, sf_scores[f.id]) for f in rows],
+        key=lambda x: x[1],
+        reverse=True,
+    )

@@ -283,6 +283,18 @@ class FindingService:
             await self._refresh_embedding(finding_pk)
         return True
 
+    async def merge_duplicates(self, keep_id: int, duplicate_ids: list[int]) -> int:
+        """Mark findings as duplicates, keeping one as canonical.
+
+        Returns the number of findings marked as duplicate.
+        """
+        count = 0
+        for fid in duplicate_ids:
+            if fid != keep_id:
+                await self.update_by_pk(fid, status="duplicate")
+                count += 1
+        return count
+
     async def set_fork_thread(self, finding_pk: int, fork_thread_id: str) -> None:
         """Set the fork_thread_id on a finding."""
         async with self.db.async_session() as s:
