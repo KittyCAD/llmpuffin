@@ -54,7 +54,7 @@ from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.agent.harness import Harness, HarnessConfig
 from llmpuffin.log import log
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Project
 from llmpuffin.agent.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.threat_model import ThreatModel
 from llmpuffin.agent.tools import make_tools
@@ -578,8 +578,14 @@ async def _create_audit_run(
                 audit_run = old_thread.audit_run
             else:
                 if profile_id is None:
+                    project = await Project.get_or_create(
+                        s, name=config.profile.name
+                    )
                     db_profile = await AuditProfile.get_or_create(
-                        s, name=config.profile.name, profile_toml=config.profile_toml
+                        s,
+                        name=config.profile.name,
+                        profile_toml=config.profile_toml,
+                        project_id=project.id,
                     )
                     profile_id = db_profile.id
                 audit_run = AuditRun(
@@ -592,8 +598,14 @@ async def _create_audit_run(
                 await s.flush()
         else:
             if profile_id is None:
+                project = await Project.get_or_create(
+                    s, name=config.profile.name
+                )
                 db_profile = await AuditProfile.get_or_create(
-                    s, name=config.profile.name, profile_toml=config.profile_toml
+                    s,
+                    name=config.profile.name,
+                    profile_toml=config.profile_toml,
+                    project_id=project.id,
                 )
                 profile_id = db_profile.id
             audit_run = AuditRun(

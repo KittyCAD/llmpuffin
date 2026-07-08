@@ -62,6 +62,43 @@ class Base(DeclarativeBase):
     pass
 
 
+class Project(Base):
+    """A project groups related audit profiles targeting the same codebase."""
+
+    __tablename__ = "project"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), unique=True)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    profiles: Mapped[list[AuditProfile]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+    @staticmethod
+    async def get_or_create(session, *, name: str) -> Project:
+        """Get or create a Project by name."""
+        project = (
+            await session.execute(select(Project).where(Project.name == name))
+        ).scalar_one_or_none()
+        if project is None:
+            project = Project(name=name)
+            session.add(project)
+            await session.flush()
+        return project
+
+
 class AuditProfile(Base):
     """A reusable audit configuration (profile TOML stored in DB).
 
@@ -72,7 +109,10 @@ class AuditProfile(Base):
     __tablename__ = "audit_profile"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String(256), unique=True)
+    project_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("project.id", ondelete="CASCADE")
+    )
+    name: Mapped[str] = mapped_column(String(256))
     profile_toml: Mapped[str] = mapped_column(Text)
     jit: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
@@ -84,8 +124,13 @@ class AuditProfile(Base):
         onupdate=func.now(),
     )
 
+    project: Mapped[Project] = relationship(back_populates="profiles")
     runs: Mapped[list[AuditRun]] = relationship(
         back_populates="profile", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_audit_profile_project_name"),
     )
 
     def __str__(self) -> str:
@@ -95,13 +140,21 @@ class AuditProfile(Base):
         return tomllib.loads(self.profile_toml)
 
     @staticmethod
-    async def get_or_create(session, *, name: str, profile_toml: str) -> AuditProfile:
-        """Get or create an AuditProfile by name. CLI runs get jit=True."""
+    async def get_or_create(
+        session, *, name: str, profile_toml: str, project_id: int
+    ) -> AuditProfile:
+        """Get or create an AuditProfile by name within a project. CLI runs get jit=True."""
         profile = (
-            await session.execute(select(AuditProfile).where(AuditProfile.name == name))
+            await session.execute(
+                select(AuditProfile).where(
+                    AuditProfile.project_id == project_id,
+                    AuditProfile.name == name,
+                )
+            )
         ).scalar_one_or_none()
         if profile is None:
             profile = AuditProfile(
+                project_id=project_id,
                 name=name,
                 profile_toml=profile_toml,
                 jit=True,

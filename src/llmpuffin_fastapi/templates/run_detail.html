@@ -142,7 +142,7 @@
 
   {% if run.profile_toml or (run.profile and run.profile.profile_toml) %}
   <h3>Profile TOML</h3>
-  <pre class="card mono text-xs">{{ run.profile_toml or run.profile.profile_toml }}</pre>
+  <pre class="toml-highlight"><code class="language-toml" x-data x-init="if (Prism) Prism.highlightElement($el)">{{ run.profile_toml or run.profile.profile_toml }}</code></pre>
   {% endif %}
 {% endif %}
 

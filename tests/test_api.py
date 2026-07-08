@@ -165,8 +165,11 @@ class TestProfiles:
         assert resp.status_code == 200
 
     def test_create_profile(self, client):
+        from llmpuffin.models import Project
+
+        proj_id = _insert(Project, name="create-profile-proj")
         resp = client.post(
-            "/profiles/create/",
+            f"/projects/{proj_id}/profiles/create/",
             data={
                 "name": "test-profile",
                 "profile_toml": '[audit]\nname = "test"\nimage = "img:v1"\nthreat_model = "tm/"',
@@ -179,25 +182,33 @@ class TestProfiles:
         assert "test-profile" in resp.text
 
     def test_create_profile_invalid_toml(self, client):
+        from llmpuffin.models import Project
+
+        proj_id = _insert(Project, name="bad-toml-proj")
         resp = client.post(
-            "/profiles/create/",
+            f"/projects/{proj_id}/profiles/create/",
             data={"name": "bad", "profile_toml": "not valid toml {{{"},
         )
         assert resp.status_code in (204, 303)
 
     def test_create_profile_empty_name(self, client):
+        from llmpuffin.models import Project
+
+        proj_id = _insert(Project, name="empty-name-proj")
         resp = client.post(
-            "/profiles/create/",
+            f"/projects/{proj_id}/profiles/create/",
             data={"name": "", "profile_toml": "[audit]"},
         )
         assert resp.status_code in (204, 303)
 
     def test_profile_detail(self, client):
-        from llmpuffin.models import AuditProfile
+        from llmpuffin.models import AuditProfile, Project
 
+        proj_id = _insert(Project, name="detail-proj")
         pid = _insert(
             AuditProfile,
             name="detail-test",
+            project_id=proj_id,
             profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model = "t"',
         )
         resp = client.get(f"/profiles/{pid}/")
@@ -209,11 +220,13 @@ class TestProfiles:
         assert resp.status_code == 404
 
     def test_update_profile(self, client):
-        from llmpuffin.models import AuditProfile
+        from llmpuffin.models import AuditProfile, Project
 
+        proj_id = _insert(Project, name="update-proj")
         pid = _insert(
             AuditProfile,
             name="update-me",
+            project_id=proj_id,
             profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model = "t"',
         )
         resp = client.post(

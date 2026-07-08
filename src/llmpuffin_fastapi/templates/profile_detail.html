@@ -1,48 +1,146 @@
 {% extends "base.html" %}
 {% block title %}{{ profile.name }}{% endblock %}
 {% block content %}
-<p><a href="/profiles/">← all profiles</a></p>
-<div class="row" style="justify-content: space-between; align-items: baseline;">
-  <h1>{{ profile.name }}</h1>
-  <form hx-post="/profiles/{{ profile.id }}/run/" hx-disabled-elt="find button" class="inline">
-    <button type="submit" class="primary">run audit</button>
+{% set tab = request.query_params.get('tab') or 'runs' %}
+
+<p><a href="/projects/{{ profile.project_id }}/">← project</a> · <a href="/profiles/">all profiles</a></p>
+
+{# ─── Header ─── #}
+<div x-data="{ editing: false }">
+<div class="row" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
+  <div class="row gap-2" style="align-items: baseline;">
+    <h1 x-show="!editing">{{ profile.name }}</h1>
+    {% if profile.jit %}<span class="badge outline text-xs" x-show="!editing">jit</span>{% endif %}
+    <button class="btn ghost text-xs" x-show="!editing" @click="editing = true" style="padding: 0.125rem 0.375rem;">edit</button>
+  </div>
+  <div class="row gap-2" x-show="!editing">
+    <form hx-post="/profiles/{{ profile.id }}/run/" hx-disabled-elt="find button" class="inline">
+      <button type="submit" class="primary">run audit</button>
+    </form>
+    <form hx-post="/profiles/{{ profile.id }}/delete/" hx-disabled-elt="find button" hx-confirm="Delete profile '{{ profile.name }}' and all its runs?" class="inline">
+      <button type="submit" class="destructive text-xs">delete</button>
+    </form>
+  </div>
+</div>
+
+{# ─── Inline project switcher (always visible) ─── #}
+<div class="row gap-2 mt-1" x-show="!editing" style="align-items: center;">
+  <span class="text-xs text-muted">Project:</span>
+  <form hx-post="/profiles/{{ profile.id }}/"
+        hx-disabled-elt="find select"
+        style="display: inline;">
+    <input type="hidden" name="name" value="{{ profile.name }}">
+    <input type="hidden" name="profile_toml" value="{{ profile.profile_toml | e }}">
+    <select name="project_id" class="text-sm" style="padding: 0.125rem 0.375rem; min-width: 0; width: auto;"
+            @change="$el.form.requestSubmit()">
+      {% for pid, pname in projects %}
+      <option value="{{ pid }}" {% if pid == profile.project_id %}selected{% endif %}>{{ pname }}</option>
+      {% endfor %}
+    </select>
   </form>
 </div>
 
-<form hx-post="/profiles/{{ profile.id }}/" hx-disabled-elt="find button, find input, find textarea" class="card col gap-3 mt-4" style="max-width: 64rem;">
-  <div>
-    <label for="name">Name</label>
-    <input type="text" name="name" id="name" value="{{ profile.name }}" required>
+{# ─── Inline edit form ─── #}
+<form x-show="editing" x-cloak
+      hx-post="/profiles/{{ profile.id }}/"
+      hx-disabled-elt="find button, find input, find textarea, find select"
+      class="card col gap-3 mt-2" style="max-width: 64rem;">
+  <div class="row gap-4" style="flex-wrap: wrap; align-items: flex-start;">
+    <div style="flex: 1; min-width: 12rem;">
+      <label for="name">Name</label>
+      <input type="text" name="name" id="name" value="{{ profile.name }}" required>
+    </div>
+    <div style="flex: 1; min-width: 12rem;">
+      <label for="project_id">Project</label>
+      <select name="project_id" id="project_id">
+        {% for pid, pname in projects %}
+        <option value="{{ pid }}" {% if pid == profile.project_id %}selected{% endif %}>{{ pname }}</option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
   <div>
     <label for="profile_toml">Config (TOML)</label>
-    <textarea name="profile_toml" id="profile_toml" rows="20" required>{{ profile.profile_toml }}</textarea>
+    {% set toml_value = profile.profile_toml %}
+    {% include "_toml_editor.html" %}
   </div>
-  <div><button type="submit" class="primary">Save</button></div>
+  <div class="row gap-2">
+    <button type="submit" class="primary">Save</button>
+    <button type="button" class="ghost" @click="editing = false">Cancel</button>
+  </div>
 </form>
+</div>
 
+{# ─── Tabs ─── #}
+<div class="tabs mt-4">
+  <a class="tab {% if tab == 'runs' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=runs">
+    Runs <span class="tab-count">{{ runs | length }}</span>
+  </a>
+  <a class="tab {% if tab == 'config' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=config">
+    Config
+  </a>
+</div>
+
+{# ─── Runs tab ─── #}
+{% if tab == 'runs' %}
 {% if runs %}
-<h2>Runs</h2>
 <div class="card" style="padding: 0;">
-<table>
-<thead><tr><th>#</th><th>Status</th><th>Model</th><th>Started</th><th>Finished</th></tr></thead>
+<table x-data="sortable">
+<thead>
+  <tr>
+    <th @click="sort('id')" :class="sortClass('id')">#</th>
+    <th>Status</th>
+    <th @click="sort('model')" :class="sortClass('model')">Model</th>
+    <th @click="sort('started')" :class="sortClass('started')">Started</th>
+    <th @click="sort('finished')" :class="sortClass('finished')">Finished</th>
+  </tr>
+</thead>
 <tbody>
 {% for r in runs %}
-<tr>
-  <td><a href="/runs/{{ r.id }}/">#{{ r.id }}</a></td>
+<tr data-href="/runs/{{ r.id }}/">
+  <td data-sort-id="{{ r.id }}"><a href="/runs/{{ r.id }}/">#{{ r.id }}</a></td>
   <td>
     {% if r.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
     {% elif r.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
-    {% elif r.status == "failed" %}<span class="badge destructive"><span class="dot"></span>failed</span>
+    {% elif r.status == "error" %}<span class="badge destructive"><span class="dot"></span>error</span>
+    {% elif r.status == "recursion_limit" %}<span class="badge warning"><span class="dot"></span>recursion_limit</span>
     {% else %}<span class="badge outline">{{ r.status }}</span>{% endif %}
   </td>
-  <td class="mono text-xs text-muted">{{ r.model_name }}</td>
-  <td class="text-muted text-xs">{{ r.started_at | datetimefmt }}</td>
-  <td class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
+  <td data-sort-model="{{ r.model_name }}" class="mono text-xs text-muted">{{ r.model_name }}</td>
+  <td data-sort-started="{{ r.started_at.isoformat() if r.started_at else '' }}" class="text-muted text-xs">{{ r.started_at | datetimefmt }}</td>
+  <td data-sort-finished="{{ r.finished_at.isoformat() if r.finished_at else '' }}" class="text-muted text-xs">{{ (r.finished_at | datetimefmt) or "—" }}</td>
 </tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
+{% else %}
+<div class="card" style="text-align: center; padding: 2rem;">
+  <p class="text-muted">No runs yet.</p>
+  <form hx-post="/profiles/{{ profile.id }}/run/" hx-disabled-elt="find button" class="inline mt-2">
+    <button type="submit" class="primary">Run first audit</button>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+{# ─── Config tab ─── #}
+{% if tab == 'config' %}
+<div class="card col gap-2">
+  <div class="row gap-4" style="flex-wrap: wrap;">
+    {% set cfg = profile.parsed_config() %}
+    {% set audit = cfg.get("audit", {}) %}
+    {% set agent = cfg.get("agent", {}) %}
+    <div><div class="text-xs text-muted">Image</div><span class="mono text-sm">{{ audit.get("image", "—") }}</span></div>
+    <div><div class="text-xs text-muted">Threat model</div><span class="mono text-sm">{{ audit.get("threat_model", "—") }}</span></div>
+    <div><div class="text-xs text-muted">Model</div><span class="mono text-sm">{{ agent.get("model", "—") }}</span></div>
+    <div><div class="text-xs text-muted">Max iterations</div><span class="mono text-sm">{{ agent.get("max_iterations", "—") }}</span></div>
+    <div><div class="text-xs text-muted">Code dir</div><span class="mono text-sm">{{ audit.get("code_dir", "/src") }}</span></div>
+    <div><div class="text-xs text-muted">Created</div><span class="text-sm">{{ profile.created_at | datetimefmt }}</span></div>
+    <div><div class="text-xs text-muted">Updated</div><span class="text-sm">{{ profile.updated_at | datetimefmt }}</span></div>
+  </div>
+</div>
+<h3>Profile TOML</h3>
+<pre class="toml-highlight"><code class="language-toml" x-data x-init="if (Prism) Prism.highlightElement($el)">{{ profile.profile_toml }}</code></pre>
 {% endif %}
 {% endblock %}

@@ -17,12 +17,14 @@ from llmpuffin.agent.harness import HarnessConfig
 from llmpuffin.db import DB
 from llmpuffin.agent.harness import Harness
 from llmpuffin.services.profile import ProfileService
+from llmpuffin.services.project import ProjectService
 from llmpuffin_fastapi.deps import (
     get_config,
     get_github_client,
     get_harness,
     get_llmpuffin_db,
     get_profile_service,
+    get_project_service,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -51,6 +53,7 @@ async def profiles_list(
                 "image": image,
                 "updated_at": p.updated_at,
                 "jit": p.jit,
+                "project_id": p.project_id,
             }
         )
     return templates.TemplateResponse(
@@ -58,26 +61,50 @@ async def profiles_list(
     )
 
 
-@router.post("/profiles/create/")
+@router.get("/projects/{project_id}/profiles/new/", response_class=HTMLResponse)
+async def profile_new(
+    project_id: int,
+    request: Request,
+    project_svc: Annotated[ProjectService, Depends(get_project_service)],
+):
+    project = await project_svc.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        request, "profile_new.html", {"project": project}
+    )
+
+
+@router.post("/projects/{project_id}/profiles/create/")
 async def profile_create(
+    project_id: int,
     request: Request,
     svc: Annotated[ProfileService, Depends(get_profile_service)],
+    project_svc: Annotated[ProjectService, Depends(get_project_service)],
     name: Annotated[str, Form()] = "",
     profile_toml: Annotated[str, Form()] = "",
 ):
+    project = await project_svc.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404)
+    redirect = f"/projects/{project_id}/profiles/new/"
     name = name.strip()
     profile_toml = profile_toml.strip()
     if not name or not profile_toml:
         return toast(
-            request, "error", "Name and config are required", redirect_to="/profiles/"
+            request, "error", "Name and config are required", redirect_to=redirect
         )
     try:
         tomllib.loads(profile_toml)
     except Exception as exc:
-        return toast(request, "error", f"Invalid TOML: {exc}", redirect_to="/profiles/")
-    await svc.create(name, profile_toml)
+        return toast(request, "error", f"Invalid TOML: {exc}", redirect_to=redirect)
+    await svc.create(name, profile_toml, project_id=project_id)
     return toast(
-        request, "success", f"Created {name}", redirect_to="/profiles/", refresh=True
+        request,
+        "success",
+        f"Created {name}",
+        redirect_to=f"/projects/{project_id}/",
+        refresh=True,
     )
 
 
@@ -86,14 +113,20 @@ async def profile_detail_get(
     profile_id: int,
     request: Request,
     svc: Annotated[ProfileService, Depends(get_profile_service)],
+    project_svc: Annotated[ProjectService, Depends(get_project_service)],
 ):
     profile = await svc.get(profile_id, with_runs=True)
     if profile is None:
         raise HTTPException(status_code=404)
+    projects = await project_svc.list_all()
     return templates.TemplateResponse(
         request,
         "profile_detail.html",
-        {"profile": profile, "runs": profile.runs},
+        {
+            "profile": profile,
+            "runs": profile.runs,
+            "projects": [(p.id, p.name) for p, _, _ in projects],
+        },
     )
 
 
@@ -104,6 +137,7 @@ async def profile_detail_post(
     svc: Annotated[ProfileService, Depends(get_profile_service)],
     name: Annotated[str, Form()] = "",
     profile_toml: Annotated[str, Form()] = "",
+    project_id: Annotated[int | None, Form()] = None,
 ):
     redirect = f"/profiles/{profile_id}/"
     try:
@@ -111,7 +145,9 @@ async def profile_detail_post(
     except Exception as exc:
         return toast(request, "error", f"Invalid TOML: {exc}", redirect_to=redirect)
 
-    if not await svc.update(profile_id, name.strip(), profile_toml):
+    if not await svc.update(
+        profile_id, name.strip(), profile_toml, project_id=project_id
+    ):
         raise HTTPException(status_code=404)
     return toast(
         request, "success", "Profile saved.", redirect_to=redirect, refresh=True
@@ -161,4 +197,20 @@ async def profile_run(
         "Audit started",
         redirect_to=f"/runs/{run_id}/",
         refresh=True,
+    )
+
+
+@router.post("/profiles/{profile_id}/delete/")
+async def profile_delete(
+    profile_id: int,
+    request: Request,
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
+):
+    error = await svc.delete(profile_id)
+    if error == "not_found":
+        raise HTTPException(status_code=404)
+    if error:
+        return toast(request, "error", error, redirect_to=f"/profiles/{profile_id}/")
+    return toast(
+        request, "success", "Profile deleted", redirect_to="/profiles/", refresh=True
     )

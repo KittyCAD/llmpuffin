@@ -18,6 +18,7 @@ from llmpuffin.github import client_from_config
 from llmpuffin.agent.harness import Harness
 from llmpuffin.log import setup as setup_logging
 from llmpuffin.services.profile import ProfileService
+from llmpuffin.services.project import ProjectService
 from llmpuffin.services.run import RunService
 from llmpuffin.services.skill import SkillService
 from llmpuffin.services.threat_model import ThreatModelService
@@ -29,6 +30,7 @@ from llmpuffin_fastapi.routes import (
     checkpoints,
     findings,
     profiles,
+    projects,
     runs,
     skills,
     threat_models,
@@ -78,6 +80,7 @@ def create_app() -> FastAPI:
     app.state.config = config
     app.state.db = DB(config.postgres)
     app.state.finding_service = FindingService(app.state.db)
+    app.state.project_service = ProjectService(app.state.db)
     app.state.profile_service = ProfileService(app.state.db)
     app.state.run_service = RunService(app.state.db)
     app.state.skill_service = SkillService(app.state.db)
@@ -89,6 +92,7 @@ def create_app() -> FastAPI:
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(runs.router)
+    app.include_router(projects.router)
     app.include_router(profiles.router)
     app.include_router(checkpoints.router)
     app.include_router(findings.router)

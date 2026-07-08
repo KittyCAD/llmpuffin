@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/projects/">← all projects</a></p>
+
+{# ─── Header ─── #}
+<div x-data="{ editing: false }">
+<div class="row" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
+  <div class="row gap-2" style="align-items: baseline;">
+    <h1 x-show="!editing">{{ project.name }}</h1>
+    <button class="btn ghost text-xs" x-show="!editing" @click="editing = true" style="padding: 0.125rem 0.375rem;">edit</button>
+  </div>
+  <div class="row gap-2" x-show="!editing">
+    <a href="/projects/{{ project.id }}/profiles/new/" class="btn primary">+ New profile</a>
+    <form hx-post="/projects/{{ project.id }}/delete/" hx-disabled-elt="find button" hx-confirm="Delete project '{{ project.name }}' and all its profiles?" class="inline">
+      <button type="submit" class="destructive text-xs">delete</button>
+    </form>
+  </div>
+</div>
+
+{# ─── Inline edit form ─── #}
+<form x-show="editing" x-cloak
+      hx-post="/projects/{{ project.id }}/"
+      hx-disabled-elt="find button, find input, find textarea"
+      class="card col gap-3 mt-2" style="max-width: 48rem;">
+  <div>
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" value="{{ project.name }}" required>
+  </div>
+  <div>
+    <label for="description">Description</label>
+    <textarea name="description" id="description" rows="2">{{ project.description }}</textarea>
+  </div>
+  <div class="row gap-2">
+    <button type="submit" class="primary">Save</button>
+    <button type="button" class="ghost" @click="editing = false">Cancel</button>
+  </div>
+</form>
+
+{% if project.description %}
+<p class="text-muted text-sm mt-1" x-show="!editing">{{ project.description }}</p>
+{% endif %}
+</div>
+
+{# ─── Profiles ─── #}
+{% if profiles %}
+<div class="card mt-4" style="padding: 0;">
+<table x-data="sortable">
+<thead>
+  <tr>
+    <th @click="sort('name')" :class="sortClass('name')">Name</th>
+    <th @click="sort('image')" :class="sortClass('image')">Image</th>
+    <th @click="sort('updated')" :class="sortClass('updated')">Updated</th>
+    <th></th>
+  </tr>
+</thead>
+<tbody>
+{% for p in profiles %}
+<tr data-href="/profiles/{{ p.id }}/">
+  <td data-sort-name="{{ p.name }}">
+    <a href="/profiles/{{ p.id }}/">{{ p.name }}</a>
+    {% if p.jit %}<span class="text-muted text-xs" title="Created automatically from CLI run">(jit)</span>{% endif %}
+  </td>
+  <td data-sort-image="{{ p.parsed_config().get('audit', {}).get('image', '') }}" class="mono text-xs text-muted">{{ p.parsed_config().get("audit", {}).get("image", "") }}</td>
+  <td data-sort-updated="{{ p.updated_at.isoformat() if p.updated_at else '' }}" class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
+  <td class="row gap-1" style="justify-content: flex-end;">
+    <form hx-post="/profiles/{{ p.id }}/run/" hx-disabled-elt="find button" class="inline">
+      <button type="submit" class="primary">run</button>
+    </form>
+    <form hx-post="/profiles/{{ p.id }}/delete/" hx-disabled-elt="find button" hx-confirm="Delete profile '{{ p.name }}' and all its runs?" class="inline">
+      <button type="submit" class="destructive text-xs">delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="card mt-4" style="text-align: center; padding: 2rem;">
+  <p class="text-muted">No profiles yet.</p>
+  <a href="/projects/{{ project.id }}/profiles/new/" class="btn primary mt-2">Create a profile</a>
+</div>
+{% endif %}
+{% endblock %}

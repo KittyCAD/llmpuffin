@@ -3,7 +3,6 @@
 {% block content %}
 <div class="row" style="justify-content: space-between; align-items: baseline;">
   <h1>Profiles</h1>
-  <a href="#create" class="btn primary">+ New profile</a>
 </div>
 
 <div x-data="{ showJit: false }" class="mt-4">
@@ -32,42 +31,20 @@
   </td>
   <td data-sort-image="{{ p.image }}" class="mono text-xs text-muted">{{ p.image }}</td>
   <td data-sort-updated="{{ p.updated_at.isoformat() if p.updated_at else '' }}" class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
-  <td>
+  <td class="row gap-1" style="justify-content: flex-end;">
     <form hx-post="/profiles/{{ p.id }}/run/" hx-disabled-elt="find button" class="inline">
       <button type="submit" class="primary">run</button>
+    </form>
+    <form hx-post="/profiles/{{ p.id }}/delete/" hx-disabled-elt="find button" hx-confirm="Delete profile '{{ p.name }}' and all its runs?" class="inline">
+      <button type="submit" class="destructive text-xs">delete</button>
     </form>
   </td>
 </tr>
 {% else %}
-<tr><td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">No profiles yet. Create one below to get started.</td></tr>
+<tr><td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">No profiles yet. Create one from a <a href="/projects/">project</a>.</td></tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
 </div>
-
-<h2 id="create">Create profile</h2>
-<form hx-post="/profiles/create/" hx-disabled-elt="find button, find input, find textarea" class="card col gap-3" style="max-width: 56rem;">
-  <div>
-    <label for="name">Name</label>
-    <input type="text" name="name" id="name" required>
-  </div>
-  <div>
-    <label for="profile_toml">Config (TOML)</label>
-    <textarea name="profile_toml" id="profile_toml" rows="16" required>
-[audit]
-name = "vulnerable-app"
-image = "llmpuffin-vulnerable-app"
-threat_model = "vulnerable-app"
-model = "claude-sonnet-4-20250514"
-max_iterations = 200
-code_dir = "/src"
-output = "examples/vulnerable-app/results.sarif"
-
-[agent]
-skills = ["audit-context-building"]
-</textarea>
-  </div>
-  <div><button type="submit" class="primary">Create</button></div>
-</form>
 {% endblock %}

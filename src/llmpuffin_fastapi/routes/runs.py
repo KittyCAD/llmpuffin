@@ -33,7 +33,7 @@ router = APIRouter()
 
 @router.get("/")
 async def root_redirect():
-    return RedirectResponse("/profiles/", status_code=303)
+    return RedirectResponse("/home/", status_code=303)
 
 
 @router.get("/runs/", response_class=HTMLResponse)

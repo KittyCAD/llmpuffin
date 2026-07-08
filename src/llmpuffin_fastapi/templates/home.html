@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_donut.html" import donut %}
+{% block title %}home{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+
+{% if stats.total_findings %}
+<h2 class="mt-4">Findings by severity</h2>
+<div class="card">
+{{ donut([
+  {"label": "High", "value": stats.high, "color": "hsl(var(--destructive))"},
+  {"label": "Medium", "value": stats.medium, "color": "hsl(var(--warning, 38 92% 50%))"},
+  {"label": "Low", "value": stats.low, "color": "hsl(var(--primary))"},
+  {"label": "Informational", "value": stats.informational, "color": "hsl(var(--muted-foreground))"},
+]) }}
+</div>
+{% else %}
+<p class="text-muted mt-4">No findings yet. Create a <a href="/projects/">project</a> and run an audit to get started.</p>
+{% endif %}
+{% endblock %}

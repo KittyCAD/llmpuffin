@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}new profile{% endblock %}
+{% block content %}
+<p><a href="/projects/{{ project.id }}/">← {{ project.name }}</a></p>
+<h1>New profile</h1>
+
+<form hx-post="/projects/{{ project.id }}/profiles/create/" hx-disabled-elt="find button, find input" class="card col gap-3 mt-4" style="max-width: 64rem;">
+  <div>
+    <label for="profile_name">Name</label>
+    <input type="text" name="name" id="profile_name" required autofocus>
+  </div>
+  <div>
+    <label for="profile_toml">Config (TOML)</label>
+    {% include "_toml_editor.html" %}
+  </div>
+  <div><button type="submit" class="primary">Create</button></div>
+</form>
+{% endblock %}

@@ -1,0 +1,50 @@
+{# Reusable donut chart component.
+
+   Usage:
+     {% from "_donut.html" import donut %}
+     {{ donut(segments, total=42) }}
+
+   Parameters:
+     segments — list of dicts: [{"label": "High", "value": 10, "color": "hsl(...)"}]
+     total    — (optional) override the center number; defaults to sum of values
+#}
+
+{% macro donut(segments, total=none) %}
+{% set t = total if total is not none else segments | sum(attribute="value") %}
+{% if t %}
+{% set circumference = 251.327 %}
+<div class="row gap-4" style="justify-content: center; align-items: center; flex-wrap: wrap;">
+  <div style="position: relative; width: 180px; height: 180px;">
+    <svg viewBox="0 0 100 100" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+      <circle cx="50" cy="50" r="40" fill="none" stroke="hsl(var(--border))" stroke-width="12" />
+      {% set ns = namespace(offset=0) %}
+      {% for seg in segments %}
+      {% if seg.value %}
+      {% set dash = (seg.value / t) * circumference %}
+      <circle cx="50" cy="50" r="40" fill="none"
+              stroke="{{ seg.color }}"
+              stroke-width="12"
+              stroke-dasharray="{{ dash }} {{ circumference - dash }}"
+              stroke-dashoffset="{{ -ns.offset }}"
+              stroke-linecap="butt" />
+      {% set ns.offset = ns.offset + dash %}
+      {% endif %}
+      {% endfor %}
+    </svg>
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+      <div style="font-size: 1.5rem; font-weight: 700; line-height: 1;">{{ t }}</div>
+      <div class="text-muted text-xs">total</div>
+    </div>
+  </div>
+  <div class="col gap-2" style="min-width: 10rem;">
+    {% for seg in segments %}
+    <div class="row gap-2">
+      <span style="width: 12px; height: 12px; border-radius: 2px; background: {{ seg.color }}; flex-shrink: 0;"></span>
+      <span class="text-sm">{{ seg.label }}</span>
+      <span class="text-sm" style="margin-left: auto; font-weight: 600;">{{ seg.value }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}

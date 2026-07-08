@@ -13,13 +13,12 @@ class ProfileService:
     def __init__(self, db: DB):
         self.db = db
 
-    async def list_all(self) -> list[AuditProfile]:
+    async def list_all(self, *, project_id: int | None = None) -> list[AuditProfile]:
         async with self.db.async_session() as s:
-            return list(
-                (await s.execute(select(AuditProfile).order_by(AuditProfile.name)))
-                .scalars()
-                .all()
-            )
+            stmt = select(AuditProfile).order_by(AuditProfile.name)
+            if project_id is not None:
+                stmt = stmt.where(AuditProfile.project_id == project_id)
+            return list((await s.execute(stmt)).scalars().all())
 
     async def get(
         self, profile_id: int, *, with_runs: bool = False
@@ -32,15 +31,26 @@ class ProfileService:
                 )
             return (await s.execute(stmt)).scalar_one_or_none()
 
-    async def create(self, name: str, profile_toml: str) -> AuditProfile:
+    async def create(
+        self, name: str, profile_toml: str, *, project_id: int
+    ) -> AuditProfile:
         async with self.db.async_session() as s:
-            profile = AuditProfile(name=name, profile_toml=profile_toml, jit=False)
+            profile = AuditProfile(
+                name=name, profile_toml=profile_toml, project_id=project_id, jit=False
+            )
             s.add(profile)
             await s.commit()
             await s.refresh(profile)
             return profile
 
-    async def update(self, profile_id: int, name: str, profile_toml: str) -> bool:
+    async def update(
+        self,
+        profile_id: int,
+        name: str,
+        profile_toml: str,
+        *,
+        project_id: int | None = None,
+    ) -> bool:
         """Update a profile. Returns False if not found."""
         async with self.db.async_session() as s:
             profile = (
@@ -52,5 +62,26 @@ class ProfileService:
                 return False
             profile.name = name
             profile.profile_toml = profile_toml
+            if project_id is not None:
+                profile.project_id = project_id
             await s.commit()
             return True
+
+    async def delete(self, profile_id: int) -> str | None:
+        """Delete a profile. Returns error message or None on success."""
+        async with self.db.async_session() as s:
+            profile = (
+                await s.execute(
+                    select(AuditProfile)
+                    .options(selectinload(AuditProfile.runs).selectinload(AuditRun.threads))
+                    .where(AuditProfile.id == profile_id)
+                )
+            ).scalar_one_or_none()
+            if profile is None:
+                return "not_found"
+            running = any(r.status == "running" for r in profile.runs)
+            if running:
+                return "Cannot delete a profile with running audits"
+            await s.delete(profile)
+            await s.commit()
+            return None

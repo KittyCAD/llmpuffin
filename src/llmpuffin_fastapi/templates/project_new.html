@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}new project{% endblock %}
+{% block content %}
+<p><a href="/projects/">← all projects</a></p>
+<h1>New project</h1>
+
+<form hx-post="/projects/create/" hx-disabled-elt="find button, find input, find textarea" class="card col gap-3 mt-4" style="max-width: 48rem;">
+  <div>
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" required autofocus>
+  </div>
+  <div>
+    <label for="description">Description <span class="text-muted text-xs">(optional)</span></label>
+    <textarea name="description" id="description" rows="3"></textarea>
+  </div>
+  <div><button type="submit" class="primary">Create</button></div>
+</form>
+{% endblock %}

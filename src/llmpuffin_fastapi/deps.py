@@ -17,6 +17,7 @@ from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.agent.harness import Harness
 from llmpuffin.services.profile import ProfileService
+from llmpuffin.services.project import ProjectService
 from llmpuffin.services.run import RunService
 from llmpuffin.services.skill import SkillService
 from llmpuffin.services.threat_model import ThreatModelService
@@ -94,6 +95,10 @@ def get_llmpuffin_db(request: Request) -> DB:
 
 def get_finding_service(request: Request) -> FindingService:
     return request.app.state.finding_service
+
+
+def get_project_service(request: Request) -> ProjectService:
+    return request.app.state.project_service
 
 
 def get_profile_service(request: Request) -> ProfileService:

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}projects{% endblock %}
+{% block content %}
+<div class="row" style="justify-content: space-between; align-items: baseline;">
+  <h1>Projects</h1>
+  <a href="/projects/new/" class="btn primary">+ New project</a>
+</div>
+
+<div class="card mt-4" style="padding: 0;">
+<table x-data="sortable">
+<thead>
+  <tr>
+    <th @click="sort('name')" :class="sortClass('name')">Name</th>
+    <th @click="sort('profiles')" :class="sortClass('profiles')">Profiles</th>
+    <th @click="sort('runs')" :class="sortClass('runs')">Runs</th>
+    <th @click="sort('updated')" :class="sortClass('updated')">Updated</th>
+  </tr>
+</thead>
+<tbody>
+{% for p in projects %}
+<tr data-href="/projects/{{ p.id }}/">
+  <td data-sort-name="{{ p.name }}">
+    <a href="/projects/{{ p.id }}/">{{ p.name }}</a>
+    {% if p.description %}<br><span class="text-muted text-xs">{{ p.description[:80] }}</span>{% endif %}
+  </td>
+  <td data-sort-profiles="{{ p.profile_count }}">{{ p.profile_count }}</td>
+  <td data-sort-runs="{{ p.run_count }}">{{ p.run_count }}</td>
+  <td data-sort-updated="{{ p.updated_at.isoformat() if p.updated_at else '' }}" class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">No projects yet. <a href="/projects/new/">Create one</a> to get started.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
