@@ -2,7 +2,7 @@
 
 from typing import Callable
 
-from llmpuffin.subagents._constants import MAIN_AGENT_TOOLS
+from llmpuffin.agent.subagents._constants import MAIN_AGENT_TOOLS
 
 TOOLS = ("get_threat_model", "get_threat_scenario", *MAIN_AGENT_TOOLS)
 

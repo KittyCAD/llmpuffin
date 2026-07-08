@@ -26,7 +26,7 @@ from deepagents.backends.protocol import (
 )
 
 from llmpuffin.audit_environment import AuditExecution
-from llmpuffin.coverage import CoverageTracker
+from llmpuffin.services.coverage import CoverageTracker
 
 DEFAULT_EXECUTE_TIMEOUT = 120
 

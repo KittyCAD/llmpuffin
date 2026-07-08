@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llmpuffin.backend import ContainerBackend
+from llmpuffin.agent.backend import ContainerBackend
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

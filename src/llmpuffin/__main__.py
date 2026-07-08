@@ -13,9 +13,9 @@ from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.db import DB
 from llmpuffin.github import client_from_config
-from llmpuffin.harness import HarnessConfig
+from llmpuffin.agent.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
-from llmpuffin.sarif import export_sarif_for_run
+from llmpuffin.services.sarif import export_sarif_for_run
 
 log = logging.getLogger("llmpuffin")
 
@@ -31,7 +31,7 @@ async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
 
     if config.backfill_embeddings:
         try:
-            from llmpuffin.embeddings import backfill_embeddings
+            from llmpuffin.services.embeddings import backfill_embeddings
 
             log.info("Backfilling finding embeddings...")
             count = await backfill_embeddings(db=db)

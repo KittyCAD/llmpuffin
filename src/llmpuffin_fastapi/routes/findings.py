@@ -16,8 +16,8 @@ from sqlalchemy.orm import selectinload
 from llmpuffin.agent import fork_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import HarnessConfig
-from llmpuffin.finding_service import FindingService
+from llmpuffin.agent.harness import HarnessConfig
+from llmpuffin.services.finding import FindingService
 from llmpuffin.models import (
     AuditProfile,
     AuditRun,
@@ -27,7 +27,7 @@ from llmpuffin.models import (
 )
 
 from llmpuffin.db import DB
-from llmpuffin.harness import Harness
+from llmpuffin.agent.harness import Harness
 from llmpuffin_fastapi.deps import (
     get_base_url,
     get_config,
@@ -166,7 +166,7 @@ async def findings_clusters(
     db: Annotated[AsyncSession, Depends(get_db)],
     threshold: float = 0.8,
 ):
-    from llmpuffin.embeddings import cluster_findings
+    from llmpuffin.services.embeddings import cluster_findings
 
     clusters = cluster_findings(db=llmpuffin_db, threshold=threshold)
 
@@ -279,7 +279,7 @@ async def finding_detail(
     if finding is None:
         raise HTTPException(status_code=404)
 
-    from llmpuffin.checkpoint import get_session
+    from llmpuffin.agent.checkpoint import get_session
 
     fork_session = None
     fork_thread = None
@@ -293,7 +293,7 @@ async def finding_detail(
             )
         ).scalar_one_or_none()
 
-    from llmpuffin.embeddings import find_similar_findings
+    from llmpuffin.services.embeddings import find_similar_findings
 
     similar_findings = await find_similar_findings(finding_id, db=llmpuffin_db)
 
@@ -370,7 +370,7 @@ async def finding_report_to_github(
             request, "error", "GitHub App not configured", redirect_to=redirect
         )
 
-    from llmpuffin.github_reporting import report_finding_to_github
+    from llmpuffin.services.github import report_finding_to_github
 
     result = await report_finding_to_github(
         finding, gh=gh, db=llmpuffin_db, base_url=base_url
@@ -460,7 +460,7 @@ async def finding_fork(
     # Re-fetch to get updated fork_thread_id, load fork session/thread for the
     # conversation partial (may be empty — messages div will start polling immediately).
     await db.refresh(finding)
-    from llmpuffin.checkpoint import get_session
+    from llmpuffin.agent.checkpoint import get_session
 
     fork_session = await get_session(new_thread_id, db=llmpuffin_db)
     fork_thread = (

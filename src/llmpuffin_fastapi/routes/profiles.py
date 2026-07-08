@@ -12,11 +12,11 @@ from fastapi.responses import HTMLResponse
 from llmpuffin.agent import create_audit_run, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import HarnessConfig
+from llmpuffin.agent.harness import HarnessConfig
 
 from llmpuffin.db import DB
-from llmpuffin.harness import Harness
-from llmpuffin.profile_service import ProfileService
+from llmpuffin.agent.harness import Harness
+from llmpuffin.services.profile import ProfileService
 from llmpuffin_fastapi.deps import (
     get_config,
     get_github_client,

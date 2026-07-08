@@ -46,18 +46,18 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
 
-from llmpuffin.backend import ContainerBackend
+from llmpuffin.agent.backend import ContainerBackend
 from llmpuffin.config import Config
-from llmpuffin.coverage import CoverageTracker
+from llmpuffin.services.coverage import CoverageTracker
 from llmpuffin.db import DB
-from llmpuffin.finding_service import FindingService
+from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import Harness, HarnessConfig
+from llmpuffin.agent.harness import Harness, HarnessConfig
 from llmpuffin.log import log
 from llmpuffin.models import AuditProfile, AuditRun, AuditThread
-from llmpuffin.subagents import MAIN_AGENT_TOOLS, build_subagents
+from llmpuffin.agent.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.threat_model import ThreatModel
-from llmpuffin.tools import make_tools
+from llmpuffin.agent.tools import make_tools
 
 
 class AuditStatus(StrEnum):
@@ -328,7 +328,7 @@ async def _execute_pipeline(
 
     Shared implementation for both fresh audits and forks.
     """
-    from llmpuffin.harness_steps import (
+    from llmpuffin.agent.steps import (
         resolved_thread,
         environment_context,
         clone_repos,

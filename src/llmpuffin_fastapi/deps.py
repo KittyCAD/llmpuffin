@@ -13,13 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from llmpuffin.config import Config
 from llmpuffin.db import DB
-from llmpuffin.finding_service import FindingService
+from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import Harness
-from llmpuffin.profile_service import ProfileService
-from llmpuffin.run_service import RunService
-from llmpuffin.skill_service import SkillService
-from llmpuffin.threat_model_service import ThreatModelService
+from llmpuffin.agent.harness import Harness
+from llmpuffin.services.profile import ProfileService
+from llmpuffin.services.run import RunService
+from llmpuffin.services.skill import SkillService
+from llmpuffin.services.threat_model import ThreatModelService
 
 log = logging.getLogger("llmpuffin")
 

@@ -42,7 +42,7 @@ class FindingService:
     async def _refresh_embedding(self, finding_pk: int) -> None:
         """Best-effort: regenerate embedding after text fields change."""
         try:
-            from llmpuffin.embeddings import embed_finding
+            from llmpuffin.services.embeddings import embed_finding
 
             embed_finding(finding_pk, db=self.db)
         except Exception as exc:

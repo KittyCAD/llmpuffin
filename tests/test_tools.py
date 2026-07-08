@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from langchain_core.tools import StructuredTool
 
 from llmpuffin.threat_model import ThreatModel
-from llmpuffin.tools import make_tools
+from llmpuffin.agent.tools import make_tools
 
 
 def _make_tools() -> dict:

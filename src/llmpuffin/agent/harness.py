@@ -127,7 +127,7 @@ class Harness:
         cfg = self.global_config
         if cfg.runtime == "nexecutor":
             try:
-                from llmpuffin.runtime_nexecutor import NexecutorRuntime
+                from llmpuffin.runtime.nexecutor import NexecutorRuntime
             except ImportError as exc:
                 raise RuntimeError(
                     f"nexecutor-client is not installed or outdated: {exc}. "
@@ -144,7 +144,7 @@ class Harness:
             )
         elif cfg.runtime == "microvm":
             try:
-                from llmpuffin.runtime_microvm import MicrovmRuntime
+                from llmpuffin.runtime.microvm import MicrovmRuntime
             except ImportError as exc:
                 raise RuntimeError(
                     "boto3 is not installed. Install it with: pip install boto3"
@@ -164,7 +164,7 @@ class Harness:
                 container_id=container_id,
             )
         else:
-            from llmpuffin.runtime_podman import PodmanEnvironment
+            from llmpuffin.runtime.podman import PodmanEnvironment
 
             return await PodmanEnvironment(
                 image=p.image,

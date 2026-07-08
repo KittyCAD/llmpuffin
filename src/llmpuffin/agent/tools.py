@@ -13,9 +13,9 @@ from typing import Callable, Literal
 from langgraph.prebuilt.tool_node import ToolRuntime
 from pydantic import BaseModel, Field
 
-from llmpuffin.backend import ContainerBackend
+from llmpuffin.agent.backend import ContainerBackend
 from llmpuffin.db import DB
-from llmpuffin.finding_service import FindingService
+from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.models import Finding, GitInfo
 from llmpuffin.threat_model import ThreatModel, ThreatModelView
@@ -521,7 +521,10 @@ Existing mitigations to verify:
         with coverage percentages. Use this to identify areas of the codebase
         that have not been examined yet.
         """
-        from llmpuffin.coverage import load_coverage_for_run, build_coverage_tree
+        from llmpuffin.services.coverage import (
+            load_coverage_for_run,
+            build_coverage_tree,
+        )
 
         all_files, accessed = load_coverage_for_run(audit_run_id, db=db)
         if not all_files:
@@ -565,7 +568,7 @@ Existing mitigations to verify:
             return f"Finding {finding_id} not found"
 
         try:
-            from llmpuffin.embeddings import find_similar_global
+            from llmpuffin.services.embeddings import find_similar_global
 
             results = find_similar_global(db_finding.id, db=db, threshold=threshold)
         except Exception as exc:

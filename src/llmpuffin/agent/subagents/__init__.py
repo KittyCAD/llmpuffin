@@ -6,10 +6,10 @@ tools can be scoped per-subagent.
 
 from typing import Callable
 
-from llmpuffin.subagents._constants import MAIN_AGENT_TOOLS
-from llmpuffin.subagents.finding_validator import finding_validator
-from llmpuffin.subagents.function_analyzer import function_analyzer
-from llmpuffin.subagents.threat_model_auditor import threat_model_auditor
+from llmpuffin.agent.subagents._constants import MAIN_AGENT_TOOLS
+from llmpuffin.agent.subagents.finding_validator import finding_validator
+from llmpuffin.agent.subagents.function_analyzer import function_analyzer
+from llmpuffin.agent.subagents.threat_model_auditor import threat_model_auditor
 
 __all__ = ["MAIN_AGENT_TOOLS", "build_subagents"]
 

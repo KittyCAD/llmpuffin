@@ -13,14 +13,14 @@ from fastapi.staticfiles import StaticFiles
 
 from llmpuffin.config import Config
 from llmpuffin.db import DB
-from llmpuffin.finding_service import FindingService
+from llmpuffin.services.finding import FindingService
 from llmpuffin.github import client_from_config
-from llmpuffin.harness import Harness
+from llmpuffin.agent.harness import Harness
 from llmpuffin.log import setup as setup_logging
-from llmpuffin.profile_service import ProfileService
-from llmpuffin.run_service import RunService
-from llmpuffin.skill_service import SkillService
-from llmpuffin.threat_model_service import ThreatModelService
+from llmpuffin.services.profile import ProfileService
+from llmpuffin.services.run import RunService
+from llmpuffin.services.skill import SkillService
+from llmpuffin.services.threat_model import ThreatModelService
 
 from llmpuffin_fastapi.auth import get_current_user, setup_auth
 from llmpuffin_fastapi.deps import set_github_client
@@ -51,7 +51,7 @@ async def _lifespan(app: FastAPI):
 
     if config.backfill_embeddings:
         try:
-            from llmpuffin.embeddings import backfill_embeddings
+            from llmpuffin.services.embeddings import backfill_embeddings
 
             log.info("Backfilling finding embeddings...")
             count = await backfill_embeddings(db=app.state.db)

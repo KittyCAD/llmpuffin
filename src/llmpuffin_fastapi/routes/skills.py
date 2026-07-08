@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from llmpuffin.skill_service import SkillService
+from llmpuffin.services.skill import SkillService
 from llmpuffin_fastapi.deps import get_skill_service, toast
 from llmpuffin_fastapi.templates_env import templates
 

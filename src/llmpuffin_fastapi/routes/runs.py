@@ -11,12 +11,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from llmpuffin.agent import fork_audit, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import HarnessConfig
-from llmpuffin.sarif import export_sarif_for_run
+from llmpuffin.agent.harness import HarnessConfig
+from llmpuffin.services.sarif import export_sarif_for_run
 
 from llmpuffin.db import DB
-from llmpuffin.harness import Harness
-from llmpuffin.run_service import RunService
+from llmpuffin.agent.harness import Harness
+from llmpuffin.services.run import RunService
 from llmpuffin_fastapi.deps import (
     get_config,
     get_github_client,
@@ -107,7 +107,7 @@ async def run_coverage(
     if run is None:
         raise HTTPException(status_code=404)
 
-    from llmpuffin.coverage import build_coverage_tree, load_coverage_for_run
+    from llmpuffin.services.coverage import build_coverage_tree, load_coverage_for_run
 
     all_files, accessed = load_coverage_for_run(run_id, db=llmpuffin_db)
     tree = build_coverage_tree(all_files, accessed) if all_files else None

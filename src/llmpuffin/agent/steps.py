@@ -14,13 +14,13 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy import update
 
-from llmpuffin.agent import AuditStatus, _build_agent, _stream_agent
+from llmpuffin.agent.orchestrator import AuditStatus, _build_agent, _stream_agent
 from llmpuffin.audit_environment import AuditExecution, GitInfo
-from llmpuffin.coverage import CoverageTracker
+from llmpuffin.services.coverage import CoverageTracker
 from llmpuffin.db import DB
-from llmpuffin.finding_service import FindingService
+from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import Harness, HarnessConfig
+from llmpuffin.agent.harness import Harness, HarnessConfig
 from llmpuffin.log import log
 from llmpuffin.models import AuditRun, AuditThread
 from llmpuffin.threat_model import ThreatModel
@@ -65,7 +65,7 @@ async def resolved_thread(
         log.info("Session thread_id: %s", tid)
 
     if audit_run_id is None:
-        from llmpuffin.agent import _create_audit_run
+        from llmpuffin.agent.orchestrator import _create_audit_run
 
         resume_tid = source_thread_id if is_fork else thread_id
         audit_run_id = await _create_audit_run(
@@ -212,7 +212,7 @@ async def file_tree(
     if coverage is None:
         return
 
-    from llmpuffin.coverage import populate_file_tree
+    from llmpuffin.services.coverage import populate_file_tree
 
     await populate_file_tree(
         env_ctx.execution,

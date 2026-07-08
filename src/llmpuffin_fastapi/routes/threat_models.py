@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from llmpuffin.threat_model_service import ThreatModelService
+from llmpuffin.services.threat_model import ThreatModelService
 from llmpuffin_fastapi.deps import get_threat_model_service, toast
 from llmpuffin_fastapi.templates_env import templates
 

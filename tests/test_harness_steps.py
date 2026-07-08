@@ -4,7 +4,7 @@ import asyncio
 import base64
 from unittest.mock import AsyncMock, MagicMock
 
-from llmpuffin.harness_steps import (
+from llmpuffin.agent.steps import (
     _GIT_CREDENTIALS_PATH,
     _resolve_repo_name,
     _setup_git_credentials,

@@ -88,7 +88,7 @@ def client():
 
     from llmpuffin.config import Config, PostgresConfig
     from llmpuffin.db import DB
-    from llmpuffin.harness import Harness
+    from llmpuffin.agent.harness import Harness
     from llmpuffin.models import Base
     from llmpuffin_fastapi.deps import set_github_client
     from llmpuffin_fastapi.routes import findings, profiles, runs, skills, threat_models

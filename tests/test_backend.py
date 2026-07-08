@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llmpuffin.backend import ContainerBackend
+from llmpuffin.agent.backend import ContainerBackend
 
 
 def _make_backend(cwd: str, max_output_bytes: int = 100_000) -> ContainerBackend:

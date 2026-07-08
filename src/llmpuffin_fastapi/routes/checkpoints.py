@@ -14,12 +14,12 @@ from sqlalchemy.orm import selectinload
 from llmpuffin.agent import run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
-from llmpuffin.harness import HarnessConfig
+from llmpuffin.agent.harness import HarnessConfig
 from llmpuffin.models import AuditRun, AuditThread, Finding
 
-from llmpuffin.checkpoint import get_session, list_sessions
+from llmpuffin.agent.checkpoint import get_session, list_sessions
 from llmpuffin.db import DB
-from llmpuffin.harness import Harness
+from llmpuffin.agent.harness import Harness
 from llmpuffin_fastapi.deps import (
     get_config,
     get_db,
