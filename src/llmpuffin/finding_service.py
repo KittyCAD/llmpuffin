@@ -295,6 +295,19 @@ class FindingService:
                 count += 1
         return count
 
+    def build_fork_message(self, finding: Finding, user_message: str = "") -> str:
+        """Build the user message for a finding fork conversation."""
+        context = (
+            f"This conversation is forked to investigate finding #{finding.local_id}.\n"
+            f"Title: {finding.title}\n"
+            f"Severity: {finding.severity} | Difficulty: {finding.difficulty}\n"
+            f"Description: {finding.description[:500]}\n\n"
+        )
+        return context + (
+            user_message.strip()
+            or "Investigate this finding further. Try to validate or refute it."
+        )
+
     async def set_fork_thread(self, finding_pk: int, fork_thread_id: str) -> None:
         """Set the fork_thread_id on a finding."""
         async with self.db.async_session() as s:
