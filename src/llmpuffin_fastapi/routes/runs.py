@@ -7,25 +7,22 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import func, select, update as sa_update
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditRun, AuditThread, Finding
 from llmpuffin.sarif import export_sarif_for_run
 
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
+from llmpuffin.run_service import RunService
 from llmpuffin_fastapi.deps import (
     get_config,
-    get_db,
     get_github_client,
     get_harness,
     get_llmpuffin_db,
+    get_run_service,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -40,33 +37,10 @@ async def root_redirect():
 
 
 @router.get("/runs/", response_class=HTMLResponse)
-async def runs_list(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
-    rows = (
-        (
-            await db.execute(
-                select(AuditRun)
-                .options(
-                    selectinload(AuditRun.profile),
-                    selectinload(AuditRun.threads),
-                )
-                .order_by(AuditRun.started_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    # Annotate finding counts (non-deleted)
-    finding_counts: dict[int, int] = {
-        row[0]: row[1]
-        for row in (
-            await db.execute(
-                select(Finding.audit_run_id, func.count(Finding.id))
-                .where(Finding.status != "deleted")
-                .group_by(Finding.audit_run_id)
-            )
-        ).all()
-    }
+async def runs_list(
+    request: Request, svc: Annotated[RunService, Depends(get_run_service)]
+):
+    rows, finding_counts = await svc.list_all()
 
     runs = []
     for r in rows:
@@ -90,20 +64,9 @@ async def runs_list(request: Request, db: Annotated[AsyncSession, Depends(get_db
 async def run_detail(
     run_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
 ):
-    run = (
-        await db.execute(
-            select(AuditRun)
-            .options(
-                selectinload(AuditRun.profile),
-                selectinload(AuditRun.threads),
-                selectinload(AuditRun.findings).selectinload(Finding.locations),
-                selectinload(AuditRun.findings).selectinload(Finding.github_link),
-            )
-            .where(AuditRun.id == run_id)
-        )
-    ).scalar_one_or_none()
+    run = await svc.get(run_id, with_findings=True)
     if run is None:
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
@@ -117,32 +80,19 @@ async def run_detail(
 async def run_delete(
     run_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
 ):
-    run = (
-        await db.execute(
-            select(AuditRun)
-            .options(selectinload(AuditRun.threads))
-            .where(AuditRun.id == run_id)
-        )
-    ).scalar_one_or_none()
-    if run is None:
+    error = await svc.delete(run_id)
+    if error == "not_found":
         raise HTTPException(status_code=404)
-    if run.status == "running":
-        return toast(
-            request,
-            "error",
-            "Cannot delete a running audit",
-            redirect_to=f"/runs/{run_id}/",
-        )
-    await db.delete(run)
-    await db.commit()
+    if error:
+        return toast(request, "error", error, redirect_to=f"/runs/{run_id}/")
     return toast(
         request, "success", f"Deleted run #{run_id}", redirect_to="/runs/", refresh=True
     )
 
 
-def _toml_for_run(run: AuditRun) -> str:
+def _toml_for_run(run) -> str:
     return run.profile_toml or (run.profile.profile_toml if run.profile else "")
 
 
@@ -150,16 +100,10 @@ def _toml_for_run(run: AuditRun) -> str:
 async def run_coverage(
     run_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
-    run = (
-        await db.execute(
-            select(AuditRun)
-            .options(selectinload(AuditRun.profile))
-            .where(AuditRun.id == run_id)
-        )
-    ).scalar_one_or_none()
+    run = await svc.get(run_id)
     if run is None:
         raise HTTPException(status_code=404)
 
@@ -183,12 +127,10 @@ async def run_coverage(
 @router.get("/runs/{run_id}/sarif/")
 async def run_sarif_export(
     run_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
 ):
-    run = (
-        await db.execute(select(AuditRun).where(AuditRun.id == run_id))
-    ).scalar_one_or_none()
+    run = await svc.get(run_id)
     if run is None:
         raise HTTPException(status_code=404)
     sarif_json = export_sarif_for_run(run_id, db=llmpuffin_db)
@@ -206,33 +148,22 @@ async def run_resume(
     run_id: int,
     thread_id: str,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     harness: Annotated[Harness, Depends(get_harness)],
     config: Annotated[Config, Depends(get_config)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
     message: Annotated[str, Form()] = "",
 ):
-    run = (
-        await db.execute(
-            select(AuditRun)
-            .options(selectinload(AuditRun.profile))
-            .where(AuditRun.id == run_id)
-        )
-    ).scalar_one_or_none()
+    run = await svc.get(run_id)
     if run is None:
         raise HTTPException(status_code=404)
-    thread = (
-        await db.execute(
-            select(AuditThread).where(
-                AuditThread.audit_run_id == run_id,
-                AuditThread.thread_id == thread_id,
-            )
-        )
-    ).scalar_one_or_none()
+    redirect = f"/runs/{run_id}/"
+
+    # Check thread exists and isn't running.
+    thread = next((t for t in run.threads if t.thread_id == thread_id), None)
     if thread is None:
         raise HTTPException(status_code=404)
-    redirect = f"/runs/{run_id}/"
     if thread.status == "running":
         return toast(
             request, "error", "Thread is already running", redirect_to=redirect
@@ -271,32 +202,20 @@ async def run_fork(
     run_id: int,
     thread_id: str,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     harness: Annotated[Harness, Depends(get_harness)],
     config: Annotated[Config, Depends(get_config)],
     message: Annotated[str, Form()],
 ):
-    run = (
-        await db.execute(
-            select(AuditRun)
-            .options(selectinload(AuditRun.profile))
-            .where(AuditRun.id == run_id)
-        )
-    ).scalar_one_or_none()
+    run = await svc.get(run_id)
     if run is None:
         raise HTTPException(status_code=404)
-    thread = (
-        await db.execute(
-            select(AuditThread).where(
-                AuditThread.audit_run_id == run_id,
-                AuditThread.thread_id == thread_id,
-            )
-        )
-    ).scalar_one_or_none()
+    redirect = f"/runs/{run_id}/"
+
+    thread = next((t for t in run.threads if t.thread_id == thread_id), None)
     if thread is None:
         raise HTTPException(status_code=404)
-    redirect = f"/runs/{run_id}/"
     if thread.status == "running" and not config.features.enabled(
         "fork_running_threads"
     ):
@@ -346,8 +265,8 @@ async def run_stop(
     run_id: int,
     thread_id: str,
     request: Request,
+    svc: Annotated[RunService, Depends(get_run_service)],
     harness: Annotated[Harness, Depends(get_harness)],
-    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     redirect = f"/runs/{run_id}/"
     if harness.cancel(thread_id):
@@ -358,13 +277,7 @@ async def run_stop(
             redirect_to=redirect,
             refresh=True,
         )
-    # Thread wasn't running — mark it as errored so the UI reflects reality
-    await db.execute(
-        sa_update(AuditThread)
-        .where(AuditThread.thread_id == thread_id)
-        .values(status="error", error="Orphaned thread (not running)")
-    )
-    await db.commit()
+    await svc.mark_thread_orphaned(thread_id)
     return toast(
         request, "success", "Thread already stopped", redirect_to=redirect, refresh=True
     )
@@ -375,17 +288,11 @@ async def run_unlink_finding(
     run_id: int,
     thread_id: str,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[RunService, Depends(get_run_service)],
 ):
     """Unlink a finding from its fork thread."""
     redirect = f"/runs/{run_id}/?tab=threads"
-    result = await db.execute(
-        sa_update(Finding)
-        .where(Finding.fork_thread_id == thread_id, Finding.audit_run_id == run_id)
-        .values(fork_thread_id="")
-    )
-    await db.commit()
-    if getattr(result, "rowcount", 0) == 0:
+    if not await svc.unlink_finding_fork(run_id, thread_id):
         return toast(request, "error", "No linked finding found", redirect_to=redirect)
     return toast(
         request, "success", "Finding unlinked", redirect_to=redirect, refresh=True

@@ -8,24 +8,21 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import create_audit_run, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import HarnessConfig
-from llmpuffin.models import AuditProfile, AuditRun
 
 from llmpuffin.db import DB
 from llmpuffin.harness import Harness
+from llmpuffin.profile_service import ProfileService
 from llmpuffin_fastapi.deps import (
     get_config,
-    get_db,
     get_github_client,
     get_harness,
     get_llmpuffin_db,
+    get_profile_service,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -37,13 +34,9 @@ router = APIRouter()
 @router.get("/profiles/", response_class=HTMLResponse)
 async def profiles_list(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
 ):
-    rows = (
-        (await db.execute(select(AuditProfile).order_by(AuditProfile.name)))
-        .scalars()
-        .all()
-    )
+    rows = await svc.list_all()
     profiles = []
     for p in rows:
         try:
@@ -68,7 +61,7 @@ async def profiles_list(
 @router.post("/profiles/create/")
 async def profile_create(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
     name: Annotated[str, Form()] = "",
     profile_toml: Annotated[str, Form()] = "",
 ):
@@ -82,8 +75,7 @@ async def profile_create(
         tomllib.loads(profile_toml)
     except Exception as exc:
         return toast(request, "error", f"Invalid TOML: {exc}", redirect_to="/profiles/")
-    db.add(AuditProfile(name=name, profile_toml=profile_toml, jit=False))
-    await db.commit()
+    await svc.create(name, profile_toml)
     return toast(
         request, "success", f"Created {name}", redirect_to="/profiles/", refresh=True
     )
@@ -93,15 +85,9 @@ async def profile_create(
 async def profile_detail_get(
     profile_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
 ):
-    profile = (
-        await db.execute(
-            select(AuditProfile)
-            .options(selectinload(AuditProfile.runs).selectinload(AuditRun.threads))
-            .where(AuditProfile.id == profile_id)
-        )
-    ).scalar_one_or_none()
+    profile = await svc.get(profile_id, with_runs=True)
     if profile is None:
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
@@ -115,29 +101,18 @@ async def profile_detail_get(
 async def profile_detail_post(
     profile_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
     name: Annotated[str, Form()] = "",
     profile_toml: Annotated[str, Form()] = "",
 ):
-    profile = (
-        await db.execute(
-            select(AuditProfile)
-            .options(selectinload(AuditProfile.runs).selectinload(AuditRun.threads))
-            .where(AuditProfile.id == profile_id)
-        )
-    ).scalar_one_or_none()
-    if profile is None:
-        raise HTTPException(status_code=404)
-
     redirect = f"/profiles/{profile_id}/"
     try:
         tomllib.loads(profile_toml)
     except Exception as exc:
         return toast(request, "error", f"Invalid TOML: {exc}", redirect_to=redirect)
 
-    profile.name = name.strip()
-    profile.profile_toml = profile_toml
-    await db.commit()
+    if not await svc.update(profile_id, name.strip(), profile_toml):
+        raise HTTPException(status_code=404)
     return toast(
         request, "success", "Profile saved.", redirect_to=redirect, refresh=True
     )
@@ -147,28 +122,26 @@ async def profile_detail_post(
 async def profile_run(
     profile_id: int,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
     llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
     harness: Annotated[Harness, Depends(get_harness)],
     config: Annotated[Config, Depends(get_config)],
     gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
 ):
-    profile = (
-        await db.execute(select(AuditProfile).where(AuditProfile.id == profile_id))
-    ).scalar_one_or_none()
-    if profile is None:
+    profile_db = await svc.get(profile_id)
+    if profile_db is None:
         raise HTTPException(status_code=404)
     redirect = f"/profiles/{profile_id}/"
     try:
-        parsed = Profile.from_toml_string(profile.profile_toml)
+        parsed = Profile.from_toml_string(profile_db.profile_toml)
     except Exception as exc:
         return toast(request, "error", f"Invalid config: {exc}", redirect_to=redirect)
-    harness_config = HarnessConfig(profile=parsed, profile_toml=profile.profile_toml)
+    harness_config = HarnessConfig(profile=parsed, profile_toml=profile_db.profile_toml)
     import uuid
 
     tid = uuid.uuid4().hex[:12]
     run_id = await create_audit_run(
-        harness_config, tid, db=llmpuffin_db, profile_id=profile.id
+        harness_config, tid, db=llmpuffin_db, profile_id=profile_db.id
     )
     harness.spawn(
         tid,
@@ -178,7 +151,7 @@ async def profile_run(
             global_config=config,
             thread_id=tid,
             github_client=gh,
-            profile_id=profile.id,
+            profile_id=profile_db.id,
             audit_run_id=run_id,
         ),
     )

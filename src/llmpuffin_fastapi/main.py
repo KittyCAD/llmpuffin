@@ -17,6 +17,10 @@ from llmpuffin.finding_service import FindingService
 from llmpuffin.github import client_from_config
 from llmpuffin.harness import Harness
 from llmpuffin.log import setup as setup_logging
+from llmpuffin.profile_service import ProfileService
+from llmpuffin.run_service import RunService
+from llmpuffin.skill_service import SkillService
+from llmpuffin.threat_model_service import ThreatModelService
 
 from llmpuffin_fastapi.auth import get_current_user, setup_auth
 from llmpuffin_fastapi.deps import set_github_client
@@ -74,6 +78,10 @@ def create_app() -> FastAPI:
     app.state.config = config
     app.state.db = DB(config.postgres)
     app.state.finding_service = FindingService(app.state.db)
+    app.state.profile_service = ProfileService(app.state.db)
+    app.state.run_service = RunService(app.state.db)
+    app.state.skill_service = SkillService(app.state.db)
+    app.state.threat_model_service = ThreatModelService(app.state.db)
     # Shared harness for task tracking. Individual audits create their own
     # Harness instances for config/threat-model, but this one owns the
     # task registry so we can cancel running audits from the web UI.

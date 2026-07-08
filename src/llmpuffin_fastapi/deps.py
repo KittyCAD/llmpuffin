@@ -16,6 +16,10 @@ from llmpuffin.db import DB
 from llmpuffin.finding_service import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.harness import Harness
+from llmpuffin.profile_service import ProfileService
+from llmpuffin.run_service import RunService
+from llmpuffin.skill_service import SkillService
+from llmpuffin.threat_model_service import ThreatModelService
 
 log = logging.getLogger("llmpuffin")
 
@@ -89,8 +93,23 @@ def get_llmpuffin_db(request: Request) -> DB:
 
 
 def get_finding_service(request: Request) -> FindingService:
-    """FastAPI dependency returning the FindingService from app state."""
     return request.app.state.finding_service
+
+
+def get_profile_service(request: Request) -> ProfileService:
+    return request.app.state.profile_service
+
+
+def get_run_service(request: Request) -> RunService:
+    return request.app.state.run_service
+
+
+def get_skill_service(request: Request) -> SkillService:
+    return request.app.state.skill_service
+
+
+def get_threat_model_service(request: Request) -> ThreatModelService:
+    return request.app.state.threat_model_service
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:

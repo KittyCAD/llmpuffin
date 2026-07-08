@@ -2,41 +2,25 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from llmpuffin.db import DB
-from llmpuffin.models import ThreatModelDB, ThreatModelFile
-from llmpuffin_fastapi.deps import get_db, get_llmpuffin_db, toast
+from llmpuffin.threat_model_service import ThreatModelService
+from llmpuffin_fastapi.deps import get_threat_model_service, toast
 from llmpuffin_fastapi.templates_env import templates
 
-log = logging.getLogger("llmpuffin")
 router = APIRouter()
 
 
 @router.get("/threat-models/", response_class=HTMLResponse)
 async def threat_models_list(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
 ):
-    rows = (
-        (
-            await db.execute(
-                select(ThreatModelDB)
-                .options(selectinload(ThreatModelDB.files))
-                .order_by(ThreatModelDB.name)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    rows = await svc.list_all()
     return templates.TemplateResponse(
         request, "threat_models_list.html", {"threat_models": rows}
     )
@@ -46,15 +30,9 @@ async def threat_models_list(
 async def threat_model_detail(
     request: Request,
     tm_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
 ):
-    tm = (
-        await db.execute(
-            select(ThreatModelDB)
-            .options(selectinload(ThreatModelDB.files))
-            .where(ThreatModelDB.id == tm_id)
-        )
-    ).scalar_one_or_none()
+    tm = await svc.get(tm_id)
     if tm is None:
         raise HTTPException(404)
     return templates.TemplateResponse(
@@ -66,16 +44,9 @@ async def threat_model_detail(
 async def threat_model_file_content(
     tm_id: int,
     file_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
 ):
-    tmf = (
-        await db.execute(
-            select(ThreatModelFile).where(
-                ThreatModelFile.id == file_id,
-                ThreatModelFile.threat_model_id == tm_id,
-            )
-        )
-    ).scalar_one_or_none()
+    tmf = await svc.get_file(tm_id, file_id)
     if tmf is None:
         raise HTTPException(404)
     return JSONResponse({"id": tmf.id, "path": tmf.path, "content": tmf.content})
@@ -84,24 +55,18 @@ async def threat_model_file_content(
 @router.post("/threat-models/create/")
 async def threat_model_create(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
     name: str = Form(...),
     description: str = Form(""),
 ):
-    existing = (
-        await db.execute(select(ThreatModelDB).where(ThreatModelDB.name == name))
-    ).scalar_one_or_none()
-    if existing:
+    tm = await svc.create(name, description)
+    if tm is None:
         return toast(
             request,
             "error",
             f"Threat model {name!r} already exists",
             redirect_to="/threat-models/",
         )
-
-    tm = ThreatModelDB(name=name, description=description)
-    db.add(tm)
-    await db.commit()
     return toast(
         request,
         "success",
@@ -115,29 +80,14 @@ async def threat_model_create(
 async def threat_model_upload_file(
     request: Request,
     tm_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
     path: str = Form(...),
     content: str = Form(...),
 ):
-    tm = (
-        await db.execute(select(ThreatModelDB).where(ThreatModelDB.id == tm_id))
-    ).scalar_one_or_none()
+    tm = await svc.get(tm_id)
     if tm is None:
         raise HTTPException(404)
-
-    existing = (
-        await db.execute(
-            select(ThreatModelFile).where(
-                ThreatModelFile.threat_model_id == tm_id,
-                ThreatModelFile.path == path,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing:
-        existing.content = content
-    else:
-        db.add(ThreatModelFile(threat_model_id=tm_id, path=path, content=content))
-    await db.commit()
+    await svc.upsert_file(tm_id, path, content)
     return toast(
         request,
         "success",
@@ -151,14 +101,11 @@ async def threat_model_upload_file(
 async def threat_model_import_directory(
     request: Request,
     tm_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
     directory: str = Form(...),
 ):
     """Import all files from a local directory into a threat model."""
-    tm = (
-        await db.execute(select(ThreatModelDB).where(ThreatModelDB.id == tm_id))
-    ).scalar_one_or_none()
+    tm = await svc.get(tm_id)
     if tm is None:
         raise HTTPException(404)
 
@@ -171,9 +118,6 @@ async def threat_model_import_directory(
             redirect_to=f"/threat-models/{tm_id}/",
         )
 
-    from llmpuffin.threat_model_service import ThreatModelService
-
-    svc = ThreatModelService(llmpuffin_db)
     count = await svc.import_directory(tm_id, dir_path)
     return toast(
         request,
@@ -188,19 +132,15 @@ async def threat_model_import_directory(
 async def threat_model_delete(
     request: Request,
     tm_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
 ):
-    tm = (
-        await db.execute(select(ThreatModelDB).where(ThreatModelDB.id == tm_id))
-    ).scalar_one_or_none()
-    if tm is None:
+    name = await svc.delete(tm_id)
+    if name is None:
         raise HTTPException(404)
-    await db.delete(tm)
-    await db.commit()
     return toast(
         request,
         "success",
-        f"Deleted threat model {tm.name!r}",
+        f"Deleted threat model {name!r}",
         redirect_to="/threat-models/",
         refresh=True,
     )
@@ -211,24 +151,15 @@ async def threat_model_file_delete(
     request: Request,
     tm_id: int,
     file_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    svc: Annotated[ThreatModelService, Depends(get_threat_model_service)],
 ):
-    tmf = (
-        await db.execute(
-            select(ThreatModelFile).where(
-                ThreatModelFile.id == file_id,
-                ThreatModelFile.threat_model_id == tm_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if tmf is None:
+    path = await svc.delete_file(tm_id, file_id)
+    if path is None:
         raise HTTPException(404)
-    await db.delete(tmf)
-    await db.commit()
     return toast(
         request,
         "success",
-        f"Deleted {tmf.path}",
+        f"Deleted {path}",
         redirect_to=f"/threat-models/{tm_id}/",
         refresh=True,
     )
