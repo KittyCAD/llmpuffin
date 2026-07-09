@@ -6,7 +6,7 @@ from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.orm import selectinload
 
 from llmpuffin.db import DB
-from llmpuffin.models import AuditRun, AuditThread, Finding
+from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
 
 
 class RunService:
@@ -105,3 +105,24 @@ class RunService:
             )
             await s.commit()
             return (result.rowcount or 0) > 0  # pyright: ignore[reportAttributeAccessIssue]
+
+    async def sync_profile_toml(self, run_id: int) -> str | None:
+        """Copy the latest profile_toml from the parent profile to this run.
+
+        Returns error message or None on success.
+        """
+        async with self.db.async_session() as s:
+            run = (
+                await s.execute(
+                    select(AuditRun)
+                    .options(selectinload(AuditRun.profile))
+                    .where(AuditRun.id == run_id)
+                )
+            ).scalar_one_or_none()
+            if run is None:
+                return "not_found"
+            if not run.profile:
+                return "Run has no linked profile"
+            run.profile_toml = run.profile.profile_toml
+            await s.commit()
+            return None

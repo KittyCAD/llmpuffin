@@ -67,6 +67,23 @@ class ProfileService:
             await s.commit()
             return True
 
+    async def patch(self, profile_id: int, **fields) -> bool:
+        """Update individual fields on a profile. Returns False if not found."""
+        allowed = {"name", "profile_toml", "project_id"}
+        async with self.db.async_session() as s:
+            profile = (
+                await s.execute(
+                    select(AuditProfile).where(AuditProfile.id == profile_id)
+                )
+            ).scalar_one_or_none()
+            if profile is None:
+                return False
+            for k, v in fields.items():
+                if k in allowed and v is not None:
+                    setattr(profile, k, v)
+            await s.commit()
+            return True
+
     async def delete(self, profile_id: int) -> str | None:
         """Delete a profile. Returns error message or None on success."""
         async with self.db.async_session() as s:
