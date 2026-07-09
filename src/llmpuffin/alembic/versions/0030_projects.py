@@ -42,9 +42,9 @@ def upgrade() -> None:
 
     # Create one project per distinct profile name and assign profiles
     conn = op.get_bind()
-    names = conn.execute(
-        sa.text("SELECT DISTINCT name FROM audit_profile")
-    ).scalars().all()
+    names = (
+        conn.execute(sa.text("SELECT DISTINCT name FROM audit_profile")).scalars().all()
+    )
     for name in names:
         conn.execute(
             sa.text("INSERT INTO project (name) VALUES (:name)"),
@@ -55,9 +55,7 @@ def upgrade() -> None:
             {"name": name},
         ).scalar()
         conn.execute(
-            sa.text(
-                "UPDATE audit_profile SET project_id = :pid WHERE name = :name"
-            ),
+            sa.text("UPDATE audit_profile SET project_id = :pid WHERE name = :name"),
             {"pid": project_id, "name": name},
         )
 

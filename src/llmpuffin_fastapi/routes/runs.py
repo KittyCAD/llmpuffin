@@ -241,9 +241,7 @@ async def run_fork(
     try:
         profile = Profile.from_toml_string(toml_str)
     except Exception as exc:
-        return toast(
-            request, "error", f"Invalid config: {exc}", redirect_to=redirect
-        )
+        return toast(request, "error", f"Invalid config: {exc}", redirect_to=redirect)
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     harness.spawn(
         new_tid,
@@ -317,5 +315,9 @@ async def run_sync_config(
     if error:
         return toast(request, "error", error, redirect_to=redirect)
     return toast(
-        request, "success", "Config updated from profile", redirect_to=redirect, refresh=True
+        request,
+        "success",
+        "Config updated from profile",
+        redirect_to=redirect,
+        refresh=True,
     )

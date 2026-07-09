@@ -59,9 +59,7 @@ async def project_create(
 ):
     name = name.strip()
     if not name:
-        return toast(
-            request, "error", "Name is required", redirect_to="/projects/new/"
-        )
+        return toast(request, "error", "Name is required", redirect_to="/projects/new/")
     project = await svc.create(name, description.strip())
     return toast(
         request,
@@ -109,9 +107,7 @@ async def project_edit(
         return toast(request, "error", "No fields to update", redirect_to=redirect)
     if not await svc.patch(project_id, **fields):
         raise HTTPException(status_code=404)
-    return toast(
-        request, "success", "Saved.", redirect_to=redirect, refresh=True
-    )
+    return toast(request, "success", "Saved.", redirect_to=redirect, refresh=True)
 
 
 @router.post("/projects/{project_id}/delete/")
@@ -124,9 +120,7 @@ async def project_delete(
     if error == "not_found":
         raise HTTPException(status_code=404)
     if error:
-        return toast(
-            request, "error", error, redirect_to=f"/projects/{project_id}/"
-        )
+        return toast(request, "error", error, redirect_to=f"/projects/{project_id}/")
     return toast(
         request,
         "success",

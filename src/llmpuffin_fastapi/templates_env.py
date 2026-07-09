@@ -51,7 +51,9 @@ def _datetimefmt(value, fmt: str = "short") -> Markup:
         iso = value.isoformat()
     except AttributeError:
         return Markup(escape(str(value)))
-    return Markup(f'<time datetime="{escape(iso)}" data-fmt="{escape(fmt)}">{escape(iso)}</time>')
+    return Markup(
+        f'<time datetime="{escape(iso)}" data-fmt="{escape(fmt)}">{escape(iso)}</time>'
+    )
 
 
 def _pluralize(value, suffix: str = "s") -> str:

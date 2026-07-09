@@ -70,9 +70,7 @@ async def profile_new(
     project = await project_svc.get(project_id)
     if project is None:
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(
-        request, "profile_new.html", {"project": project}
-    )
+    return templates.TemplateResponse(request, "profile_new.html", {"project": project})
 
 
 @router.post("/projects/{project_id}/profiles/create/")
@@ -158,9 +156,7 @@ async def profile_edit(
         return toast(request, "error", "No fields to update", redirect_to=redirect)
     if not await svc.patch(profile_id, **fields):
         raise HTTPException(status_code=404)
-    return toast(
-        request, "success", "Saved.", redirect_to=redirect, refresh=True
-    )
+    return toast(request, "success", "Saved.", redirect_to=redirect, refresh=True)
 
 
 @router.post("/profiles/{profile_id}/run/")

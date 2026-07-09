@@ -6,7 +6,7 @@ from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.orm import selectinload
 
 from llmpuffin.db import DB
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Finding
+from llmpuffin.models import AuditRun, AuditThread, Finding
 
 
 class RunService:

@@ -340,7 +340,13 @@ async def _execute_pipeline(
 
     # Step 1: resolve thread
     resolved = await resolved_thread(
-        config, thread_id, source_thread_id, is_fork, db, profile_id, audit_run_id,
+        config,
+        thread_id,
+        source_thread_id,
+        is_fork,
+        db,
+        profile_id,
+        audit_run_id,
     )
 
     env_ctx = None
@@ -429,7 +435,11 @@ async def create_audit_run(
 ) -> int:
     """Pre-create an AuditRun + thread before spawning. Returns audit_run.id."""
     return await _create_audit_run(
-        config, tid, resume_thread_id, db=db, profile_id=profile_id,
+        config,
+        tid,
+        resume_thread_id,
+        db=db,
+        profile_id=profile_id,
     )
 
 

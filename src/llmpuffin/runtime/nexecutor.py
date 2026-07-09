@@ -16,7 +16,6 @@ from types import TracebackType
 import httpx
 from nexecutor_client import AuthenticatedClient  # pyright: ignore[reportMissingImports]
 from nexecutor_client.api.workloads import (  # pyright: ignore[reportMissingImports]
-    destroy_workload,
     exec_command,
     get_workload,
     run_workload,
@@ -239,17 +238,9 @@ class NexecutorRuntime:
     async def capture_git_info(self) -> GitInfo | None:
         return await _capture_git_info(self)  # pyright: ignore[reportArgumentType]
 
-    async def stop(self, timeout: int = 30, remove: bool = False) -> None:
+    async def stop(self, timeout: int = 30) -> None:
         """Stop the workload."""
         try:
             await stop_workload.asyncio(id=self._workload_id, client=self._client)
         except Exception as exc:
             log.debug("stop failed (workload may already be stopped): %s", exc)
-
-        if remove:
-            try:
-                await destroy_workload.asyncio(
-                    id=self._workload_id, client=self._client
-                )
-            except Exception as exc:
-                log.debug("destroy failed: %s", exc)

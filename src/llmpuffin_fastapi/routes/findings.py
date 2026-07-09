@@ -89,9 +89,9 @@ async def findings_list(
         if profile_id_int is not None:
             stmt = stmt.where(AuditRun.profile_id == profile_id_int)
         if project_id_int is not None:
-            stmt = stmt.join(AuditProfile, AuditRun.profile_id == AuditProfile.id).where(
-                AuditProfile.project_id == project_id_int
-            )
+            stmt = stmt.join(
+                AuditProfile, AuditRun.profile_id == AuditProfile.id
+            ).where(AuditProfile.project_id == project_id_int)
     if severity:
         stmt = stmt.where(Finding.severity == severity)
     if difficulty:
@@ -112,9 +112,7 @@ async def findings_list(
 
     # Collect filter-option facets.
     projects = (
-        (await db.execute(select(Project).order_by(Project.name)))
-        .scalars()
-        .all()
+        (await db.execute(select(Project).order_by(Project.name))).scalars().all()
     )
     profiles = (
         (await db.execute(select(AuditProfile).order_by(AuditProfile.name)))

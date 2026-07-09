@@ -90,7 +90,9 @@ class ProfileService:
             profile = (
                 await s.execute(
                     select(AuditProfile)
-                    .options(selectinload(AuditProfile.runs).selectinload(AuditRun.threads))
+                    .options(
+                        selectinload(AuditProfile.runs).selectinload(AuditRun.threads)
+                    )
                     .where(AuditProfile.id == profile_id)
                 )
             ).scalar_one_or_none()

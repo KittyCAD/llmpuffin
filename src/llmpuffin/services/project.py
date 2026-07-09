@@ -42,7 +42,9 @@ class ProjectService:
                     func.coalesce(profile_counts_sq.c.cnt, 0),
                     func.coalesce(run_counts_sq.c.cnt, 0),
                 )
-                .outerjoin(profile_counts_sq, Project.id == profile_counts_sq.c.project_id)
+                .outerjoin(
+                    profile_counts_sq, Project.id == profile_counts_sq.c.project_id
+                )
                 .outerjoin(run_counts_sq, Project.id == run_counts_sq.c.project_id)
                 .order_by(Project.name)
             )

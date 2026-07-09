@@ -39,7 +39,7 @@ class TestGitCredentials:
     def test_setup_writes_file_and_includes(self):
         execution = _mock_execution()
         asyncio.run(_setup_git_credentials(execution, "ghp_abc123"))
-        assert execution.exec.call_count == 2
+        assert execution.exec.call_count == 5
 
         # First call: write credentials file
         write_cmd = execution.exec.call_args_list[0][0][0]
@@ -61,7 +61,7 @@ class TestGitCredentials:
     def test_teardown_removes_file_and_include(self):
         execution = _mock_execution()
         asyncio.run(_teardown_git_credentials(execution))
-        assert execution.exec.call_count == 2
+        assert execution.exec.call_count == 4
         rm_cmd = execution.exec.call_args_list[0][0][0]
         assert rm_cmd == ["rm", "-f", _GIT_CREDENTIALS_PATH]
         unset_cmd = execution.exec.call_args_list[1][0][0]
