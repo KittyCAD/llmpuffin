@@ -67,6 +67,9 @@ dev = ["pytest", "ruff", "pyright"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/llmpuffin", "src/llmpuffin_fastapi", "src/llmpuffin_microvm_agent"]
 
+[tool.hatch.build]
+artifacts = ["src/llmpuffin_fastapi/static/app.bundle.js"]
+
 [tool.hatch.build.hooks.custom]
 
 [build-system]
