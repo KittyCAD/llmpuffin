@@ -126,7 +126,7 @@
     <th @click="sort('title')" :class="sortClass('title')">Title</th>
     <th @click="sort('severity')" :class="sortClass('severity')">Severity</th>
     <th @click="sort('difficulty')" :class="sortClass('difficulty')">Difficulty</th>
-    {% if show_profile %}<th @click="sort('profile')" :class="sortClass('profile')">Profile</th>{% endif %}
+    {% if show_profile %}<th @click="sort('project')" :class="sortClass('project')">Project</th>{% endif %}
     {% if show_run %}<th @click="sort('run')" :class="sortClass('run')">Run</th>{% endif %}
     <th @click="sort('status')" :class="sortClass('status')">Status</th>
     <th @click="sort('validated')" :class="sortClass('validated')">Validated</th>
@@ -147,9 +147,10 @@
     <td data-sort-severity="{{ _sev_order.get(finding.severity|lower, 9) }}"><span class="badge sev-{{ finding.severity|lower }}">{{ finding.severity }}</span></td>
     <td data-sort-difficulty="{{ finding.difficulty or '' }}">{{ finding.difficulty or "—" }}</td>
     {% if show_profile %}
-    <td data-sort-profile="{{ finding.audit_run.profile.name if finding.audit_run and finding.audit_run.profile else '' }}">
-      {% if finding.audit_run and finding.audit_run.profile %}
-        <a href="/profiles/{{ finding.audit_run.profile.id }}/">{{ finding.audit_run.profile.name }}</a>
+    {% set _project = finding.audit_run.profile.project if finding.audit_run and finding.audit_run.profile else none %}
+    <td data-sort-project="{{ _project.name if _project else '' }}">
+      {% if _project %}
+        <a href="/projects/{{ _project.id }}/">{{ _project.name }}</a>
       {% else %}—{% endif %}
     </td>
     {% endif %}

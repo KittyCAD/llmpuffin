@@ -72,7 +72,9 @@ async def findings_list(
     stmt = (
         select(Finding)
         .options(
-            selectinload(Finding.audit_run).selectinload(AuditRun.profile),
+            selectinload(Finding.audit_run)
+            .selectinload(AuditRun.profile)
+            .selectinload(AuditProfile.project),
             selectinload(Finding.github_link),
         )
         .order_by(Finding.created_at.desc())
