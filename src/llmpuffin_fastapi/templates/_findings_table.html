@@ -27,6 +27,7 @@
 {# ─── Query-string helper ─── #}
 {% macro qs(overrides) -%}
 ?{% for k, v in {
+    'project_id': f.project_id | default(''),
     'profile_id': f.profile_id | default(''),
     'status':     f.status | default(''),
     'severity':   f.severity | default(''),
@@ -69,6 +70,13 @@
     </select>
 
     {% if show_profile %}
+    <select name="project_id" onchange="this.form.submit()" style="max-width: 14rem;">
+      <option value="">All projects</option>
+      {% for p in projects | default([]) %}
+        <option value="{{ p.id }}" {% if f.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+
     <select name="profile_id" onchange="this.form.submit()" style="max-width: 14rem;">
       <option value="">All profiles</option>
       {% for p in profiles | default([]) %}
@@ -181,7 +189,7 @@
     {% if show_thread %}
     <td>{% if finding.thread_id %}<a href="/checkpoints/{{ finding.thread_id }}/" class="mono text-xs">{{ finding.thread_id | truncatechars(12) }}</a>{% else %}—{% endif %}</td>
     {% endif %}
-    <td data-sort-created="{{ finding.created_at.isoformat() if finding.created_at else '' }}" class="text-muted text-xs">{{ finding.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
+    <td data-sort-created="{{ finding.created_at.isoformat() if finding.created_at else '' }}" class="text-muted text-xs">{{ finding.created_at | datetimefmt }}</td>
   </tr>
 {% else %}
   <tr><td colspan="99" class="text-muted" style="text-align: center; padding: 2rem;">No findings match these filters.</td></tr>

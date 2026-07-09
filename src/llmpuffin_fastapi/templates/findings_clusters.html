@@ -57,7 +57,7 @@
         {% elif f.status == "duplicate" %}<span class="badge outline">duplicate</span>
         {% else %}<span class="badge primary">open</span>{% endif %}
       </td>
-      <td class="text-muted text-xs">{{ f.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
+      <td class="text-muted text-xs">{{ f.created_at | datetimefmt }}</td>
       <td @click.stop>
         <form method="post" action="/findings/merge/" @submit="selected.forEach(id => { const i = document.createElement('input'); i.type='hidden'; i.name='finding_ids'; i.value=id; $el.appendChild(i); })">
           <input type="hidden" name="keep_id" value="{{ f.id }}">

@@ -24,6 +24,7 @@ from llmpuffin.models import (
     AuditThread,
     Finding,
     FindingAttachment,
+    Project,
 )
 
 from llmpuffin.db import DB
@@ -48,6 +49,7 @@ router = APIRouter()
 async def findings_list(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    project_id: str = "",
     profile_id: str = "",
     status: str = "",  # "open" | "fixed" | "invalid" | "deleted" | "duplicate" | ""
     severity: str = "",
@@ -56,6 +58,11 @@ async def findings_list(
     has_issue: str = "",  # "yes" | "no" | ""
     q: str = "",
 ):
+    project_id_int: int | None
+    try:
+        project_id_int = int(project_id) if project_id else None
+    except ValueError:
+        project_id_int = None
     profile_id_int: int | None
     try:
         profile_id_int = int(profile_id) if profile_id else None
@@ -75,10 +82,14 @@ async def findings_list(
         stmt = stmt.where(Finding.status == status)
     else:
         stmt = stmt.where(Finding.status.notin_(["deleted", "duplicate"]))
-    if profile_id_int is not None:
-        stmt = stmt.join(AuditRun, Finding.audit_run_id == AuditRun.id).where(
-            AuditRun.profile_id == profile_id_int
-        )
+    if project_id_int is not None or profile_id_int is not None:
+        stmt = stmt.join(AuditRun, Finding.audit_run_id == AuditRun.id)
+        if profile_id_int is not None:
+            stmt = stmt.where(AuditRun.profile_id == profile_id_int)
+        if project_id_int is not None:
+            stmt = stmt.join(AuditProfile, AuditRun.profile_id == AuditProfile.id).where(
+                AuditProfile.project_id == project_id_int
+            )
     if severity:
         stmt = stmt.where(Finding.severity == severity)
     if difficulty:
@@ -98,6 +109,11 @@ async def findings_list(
     findings = (await db.execute(stmt)).scalars().all()
 
     # Collect filter-option facets.
+    projects = (
+        (await db.execute(select(Project).order_by(Project.name)))
+        .scalars()
+        .all()
+    )
     profiles = (
         (await db.execute(select(AuditProfile).order_by(AuditProfile.name)))
         .scalars()
@@ -128,7 +144,7 @@ async def findings_list(
     sev_counts_rows = (
         await db.execute(
             select(Finding.severity, func.count(Finding.id))
-            .where(Finding.status != "deleted")
+            .where(Finding.status.notin_(["deleted", "duplicate"]))
             .group_by(Finding.severity)
         )
     ).all()
@@ -139,11 +155,13 @@ async def findings_list(
         "findings_list.html",
         {
             "findings": findings,
+            "projects": projects,
             "profiles": profiles,
             "severities": sorted(severities),
             "difficulties": sorted(difficulties),
             "sev_counts": sev_counts,
             "filters": {
+                "project_id": project_id_int,
                 "profile_id": profile_id_int,
                 "status": status,
                 "severity": severity,
@@ -431,6 +449,11 @@ async def finding_fork(
     if not toml_str:
         return _fork_error("No config available for fork")
 
+    try:
+        profile = Profile.from_toml_string(toml_str)
+    except Exception as exc:
+        return _fork_error(f"Invalid config: {exc}")
+
     user_message = svc.build_fork_message(finding, message)
 
     # Capture values before the session closes — _do_fork runs in background.
@@ -439,21 +462,18 @@ async def finding_fork(
 
     await svc.set_fork_thread(finding_id, new_thread_id)
 
+    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
+
     async def _do_fork():
-        profile = Profile.from_toml_string(toml_str)
-        harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
-        try:
-            await fork_audit(
-                harness_config,
-                source_thread_id=source_thread_id,
-                user_message=user_message,
-                db=llmpuffin_db,
-                global_config=config,
-                thread_id=new_thread_id,
-                github_client=gh,
-            )
-        except Exception as exc:
-            log.exception("Background finding fork failed", exc)
+        await fork_audit(
+            harness_config,
+            source_thread_id=source_thread_id,
+            user_message=user_message,
+            db=llmpuffin_db,
+            global_config=config,
+            thread_id=new_thread_id,
+            github_client=gh,
+        )
 
     harness.spawn(new_thread_id, _do_fork())
 
