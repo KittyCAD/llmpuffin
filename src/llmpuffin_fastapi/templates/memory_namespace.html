@@ -30,7 +30,7 @@
       <span class="badge outline">{{ item.kind }}</span>
     </div>
     <div class="row gap-3 text-xs text-muted" style="flex-shrink: 0;">
-      {% if item.updated_at %}<span title="updated">{{ item.updated_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span>{% endif %}
+      {% if item.updated_at %}<span title="updated">{{ item.updated_at | datetimefmt("long") }}</span>{% endif %}
     </div>
   </summary>
 
@@ -72,8 +72,8 @@
     </form>
 
     <div class="row gap-4 text-xs text-muted mt-4" style="border-top: 1px solid hsl(var(--border)); padding-top: 0.5rem;">
-      {% if item.created_at %}<span>created {{ item.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span>{% endif %}
-      {% if item.updated_at %}<span>updated {{ item.updated_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span>{% endif %}
+      {% if item.created_at %}<span>created {{ item.created_at | datetimefmt("long") }}</span>{% endif %}
+      {% if item.updated_at %}<span>updated {{ item.updated_at | datetimefmt("long") }}</span>{% endif %}
     </div>
   </div>
 </details>

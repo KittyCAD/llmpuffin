@@ -17,11 +17,14 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 
 def _static_hash() -> str:
-    """Hash of app.css content — changes on every file edit."""
-    css = STATIC_DIR / "app.css"
-    if css.exists():
-        return hashlib.md5(css.read_bytes()).hexdigest()[:8]
-    return str(int(time.time()))
+    """Hash of static assets — changes on every CSS or JS edit."""
+    h = hashlib.md5()
+    for name in ("app.css", "app.bundle.js"):
+        f = STATIC_DIR / name
+        if f.exists():
+            h.update(f.read_bytes())
+    digest = h.hexdigest()[:8]
+    return digest if digest != hashlib.md5().hexdigest()[:8] else str(int(time.time()))
 
 
 def _md(text: str) -> Markup:
@@ -36,13 +39,19 @@ def _truncatechars(text: str | None, n: int) -> str:
     return text[: max(0, n - 1)] + "..."
 
 
-def _datetimefmt(value, fmt: str = "%Y-%m-%d %H:%M") -> str:
+def _datetimefmt(value, fmt: str = "short") -> Markup:
+    """Render a datetime as a <time> element for client-side local formatting.
+
+    fmt is "short" (date + HH:MM) or "long" (date + HH:MM:SS).
+    Falls back to server-side formatting if value lacks isoformat.
+    """
     if value is None:
-        return ""
+        return Markup("")
     try:
-        return value.strftime(fmt)
+        iso = value.isoformat()
     except AttributeError:
-        return str(value)
+        return Markup(escape(str(value)))
+    return Markup(f'<time datetime="{escape(iso)}" data-fmt="{escape(fmt)}">{escape(iso)}</time>')
 
 
 def _pluralize(value, suffix: str = "s") -> str:

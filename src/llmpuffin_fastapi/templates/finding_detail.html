@@ -103,7 +103,7 @@
 <tr><th>Severity</th><td>{{ editable_select("severity", finding.severity, ["high", "medium", "low", "informational"]) }}</td></tr>
 <tr><th>Difficulty</th><td>{{ editable_select("difficulty", finding.difficulty, ["high", "medium", "low"]) }}</td></tr>
 <tr><th>Validated</th><td>{{ editable_select("validated", "yes" if finding.validated else "no", ["yes", "no"]) }}</td></tr>
-<tr><th>Created</th><td>{{ finding.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td></tr>
+<tr><th>Created</th><td>{{ finding.created_at | datetimefmt("long") }}</td></tr>
 {% if finding.tool_call_id %}<tr><th>Tool call</th><td class="mono text-xs">{{ finding.tool_call_id }}</td></tr>{% endif %}
 {% if finding.fork_thread_id %}
 <tr><th>Fork</th><td><a href="/checkpoints/{{ finding.fork_thread_id }}/" class="mono text-xs">{{ finding.fork_thread_id }}</a></td></tr>
@@ -150,7 +150,7 @@
   <td class="mono text-xs">{{ att.filename }}</td>
   <td class="text-xs text-muted">{{ att.size | filesizeformat }}</td>
   <td class="text-xs text-muted">{{ att.description or "—" }}</td>
-  <td class="text-xs text-muted">{{ att.created_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
+  <td class="text-xs text-muted">{{ att.created_at | datetimefmt }}</td>
   <td><a href="/findings/{{ finding.id }}/attachments/{{ att.id }}/" class="btn text-xs" style="padding: 0.25rem 0.5rem;">download</a></td>
 </tr>
 {% endfor %}
@@ -162,7 +162,7 @@
 {# ─── Validation notes ─── #}
 {% macro note_header(note) -%}
   <div class="note-card-header">
-    {{ note.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}
+    {{ note.created_at | datetimefmt("long") }}
     {% if note.thread_id %}
       <a href="/checkpoints/{{ note.thread_id }}/{% if note.tool_call_id %}#tc-{{ note.tool_call_id }}{% endif %}" class="mono text-xs" style="margin-left: 0.5rem;">{{ note.thread_id }}</a>
     {% endif %}
@@ -239,7 +239,7 @@
   {% for c in finding.comments %}
   <div class="comment-card mt-2" x-data="{ editing: false }">
     <div class="comment-card-header">
-      {{ c.created_at | datetimefmt("%Y-%m-%d %H:%M") }}
+      {{ c.created_at | datetimefmt }}
       <span style="margin-left: auto;">
         <button class="btn ghost text-xs" style="padding: 0.125rem 0.375rem;" @click="editing = true" x-show="!editing">edit</button>
         <form hx-post="/findings/{{ finding.id }}/comments/{{ c.id }}/delete/"

@@ -22,7 +22,7 @@
   <td><a href="{{ collection_url }}/{{ item.id }}/">{{ item.name }}</a></td>
   <td class="text-muted text-sm">{{ item.description | truncatechars(60) or "—" }}</td>
   <td>{{ item.files | length }}</td>
-  <td class="text-muted text-xs">{{ item.updated_at | datetimefmt("%Y-%m-%d %H:%M") }}</td>
+  <td class="text-muted text-xs">{{ item.updated_at | datetimefmt }}</td>
   <td>
     <form hx-post="{{ collection_url }}/{{ item.id }}/delete/" hx-confirm="Delete {{ collection_label }} {{ item.name }}?" hx-disabled-elt="find button" class="inline">
       <button type="submit" class="destructive">delete</button>
