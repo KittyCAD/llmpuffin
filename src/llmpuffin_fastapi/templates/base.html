@@ -52,87 +52,10 @@
   {% block external_css %}{% endblock %}
 
   {% block external_js %}
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
-          integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/idiomorph@0.7.4/dist/idiomorph-ext.min.js" integrity="sha384-SsScJKzATF/w6suEEdLbgYGsYFLzeKfOA6PY+/C5ZPxOSuA+ARquqtz/BZz9JWU8" crossorigin="anonymous"></script>
-  <script src="//unpkg.com/alpinejs" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/prism.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-toml.min.js"></script>
+  <script src="/static/app.bundle.js?v={{ static_hash() }}"></script>
   {% endblock %}
 
   {% block head %}{% endblock %}
-
-  <script>
-    // Alpine store: theme + sidebar collapse.
-    document.addEventListener("alpine:init", () => {
-      Alpine.store("ui", {
-        sidebarCollapsed: localStorage.getItem("llmpuffin.sidebar.collapsed") === "1",
-        dark: document.documentElement.classList.contains("dark"),
-        toggleSidebar() {
-          this.sidebarCollapsed = !this.sidebarCollapsed;
-          localStorage.setItem("llmpuffin.sidebar.collapsed", this.sidebarCollapsed ? "1" : "0");
-        },
-        toggleTheme() {
-          this.dark = !this.dark;
-          localStorage.setItem("llmpuffin.theme", this.dark ? "dark" : "light");
-        },
-      });
-    });
-  </script>
-  {% include "_toasts.html" %}
-
-  <script>
-    // Clickable table rows: use data-href on <tr> for navigation.
-    // Left-click navigates; middle-click / ctrl+click / cmd+click opens in new tab.
-    document.addEventListener("click", function(e) {
-      const tr = e.target.closest("tr[data-href]");
-      if (!tr) return;
-      if (e.target.closest("a, button, input, select, textarea, form")) return;
-      if (e.ctrlKey || e.metaKey) {
-        window.open(tr.dataset.href, "_blank");
-      } else {
-        window.location.href = tr.dataset.href;
-      }
-    });
-    document.addEventListener("auxclick", function(e) {
-      if (e.button !== 1) return;
-      const tr = e.target.closest("tr[data-href]");
-      if (!tr) return;
-      window.open(tr.dataset.href, "_blank");
-      e.preventDefault();
-    });
-
-    // Sortable table: add x-data="sortable" to any <table>.
-    // Headers use @click="sort('key')" and rows carry data-sort-<key>="value" on <td>s.
-    document.addEventListener("alpine:init", () => {
-      Alpine.data("sortable", () => ({
-        col: null,
-        asc: true,
-        sort(key) {
-          if (this.col === key) { this.asc = !this.asc; }
-          else { this.col = key; this.asc = true; }
-          const tbody = this.$root.querySelector("tbody");
-          const rows = Array.from(tbody.querySelectorAll("tr"));
-          const dir = this.asc ? 1 : -1;
-          rows.sort((a, b) => {
-            const ca = a.querySelector("[data-sort-" + key + "]");
-            const cb = b.querySelector("[data-sort-" + key + "]");
-            if (!ca || !cb) return 0;
-            const va = ca.getAttribute("data-sort-" + key);
-            const vb = cb.getAttribute("data-sort-" + key);
-            const na = parseFloat(va), nb = parseFloat(vb);
-            if (!isNaN(na) && !isNaN(nb)) return (na - nb) * dir;
-            return va.localeCompare(vb, undefined, {sensitivity: "base"}) * dir;
-          });
-          rows.forEach(r => tbody.appendChild(r));
-        },
-        sortClass(key) {
-          if (this.col !== key) return "sortable";
-          return "sortable " + (this.asc ? "asc" : "desc");
-        }
-      }));
-    });
-  </script>
 
   {# Pre-paint sidebar collapsed state to avoid FOUC before Alpine boots. #}
   <script>

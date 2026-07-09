@@ -64,9 +64,11 @@ src = ["src"]
 [dependency-groups]
 dev = ["pytest", "ruff", "pyright"]
 
-[tool.uv.build-backend]
-module-name = ["llmpuffin", "llmpuffin_fastapi", "llmpuffin_microvm_agent", ]
+[tool.hatch.build.targets.wheel]
+packages = ["src/llmpuffin", "src/llmpuffin_fastapi", "src/llmpuffin_microvm_agent"]
+
+[tool.hatch.build.hooks.custom]
 
 [build-system]
-requires = ["uv_build>=0.9.13,<0.12.0"]
-build-backend = "uv_build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"

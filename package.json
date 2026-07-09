@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/llmpuffin_fastapi/static/js/app.js --bundle --minify --format=iife --outfile=src/llmpuffin_fastapi/static/app.bundle.js",
+    "watch": "esbuild src/llmpuffin_fastapi/static/js/app.js --bundle --format=iife --outfile=src/llmpuffin_fastapi/static/app.bundle.js --watch"
+  },
+  "dependencies": {
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/legacy-modes": "^6.5.3",
+    "alpinejs": "^3",
+    "codemirror": "^6.0.2",
+    "htmx.org": "^2.0.10",
+    "idiomorph": "^0.7.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25"
+  }
+}

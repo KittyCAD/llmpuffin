@@ -23,3 +23,6 @@ profiles
 threat_model
 
 *local.toml
+
+node_modules
+src/llmpuffin_fastapi/static/app.bundle.js

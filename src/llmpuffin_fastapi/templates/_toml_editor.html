@@ -1,15 +1,10 @@
-{# Editable TOML textarea with syntax highlighting overlay.
+{# Editable TOML editor powered by CodeMirror.
 
    Expects:
      toml_value  — initial content (optional, defaults to a template)
      field_name  — form field name (optional, defaults to "profile_toml")
-     rows        — textarea rows (optional, defaults to 18)
-
-   Uses Prism.js for highlighting. The textarea is transparent and layered
-   on top of a <pre><code> that mirrors its content.
 #}
 {% set _field = field_name | default("profile_toml") %}
-{% set _rows = rows | default(18) %}
 {% set _default_toml %}
 [audit]
 name = "{{ project.name if project is defined else '' }}"
@@ -22,36 +17,6 @@ model = "anthropic:claude-sonnet-4-20250514"
 max_iterations = 200
 skills = ["audit-context-building"]
 {% endset %}
-{% set _value = toml_value if toml_value is defined and toml_value else _default_toml %}
+{% set _value = (toml_value if toml_value is defined and toml_value else _default_toml) | trim %}
 
-<div x-data="tomlEditor()" class="toml-editor" x-init="init()">
-  <pre class="toml-editor-highlight" aria-hidden="true"><code class="language-toml" x-ref="highlight"></code></pre>
-  <textarea name="{{ _field }}"
-            x-ref="textarea"
-            x-model="content"
-            @input="sync()"
-            @scroll="$refs.highlight.parentElement.scrollTop = $el.scrollTop; $refs.highlight.parentElement.scrollLeft = $el.scrollLeft;"
-            rows="{{ _rows }}"
-            required
-            spellcheck="false"
-            class="toml-editor-input">{{ _value }}</textarea>
-</div>
-
-<script>
-function tomlEditor() {
-  return {
-    content: '',
-    init() {
-      this.content = this.$refs.textarea.value;
-      this.sync();
-    },
-    sync() {
-      if (typeof Prism !== 'undefined' && Prism.languages.toml) {
-        this.$refs.highlight.innerHTML = Prism.highlight(this.content, Prism.languages.toml, 'toml');
-      } else {
-        this.$refs.highlight.textContent = this.content;
-      }
-    }
-  };
-}
-</script>
+<textarea name="{{ _field }}" data-codemirror="edit" required>{{ _value }}</textarea>
