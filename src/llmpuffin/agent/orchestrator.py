@@ -54,7 +54,7 @@ from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.agent.harness import Harness, HarnessConfig
 from llmpuffin.log import log
-from llmpuffin.models import AuditProfile, AuditRun, AuditThread, Project
+from llmpuffin.models import AuditRun, AuditThread
 from llmpuffin.agent.subagents import MAIN_AGENT_TOOLS, build_subagents
 from llmpuffin.threat_model import ThreatModel
 from llmpuffin.agent.tools import make_tools
@@ -340,7 +340,7 @@ async def _execute_pipeline(
 
     # Step 1: resolve thread
     resolved = await resolved_thread(
-        config, thread_id, source_thread_id, is_fork, db, profile_id, audit_run_id
+        config, thread_id, source_thread_id, is_fork, db, profile_id, audit_run_id,
     )
 
     env_ctx = None
@@ -429,7 +429,7 @@ async def create_audit_run(
 ) -> int:
     """Pre-create an AuditRun + thread before spawning. Returns audit_run.id."""
     return await _create_audit_run(
-        config, tid, resume_thread_id, db=db, profile_id=profile_id
+        config, tid, resume_thread_id, db=db, profile_id=profile_id,
     )
 
 
@@ -578,16 +578,7 @@ async def _create_audit_run(
                 audit_run = old_thread.audit_run
             else:
                 if profile_id is None:
-                    project = await Project.get_or_create(
-                        s, name=config.profile.name
-                    )
-                    db_profile = await AuditProfile.get_or_create(
-                        s,
-                        name=config.profile.name,
-                        profile_toml=config.profile_toml,
-                        project_id=project.id,
-                    )
-                    profile_id = db_profile.id
+                    raise ValueError("profile_id is required to create a new audit run")
                 audit_run = AuditRun(
                     profile_id=profile_id,
                     profile_toml=config.profile_toml,
@@ -598,16 +589,7 @@ async def _create_audit_run(
                 await s.flush()
         else:
             if profile_id is None:
-                project = await Project.get_or_create(
-                    s, name=config.profile.name
-                )
-                db_profile = await AuditProfile.get_or_create(
-                    s,
-                    name=config.profile.name,
-                    profile_toml=config.profile_toml,
-                    project_id=project.id,
-                )
-                profile_id = db_profile.id
+                raise ValueError("profile_id is required to create a new audit run")
             audit_run = AuditRun(
                 profile_id=profile_id,
                 profile_toml=config.profile_toml,

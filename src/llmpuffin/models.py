@@ -86,18 +86,6 @@ class Project(Base):
     def __str__(self) -> str:
         return self.name
 
-    @staticmethod
-    async def get_or_create(session, *, name: str) -> Project:
-        """Get or create a Project by name."""
-        project = (
-            await session.execute(select(Project).where(Project.name == name))
-        ).scalar_one_or_none()
-        if project is None:
-            project = Project(name=name)
-            session.add(project)
-            await session.flush()
-        return project
-
 
 class AuditProfile(Base):
     """A reusable audit configuration (profile TOML stored in DB).

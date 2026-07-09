@@ -324,7 +324,6 @@ class Profile(BaseModel):
 
     @classmethod
     def _from_dict(cls, data: dict) -> Profile:
-        # Validate structure + reject unknown keys via the strict schema.
         parsed = _ProfileToml.model_validate(data)
         return cls(
             name=parsed.audit.name,

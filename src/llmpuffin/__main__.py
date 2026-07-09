@@ -9,12 +9,15 @@ from pathlib import Path
 
 import logging
 
+from sqlalchemy import select
+
 from llmpuffin.agent import AuditStatus, run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.db import DB
 from llmpuffin.github import client_from_config
 from llmpuffin.agent.harness import HarnessConfig
 from llmpuffin.log import setup as setup_logging
+from llmpuffin.models import AuditProfile, Project
 from llmpuffin.services.sarif import export_sarif_for_run
 
 log = logging.getLogger("llmpuffin")
@@ -26,7 +29,35 @@ async def _async_abort_orphaned(config: Config):
     await db.abort_orphaned_threads()
 
 
-async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
+async def _resolve_profile_id(
+    harness_config: HarnessConfig, *, db: DB, project_name: str
+) -> int:
+    """Ensure project + profile exist in DB. Returns profile_id."""
+    async with db.async_session() as s:
+        project = (
+            await s.execute(select(Project).where(Project.name == project_name))
+        ).scalar_one_or_none()
+        if project is None:
+            project = Project(name=project_name)
+            s.add(project)
+            await s.flush()
+        db_profile = await AuditProfile.get_or_create(
+            s,
+            name=harness_config.profile.name,
+            profile_toml=harness_config.profile_toml,
+            project_id=project.id,
+        )
+        await s.commit()
+        return db_profile.id
+
+
+async def _async_main(
+    harness_config: HarnessConfig,
+    *,
+    config: Config,
+    db: DB,
+    project_name: str,
+):
     await db.setup()
 
     if config.backfill_embeddings:
@@ -39,9 +70,17 @@ async def _async_main(harness_config: HarnessConfig, *, config: Config, db: DB):
         except Exception:
             log.warning("Embedding backfill failed", exc_info=True)
 
+    profile_id = await _resolve_profile_id(
+        harness_config, db=db, project_name=project_name
+    )
+
     gh = client_from_config(config.github)
     return await run_audit(
-        harness_config, db=db, global_config=config, github_client=gh
+        harness_config,
+        db=db,
+        global_config=config,
+        github_client=gh,
+        profile_id=profile_id,
     )
 
 
@@ -75,6 +114,12 @@ def main() -> None:
         help="Audit profile TOML file",
     )
     run_parser.add_argument(
+        "--project",
+        type=str,
+        required=True,
+        help="Project name (created if it doesn't exist)",
+    )
+    run_parser.add_argument(
         "--sarif",
         type=Path,
         default=None,
@@ -106,7 +151,14 @@ def main() -> None:
     )
 
     db = DB(global_config.postgres)
-    result = asyncio.run(_async_main(harness_config, config=global_config, db=db))
+    result = asyncio.run(
+        _async_main(
+            harness_config,
+            config=global_config,
+            db=db,
+            project_name=args.project,
+        )
+    )
     n = result.finding_count
     print(f"Audit {result.status}. {n} finding{'s' if n != 1 else ''} recorded.")
 
