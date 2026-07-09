@@ -88,21 +88,29 @@ async def project_detail(
     )
 
 
-@router.post("/projects/{project_id}/", response_class=HTMLResponse)
-async def project_update(
+@router.post("/projects/{project_id}/edit/")
+async def project_edit(
     project_id: int,
     request: Request,
     svc: Annotated[ProjectService, Depends(get_project_service)],
-    name: Annotated[str, Form()] = "",
-    description: Annotated[str, Form()] = "",
+    name: Annotated[str | None, Form()] = None,
+    description: Annotated[str | None, Form()] = None,
 ):
     redirect = f"/projects/{project_id}/"
-    if not name.strip():
-        return toast(request, "error", "Name is required", redirect_to=redirect)
-    if not await svc.update(project_id, name.strip(), description.strip()):
+    fields = {}
+    if name is not None:
+        name = name.strip()
+        if not name:
+            return toast(request, "error", "Name cannot be empty", redirect_to=redirect)
+        fields["name"] = name
+    if description is not None:
+        fields["description"] = description.strip()
+    if not fields:
+        return toast(request, "error", "No fields to update", redirect_to=redirect)
+    if not await svc.patch(project_id, **fields):
         raise HTTPException(status_code=404)
     return toast(
-        request, "success", "Project saved.", redirect_to=redirect, refresh=True
+        request, "success", "Saved.", redirect_to=redirect, refresh=True
     )
 
 

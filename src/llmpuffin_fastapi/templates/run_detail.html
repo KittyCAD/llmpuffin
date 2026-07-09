@@ -89,7 +89,7 @@
       {% else %}<span class="badge outline">{{ t.status }}</span>{% endif %}
       {% if t.error %}<div class="text-xs text-muted mt-1">{{ t.error }}</div>{% endif %}
     </td>
-    <td class="text-muted text-xs">{{ t.created_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</td>
+    <td class="text-muted text-xs">{{ t.created_at | datetimefmt("long") }}</td>
     <td>
       {% if t.status == "running" %}
       <form hx-post="/runs/{{ run.id }}/stop/{{ t.thread_id }}/" hx-confirm="Stop this thread?" hx-disabled-elt="find button" class="inline">
@@ -134,15 +134,22 @@
       <div><div class="text-xs text-muted">Image</div><span class="mono text-sm">{{ run.container_image }}</span></div>
       <div><div class="text-xs text-muted">Repo</div>{% if run.github_repo_url %}<a href="{{ run.github_repo_url }}" target="_blank" rel="noopener">{{ run.github_repo_url }}</a>{% else %}—{% endif %}</div>
       <div><div class="text-xs text-muted">Commit</div>{% if run.git_commit %}{% if run.github_repo_url %}<a href="{{ run.github_repo_url.rstrip('/') }}/commit/{{ run.git_commit }}" target="_blank" rel="noopener"><code>{{ run.git_commit | truncatechars(12) }}</code></a>{% else %}<code>{{ run.git_commit | truncatechars(12) }}</code>{% endif %}{% else %}—{% endif %}</div>
-      <div><div class="text-xs text-muted">Started</div><span class="text-sm">{{ run.started_at | datetimefmt("%Y-%m-%d %H:%M:%S") }}</span></div>
-      <div><div class="text-xs text-muted">Finished</div><span class="text-sm">{{ (run.finished_at | datetimefmt("%Y-%m-%d %H:%M:%S")) or "—" }}</span></div>
+      <div><div class="text-xs text-muted">Started</div><span class="text-sm">{{ run.started_at | datetimefmt("long") }}</span></div>
+      <div><div class="text-xs text-muted">Finished</div><span class="text-sm">{{ (run.finished_at | datetimefmt("long")) or "—" }}</span></div>
     </div>
     {% if run.error %}<div class="error mt-2">{{ run.error }}</div>{% endif %}
   </div>
 
   {% if run.profile_toml or (run.profile and run.profile.profile_toml) %}
-  <h3>Profile TOML</h3>
-  <pre class="toml-highlight"><code class="language-toml" x-data x-init="if (Prism) Prism.highlightElement($el)">{{ run.profile_toml or run.profile.profile_toml }}</code></pre>
+  <div class="row mt-4" style="justify-content: space-between; align-items: baseline;">
+    <h3 style="margin: 0;">Profile TOML</h3>
+    {% if run.profile %}
+    <form hx-post="/runs/{{ run.id }}/sync-config/" hx-disabled-elt="find button" hx-confirm="Update this run's config from the latest profile?" class="inline">
+      <button type="submit" class="text-xs">sync from profile</button>
+    </form>
+    {% endif %}
+  </div>
+  <div data-codemirror="readonly" data-value="{{ (run.profile_toml or run.profile.profile_toml) | e }}"></div>
   {% endif %}
 {% endif %}
 

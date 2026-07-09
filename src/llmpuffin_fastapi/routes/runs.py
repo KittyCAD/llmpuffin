@@ -238,7 +238,12 @@ async def run_fork(
     import uuid as _uuid
 
     new_tid = _uuid.uuid4().hex[:12]
-    profile = Profile.from_toml_string(toml_str)
+    try:
+        profile = Profile.from_toml_string(toml_str)
+    except Exception as exc:
+        return toast(
+            request, "error", f"Invalid config: {exc}", redirect_to=redirect
+        )
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     harness.spawn(
         new_tid,
@@ -296,4 +301,21 @@ async def run_unlink_finding(
         return toast(request, "error", "No linked finding found", redirect_to=redirect)
     return toast(
         request, "success", "Finding unlinked", redirect_to=redirect, refresh=True
+    )
+
+
+@router.post("/runs/{run_id}/sync-config/")
+async def run_sync_config(
+    run_id: int,
+    request: Request,
+    svc: Annotated[RunService, Depends(get_run_service)],
+):
+    redirect = f"/runs/{run_id}/?tab=config"
+    error = await svc.sync_profile_toml(run_id)
+    if error == "not_found":
+        raise HTTPException(status_code=404)
+    if error:
+        return toast(request, "error", error, redirect_to=redirect)
+    return toast(
+        request, "success", "Config updated from profile", redirect_to=redirect, refresh=True
     )

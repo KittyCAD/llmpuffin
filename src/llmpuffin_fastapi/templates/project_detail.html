@@ -3,14 +3,44 @@
 {% block content %}
 <p><a href="/projects/">← all projects</a></p>
 
+{# ─── Inline edit macros ─── #}
+{% macro editable_text(field, value) %}
+<span x-data="{ editing: false }">
+  <span x-show="!editing">{{ value }}
+    <button class="btn ghost text-xs" style="padding: 0.125rem 0.375rem; margin-left: 0.25rem;" @click="editing = true">edit</button>
+  </span>
+  <form x-show="editing" x-cloak
+        hx-post="/projects/{{ project.id }}/edit/"
+        style="display: inline;"
+        @htmx:after-request="editing = false">
+    <input type="text" name="{{ field }}" value="{{ value }}" style="max-width: 20rem;" autofocus
+           @keydown.escape="editing = false">
+  </form>
+</span>
+{% endmacro %}
+
+{% macro editable_textarea(field, value) %}
+<span x-data="{ editing: false }">
+  <span x-show="!editing">{{ value or '—' }}
+    <button class="btn ghost text-xs" style="padding: 0.125rem 0.375rem; margin-left: 0.25rem;" @click="editing = true">edit</button>
+  </span>
+  <form x-show="editing" x-cloak
+        hx-post="/projects/{{ project.id }}/edit/"
+        class="col gap-1"
+        @htmx:after-request="editing = false">
+    <textarea name="{{ field }}" rows="2" style="max-width: 30rem;">{{ value }}</textarea>
+    <div class="row gap-2">
+      <button type="submit" class="primary text-xs">save</button>
+      <button type="button" class="ghost text-xs" @click="editing = false">cancel</button>
+    </div>
+  </form>
+</span>
+{% endmacro %}
+
 {# ─── Header ─── #}
-<div x-data="{ editing: false }">
 <div class="row" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
-  <div class="row gap-2" style="align-items: baseline;">
-    <h1 x-show="!editing">{{ project.name }}</h1>
-    <button class="btn ghost text-xs" x-show="!editing" @click="editing = true" style="padding: 0.125rem 0.375rem;">edit</button>
-  </div>
-  <div class="row gap-2" x-show="!editing">
+  <h1>{{ project.name }}</h1>
+  <div class="row gap-2">
     <a href="/projects/{{ project.id }}/profiles/new/" class="btn primary">+ New profile</a>
     <form hx-post="/projects/{{ project.id }}/delete/" hx-disabled-elt="find button" hx-confirm="Delete project '{{ project.name }}' and all its profiles?" class="inline">
       <button type="submit" class="destructive text-xs">delete</button>
@@ -18,28 +48,15 @@
   </div>
 </div>
 
-{# ─── Inline edit form ─── #}
-<form x-show="editing" x-cloak
-      hx-post="/projects/{{ project.id }}/"
-      hx-disabled-elt="find button, find input, find textarea"
-      class="card col gap-3 mt-2" style="max-width: 48rem;">
-  <div>
-    <label for="name">Name</label>
-    <input type="text" name="name" id="name" value="{{ project.name }}" required>
-  </div>
-  <div>
-    <label for="description">Description</label>
-    <textarea name="description" id="description" rows="2">{{ project.description }}</textarea>
-  </div>
-  <div class="row gap-2">
-    <button type="submit" class="primary">Save</button>
-    <button type="button" class="ghost" @click="editing = false">Cancel</button>
-  </div>
-</form>
-
-{% if project.description %}
-<p class="text-muted text-sm mt-1" x-show="!editing">{{ project.description }}</p>
-{% endif %}
+{# ─── Details table ─── #}
+<div class="card mt-4" style="padding: 0;">
+<table>
+<tr><th>Name</th><td>{{ editable_text("name", project.name) }}</td></tr>
+<tr><th>Description</th><td>{{ editable_textarea("description", project.description) }}</td></tr>
+<tr><th>Profiles</th><td>{{ profiles | length }}</td></tr>
+<tr><th>Created</th><td>{{ project.created_at | datetimefmt }}</td></tr>
+<tr><th>Updated</th><td>{{ project.updated_at | datetimefmt }}</td></tr>
+</table>
 </div>
 
 {# ─── Profiles ─── #}

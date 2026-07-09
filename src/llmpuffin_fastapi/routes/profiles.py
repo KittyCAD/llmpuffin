@@ -130,27 +130,36 @@ async def profile_detail_get(
     )
 
 
-@router.post("/profiles/{profile_id}/", response_class=HTMLResponse)
-async def profile_detail_post(
+@router.post("/profiles/{profile_id}/edit/")
+async def profile_edit(
     profile_id: int,
     request: Request,
     svc: Annotated[ProfileService, Depends(get_profile_service)],
-    name: Annotated[str, Form()] = "",
-    profile_toml: Annotated[str, Form()] = "",
+    name: Annotated[str | None, Form()] = None,
+    profile_toml: Annotated[str | None, Form()] = None,
     project_id: Annotated[int | None, Form()] = None,
 ):
     redirect = f"/profiles/{profile_id}/"
-    try:
-        tomllib.loads(profile_toml)
-    except Exception as exc:
-        return toast(request, "error", f"Invalid TOML: {exc}", redirect_to=redirect)
-
-    if not await svc.update(
-        profile_id, name.strip(), profile_toml, project_id=project_id
-    ):
+    fields: dict = {}
+    if name is not None:
+        name = name.strip()
+        if not name:
+            return toast(request, "error", "Name cannot be empty", redirect_to=redirect)
+        fields["name"] = name
+    if profile_toml is not None:
+        try:
+            tomllib.loads(profile_toml)
+        except Exception as exc:
+            return toast(request, "error", f"Invalid TOML: {exc}", redirect_to=redirect)
+        fields["profile_toml"] = profile_toml
+    if project_id is not None:
+        fields["project_id"] = project_id
+    if not fields:
+        return toast(request, "error", "No fields to update", redirect_to=redirect)
+    if not await svc.patch(profile_id, **fields):
         raise HTTPException(status_code=404)
     return toast(
-        request, "success", "Profile saved.", redirect_to=redirect, refresh=True
+        request, "success", "Saved.", redirect_to=redirect, refresh=True
     )
 
 

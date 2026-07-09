@@ -13,7 +13,6 @@
     <th @click="sort('name')" :class="sortClass('name')">Name</th>
     <th @click="sort('profiles')" :class="sortClass('profiles')">Profiles</th>
     <th @click="sort('runs')" :class="sortClass('runs')">Runs</th>
-    <th @click="sort('updated')" :class="sortClass('updated')">Updated</th>
   </tr>
 </thead>
 <tbody>
@@ -25,10 +24,9 @@
   </td>
   <td data-sort-profiles="{{ p.profile_count }}">{{ p.profile_count }}</td>
   <td data-sort-runs="{{ p.run_count }}">{{ p.run_count }}</td>
-  <td data-sort-updated="{{ p.updated_at.isoformat() if p.updated_at else '' }}" class="text-muted text-xs">{{ p.updated_at | datetimefmt }}</td>
 </tr>
 {% else %}
-<tr><td colspan="4" class="text-muted" style="text-align: center; padding: 2rem;">No projects yet. <a href="/projects/new/">Create one</a> to get started.</td></tr>
+<tr><td colspan="3" class="text-muted" style="text-align: center; padding: 2rem;">No projects yet. <a href="/projects/new/">Create one</a> to get started.</td></tr>
 {% endfor %}
 </tbody>
 </table>

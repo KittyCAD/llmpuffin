@@ -5,15 +5,44 @@
 
 <p><a href="/projects/{{ profile.project_id }}/">← project</a> · <a href="/profiles/">all profiles</a></p>
 
+{# ─── Inline edit macros ─── #}
+{% macro editable_text(field, value) %}
+<span x-data="{ editing: false }">
+  <span x-show="!editing">{{ value }}
+    <button class="btn ghost text-xs" style="padding: 0.125rem 0.375rem; margin-left: 0.25rem;" @click="editing = true">edit</button>
+  </span>
+  <form x-show="editing" x-cloak
+        hx-post="/profiles/{{ profile.id }}/edit/"
+        style="display: inline;"
+        @htmx:after-request="editing = false">
+    <input type="text" name="{{ field }}" value="{{ value }}" style="max-width: 20rem;" autofocus
+           @keydown.escape="editing = false">
+  </form>
+</span>
+{% endmacro %}
+
+{% macro editable_select(field, value, options) %}
+<span x-data="{ editing: false }">
+  <span x-show="!editing">{{ value }}
+    <button class="btn ghost text-xs" style="padding: 0.125rem 0.375rem; margin-left: 0.25rem;" @click="editing = true">edit</button>
+  </span>
+  <form x-show="editing" x-cloak
+        hx-post="/profiles/{{ profile.id }}/edit/"
+        style="display: inline;"
+        @htmx:after-request="editing = false">
+    <select name="{{ field }}" @change="$el.form.requestSubmit()" style="max-width: 14rem;">
+      {% for val, label in options %}
+        <option value="{{ val }}" {% if value == label %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</span>
+{% endmacro %}
+
 {# ─── Header ─── #}
-<div x-data="{ editing: false }">
 <div class="row" style="justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
-  <div class="row gap-2" style="align-items: baseline;">
-    <h1 x-show="!editing">{{ profile.name }}</h1>
-    {% if profile.jit %}<span class="badge outline text-xs" x-show="!editing">jit</span>{% endif %}
-    <button class="btn ghost text-xs" x-show="!editing" @click="editing = true" style="padding: 0.125rem 0.375rem;">edit</button>
-  </div>
-  <div class="row gap-2" x-show="!editing">
+  <h1>{{ profile.name }}{% if profile.jit %} <span class="badge outline text-xs">jit</span>{% endif %}</h1>
+  <div class="row gap-2">
     <form hx-post="/profiles/{{ profile.id }}/run/" hx-disabled-elt="find button" class="inline">
       <button type="submit" class="primary">run audit</button>
     </form>
@@ -23,52 +52,22 @@
   </div>
 </div>
 
-{# ─── Inline project switcher (always visible) ─── #}
-<div class="row gap-2 mt-1" x-show="!editing" style="align-items: center;">
-  <span class="text-xs text-muted">Project:</span>
-  <form hx-post="/profiles/{{ profile.id }}/"
-        hx-disabled-elt="find select"
-        style="display: inline;">
-    <input type="hidden" name="name" value="{{ profile.name }}">
-    <input type="hidden" name="profile_toml" value="{{ profile.profile_toml | e }}">
-    <select name="project_id" class="text-sm" style="padding: 0.125rem 0.375rem; min-width: 0; width: auto;"
-            @change="$el.form.requestSubmit()">
-      {% for pid, pname in projects %}
-      <option value="{{ pid }}" {% if pid == profile.project_id %}selected{% endif %}>{{ pname }}</option>
-      {% endfor %}
-    </select>
-  </form>
-</div>
-
-{# ─── Inline edit form ─── #}
-<form x-show="editing" x-cloak
-      hx-post="/profiles/{{ profile.id }}/"
-      hx-disabled-elt="find button, find input, find textarea, find select"
-      class="card col gap-3 mt-2" style="max-width: 64rem;">
-  <div class="row gap-4" style="flex-wrap: wrap; align-items: flex-start;">
-    <div style="flex: 1; min-width: 12rem;">
-      <label for="name">Name</label>
-      <input type="text" name="name" id="name" value="{{ profile.name }}" required>
-    </div>
-    <div style="flex: 1; min-width: 12rem;">
-      <label for="project_id">Project</label>
-      <select name="project_id" id="project_id">
-        {% for pid, pname in projects %}
-        <option value="{{ pid }}" {% if pid == profile.project_id %}selected{% endif %}>{{ pname }}</option>
-        {% endfor %}
-      </select>
-    </div>
-  </div>
-  <div>
-    <label for="profile_toml">Config (TOML)</label>
-    {% set toml_value = profile.profile_toml %}
-    {% include "_toml_editor.html" %}
-  </div>
-  <div class="row gap-2">
-    <button type="submit" class="primary">Save</button>
-    <button type="button" class="ghost" @click="editing = false">Cancel</button>
-  </div>
-</form>
+{# ─── Details table ─── #}
+{% set cfg = profile.parsed_config() %}
+{% set audit = cfg.get("audit", {}) %}
+{% set agent = cfg.get("agent", {}) %}
+<div class="card mt-4" style="padding: 0;">
+<table>
+<tr><th>Name</th><td>{{ editable_text("name", profile.name) }}</td></tr>
+<tr><th>Project</th><td>{{ editable_select("project_id", (projects | selectattr("0", "equalto", profile.project_id) | first)[1] if projects else "—", projects) }}</td></tr>
+<tr><th>Image</th><td class="mono text-sm">{{ audit.get("image", "—") }}</td></tr>
+<tr><th>Threat model</th><td class="mono text-sm">{{ audit.get("threat_model", "—") }}</td></tr>
+<tr><th>Model</th><td class="mono text-sm">{{ agent.get("model", "—") }}</td></tr>
+<tr><th>Max iterations</th><td class="mono text-sm">{{ agent.get("max_iterations", "—") }}</td></tr>
+<tr><th>Code dir</th><td class="mono text-sm">{{ audit.get("code_dir", "/src") }}</td></tr>
+<tr><th>Created</th><td>{{ profile.created_at | datetimefmt }}</td></tr>
+<tr><th>Updated</th><td>{{ profile.updated_at | datetimefmt }}</td></tr>
+</table>
 </div>
 
 {# ─── Tabs ─── #}
@@ -76,8 +75,8 @@
   <a class="tab {% if tab == 'runs' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=runs">
     Runs <span class="tab-count">{{ runs | length }}</span>
   </a>
-  <a class="tab {% if tab == 'config' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=config">
-    Config
+  <a class="tab {% if tab == 'profile' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=profile">
+    Profile
   </a>
 </div>
 
@@ -124,23 +123,14 @@
 {% endif %}
 {% endif %}
 
-{# ─── Config tab ─── #}
-{% if tab == 'config' %}
-<div class="card col gap-2">
-  <div class="row gap-4" style="flex-wrap: wrap;">
-    {% set cfg = profile.parsed_config() %}
-    {% set audit = cfg.get("audit", {}) %}
-    {% set agent = cfg.get("agent", {}) %}
-    <div><div class="text-xs text-muted">Image</div><span class="mono text-sm">{{ audit.get("image", "—") }}</span></div>
-    <div><div class="text-xs text-muted">Threat model</div><span class="mono text-sm">{{ audit.get("threat_model", "—") }}</span></div>
-    <div><div class="text-xs text-muted">Model</div><span class="mono text-sm">{{ agent.get("model", "—") }}</span></div>
-    <div><div class="text-xs text-muted">Max iterations</div><span class="mono text-sm">{{ agent.get("max_iterations", "—") }}</span></div>
-    <div><div class="text-xs text-muted">Code dir</div><span class="mono text-sm">{{ audit.get("code_dir", "/src") }}</span></div>
-    <div><div class="text-xs text-muted">Created</div><span class="text-sm">{{ profile.created_at | datetimefmt }}</span></div>
-    <div><div class="text-xs text-muted">Updated</div><span class="text-sm">{{ profile.updated_at | datetimefmt }}</span></div>
+{# ─── Profile tab ─── #}
+{% if tab == 'profile' %}
+<form hx-post="/profiles/{{ profile.id }}/edit/" class="col gap-3" style="max-width: 64rem;">
+  <div>
+    {% set toml_value = profile.profile_toml %}
+    {% include "_toml_editor.html" %}
   </div>
-</div>
-<h3>Profile TOML</h3>
-<pre class="toml-highlight"><code class="language-toml" x-data x-init="if (Prism) Prism.highlightElement($el)">{{ profile.profile_toml }}</code></pre>
+  <div><button type="submit" class="primary">Save</button></div>
+</form>
 {% endif %}
 {% endblock %}
