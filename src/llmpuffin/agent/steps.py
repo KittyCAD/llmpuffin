@@ -424,15 +424,33 @@ async def _setup_git_credentials(execution: AuditExecution, token: str) -> None:
     if not include.ok:
         log.warning("Failed to set git include.path: %s", include.stderr.strip())
 
+    # Rewrite SSH URLs to HTTPS so the token auth applies.
+    for ssh_prefix, https_prefix in [
+        ("git@github.com:", "https://github.com/"),
+        ("ssh://git@github.com/", "https://github.com/"),
+        ("git@gist.github.com:", "https://gist.github.com/"),
+    ]:
+        await execution.exec(
+            ["git", "config", "--global", f"url.{https_prefix}.insteadOf", ssh_prefix],
+            timeout=5,
+            workdir="/",
+        )
+
 
 async def _teardown_git_credentials(execution: AuditExecution) -> None:
-    """Remove the credentials file and global include after cloning."""
+    """Remove the credentials file, global include, and URL rewrites after cloning."""
     await execution.exec(["rm", "-f", _GIT_CREDENTIALS_PATH], timeout=5, workdir="/")
     await execution.exec(
         ["git", "config", "--global", "--unset-all", "include.path"],
         timeout=5,
         workdir="/",
     )
+    for https_prefix in ["https://github.com/", "https://gist.github.com/"]:
+        await execution.exec(
+            ["git", "config", "--global", "--remove-section", f"url.{https_prefix}"],
+            timeout=5,
+            workdir="/",
+        )
 
 
 async def _set_pipeline_state(tid: str, state: str, *, db: DB) -> None:
