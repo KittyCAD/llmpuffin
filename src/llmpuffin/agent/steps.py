@@ -435,7 +435,7 @@ async def _setup_git_credentials(execution: AuditExecution, token: str) -> None:
         ("git@gist.github.com:", "https://gist.github.com/"),
     ]:
         await execution.exec(
-            ["git", "config", "--global", f"url.{https_prefix}.insteadOf", ssh_prefix],
+            ["git", "config", "--global", "--add", f"url.{https_prefix}.insteadOf", ssh_prefix],
             timeout=5,
             workdir="/",
         )
