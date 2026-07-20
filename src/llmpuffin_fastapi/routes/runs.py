@@ -107,19 +107,39 @@ async def run_coverage(
     if run is None:
         raise HTTPException(status_code=404)
 
-    from llmpuffin.services.coverage import build_coverage_tree, load_coverage_for_run
+    import json as _json
+    from llmpuffin.services.coverage import (
+        build_directory_coverage,
+        load_coverage_for_run,
+    )
 
     all_files, accessed = load_coverage_for_run(run_id, db=llmpuffin_db)
-    tree = build_coverage_tree(all_files, accessed) if all_files else None
+    dirs = build_directory_coverage(all_files, accessed) if all_files else []
+    total_files = len(all_files)
+    accessed_files = len(accessed & set(all_files))
+    overall_pct = (100.0 * accessed_files / total_files) if total_files else 0
+
+    coverage_json = _json.dumps({
+        "dirs": [
+            {"path": d.path, "total": d.total_files, "reached": d.accessed_files}
+            for d in dirs
+        ],
+        "files": [
+            {"path": f, "reached": f in accessed}
+            for f in all_files
+        ],
+    })
 
     return templates.TemplateResponse(
         request,
         "run_coverage.html",
         {
             "run": run,
-            "tree": tree,
-            "total_files": len(all_files),
-            "accessed_files": len(accessed & set(all_files)),
+            "coverage_json": coverage_json,
+            "has_data": bool(dirs),
+            "total_files": total_files,
+            "accessed_files": accessed_files,
+            "overall_pct": overall_pct,
         },
     )
 

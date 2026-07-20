@@ -170,12 +170,10 @@ async def populate_file_tree(
 
 
 @dataclass
-class DirNode:
-    """A node in the file tree for coverage visualization."""
+class DirCoverage:
+    """Coverage stats for a single directory path."""
 
-    name: str
-    is_dir: bool = True
-    children: dict[str, DirNode] = field(default_factory=dict)
+    path: str
     total_files: int = 0
     accessed_files: int = 0
 
@@ -195,56 +193,33 @@ class DirNode:
         return "coverage-low"
 
 
-def build_coverage_tree(all_files: list[str], accessed: set[str]) -> DirNode:
-    """Build a tree from file paths, annotating coverage.
+def build_directory_coverage(
+    all_files: list[str], accessed: set[str]
+) -> list[DirCoverage]:
+    """Build per-directory coverage stats as a flat sorted list.
 
-    all_files: relative paths of all files in /src
-    accessed: relative paths that were accessed
+    Each file counts only toward its immediate parent directory.
     """
-    root = DirNode(name="/")
+    from collections import defaultdict
 
-    # Insert all files into tree
-    for path in all_files:
-        parts = path.split("/")
-        node = root
-        for part in parts[:-1]:
-            if part not in node.children:
-                node.children[part] = DirNode(name=part)
-            node = node.children[part]
-        filename = parts[-1]
-        leaf = DirNode(name=filename, is_dir=False)
-        node.children[filename] = leaf
+    totals: dict[str, int] = defaultdict(int)
+    reached: dict[str, int] = defaultdict(int)
 
-    # Mark accessed files
     for path in all_files:
-        parts = path.split("/")
-        node = root
-        for part in parts[:-1]:
-            node = node.children[part]
-        leaf = node.children[parts[-1]]
+        idx = path.rfind("/")
+        dir_path = path[:idx] if idx >= 0 else "."
+        totals[dir_path] += 1
         if path in accessed:
-            leaf.total_files = 1
-            leaf.accessed_files = 1
-        else:
-            leaf.total_files = 1
-            leaf.accessed_files = 0
+            reached[dir_path] += 1
 
-    # Roll up counts
-    def _rollup(node: DirNode) -> tuple[int, int]:
-        if not node.is_dir:
-            return node.total_files, node.accessed_files
-        total = 0
-        acc = 0
-        for child in node.children.values():
-            t, a = _rollup(child)
-            total += t
-            acc += a
-        node.total_files = total
-        node.accessed_files = acc
-        return total, acc
-
-    _rollup(root)
-    return root
+    return [
+        DirCoverage(
+            path=d,
+            total_files=totals[d],
+            accessed_files=reached.get(d, 0),
+        )
+        for d in sorted(totals)
+    ]
 
 
 def load_coverage_for_run(audit_run_id: int, *, db: DB) -> tuple[list[str], set[str]]:

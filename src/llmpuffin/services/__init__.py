@@ -2,7 +2,7 @@
 
 from llmpuffin.services.coverage import (
     CoverageTracker,
-    build_coverage_tree,
+    build_directory_coverage,
     load_coverage_for_run,
 )
 from llmpuffin.services.embeddings import (
@@ -31,7 +31,7 @@ __all__ = [
     "SkillService",
     "ThreatModelService",
     "backfill_embeddings",
-    "build_coverage_tree",
+    "build_directory_coverage",
     "cluster_findings",
     "embed_finding",
     "export_sarif_for_run",

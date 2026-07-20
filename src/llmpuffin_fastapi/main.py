@@ -137,6 +137,7 @@ def main() -> None:
         host="0.0.0.0",
         port=config.web.port,
         reload=config.web.debug,
+        reload_includes=["*.py", "*.html", "*.css", "*.js"] if config.web.debug else None,
     )
 
 
