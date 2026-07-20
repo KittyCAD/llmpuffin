@@ -99,11 +99,11 @@ document.addEventListener("alpine:initialized", () => {
 });
 
 // htmx → toast bridges.
-document.addEventListener("toast", (e) => {
+document.addEventListener("toast", ((e: CustomEvent) => {
   const d = e.detail || {};
   Alpine.store("toasts").push(d.level, d.message);
-});
-document.addEventListener("htmx:beforeOnLoad", (e) => {
+}) as EventListener);
+document.addEventListener("htmx:beforeOnLoad", ((e: CustomEvent) => {
   const xhr = e.detail && e.detail.xhr;
   if (!xhr || !xhr.getResponseHeader) return;
   const trigger = xhr.getResponseHeader("HX-Trigger");
@@ -119,14 +119,14 @@ document.addEventListener("htmx:beforeOnLoad", (e) => {
       }
     } catch (_) {}
   }
-});
-document.addEventListener("htmx:responseError", (e) => {
+}) as EventListener);
+document.addEventListener("htmx:responseError", ((e: CustomEvent) => {
   const xhr = e.detail && e.detail.xhr;
   Alpine.store("toasts").push(
     "error",
     "Request failed" + (xhr ? " (" + xhr.status + ")" : "")
   );
-});
+}) as EventListener);
 document.addEventListener("htmx:sendError", () => {
   Alpine.store("toasts").push("error", "Network error");
 });
@@ -144,10 +144,10 @@ document.addEventListener("alpine:init", () => {
         this.col = key;
         this.asc = true;
       }
-      const tbody = this.$root.querySelector("tbody");
-      const rows = Array.from(tbody.querySelectorAll("tr"));
+      const tbody = (this as any).$root.querySelector("tbody");
+      const rows = Array.from(tbody.querySelectorAll("tr")) as HTMLElement[];
       const dir = this.asc ? 1 : -1;
-      rows.sort((a, b) => {
+      rows.sort((a: HTMLElement, b: HTMLElement) => {
         const ca = a.querySelector("[data-sort-" + key + "]");
         const cb = b.querySelector("[data-sort-" + key + "]");
         if (!ca || !cb) return 0;
@@ -170,9 +170,10 @@ document.addEventListener("alpine:init", () => {
 // ── Clickable table rows ──
 
 document.addEventListener("click", (e) => {
-  const tr = e.target.closest("tr[data-href]");
+  const target = e.target as HTMLElement;
+  const tr = target.closest("tr[data-href]") as HTMLElement | null;
   if (!tr) return;
-  if (e.target.closest("a, button, input, select, textarea, form")) return;
+  if (target.closest("a, button, input, select, textarea, form")) return;
   if (e.ctrlKey || e.metaKey) {
     window.open(tr.dataset.href, "_blank");
   } else {
@@ -181,7 +182,7 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("auxclick", (e) => {
   if (e.button !== 1) return;
-  const tr = e.target.closest("tr[data-href]");
+  const tr = (e.target as HTMLElement).closest("tr[data-href]") as HTMLElement | null;
   if (!tr) return;
   window.open(tr.dataset.href, "_blank");
   e.preventDefault();
@@ -189,12 +190,12 @@ document.addEventListener("auxclick", (e) => {
 
 // ── Local timezone formatting for <time> elements ──
 
-function formatTimes(root) {
+function formatTimes(root: Element | Document) {
   (root || document).querySelectorAll("time[datetime]").forEach((el) => {
-    const d = new Date(el.getAttribute("datetime"));
-    if (isNaN(d)) return;
-    const fmt = el.dataset.fmt || "short";
-    const opts = {
+    const d = new Date(el.getAttribute("datetime")!);
+    if (isNaN(d.getTime())) return;
+    const fmt = (el as HTMLElement).dataset.fmt || "short";
+    const opts: Intl.DateTimeFormatOptions = {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -205,7 +206,7 @@ function formatTimes(root) {
     el.textContent = d.toLocaleString(undefined, opts);
   });
 }
-document.addEventListener("htmx:load", (e) => formatTimes(e.detail.elt));
+document.addEventListener("htmx:load", ((e: CustomEvent) => formatTimes(e.detail.elt)) as EventListener);
 
 // ── CodeMirror: TOML editor / viewer ──
 
@@ -282,7 +283,7 @@ function initCodeMirror(root) {
       el._cmView = view;
     });
 }
-document.addEventListener("htmx:load", (e) => initCodeMirror(e.detail.elt));
+document.addEventListener("htmx:load", ((e: CustomEvent) => initCodeMirror(e.detail.elt)) as EventListener);
 
 // ── Coverage treemap (d3) ──
 
@@ -334,10 +335,19 @@ function initTreemap(root) {
         .style("opacity", 0)
         .style("z-index", 10);
 
-      function groupAtDepth(prefix, depth) {
+      interface DirGroup {
+        path: string;
+        total: number;
+        reached: number;
+        hasChildren: boolean;
+        isFiles?: boolean;
+        value?: number;
+      }
+
+      function groupAtDepth(prefix: string, depth: number): DirGroup[] {
         // Group dirs under prefix by taking `depth` path segments.
         // Returns aggregated groups with hasChildren flag.
-        const groups = {};
+        const groups: Record<string, DirGroup> = {};
         const pfx = prefix ? prefix + "/" : "";
 
         for (const d of allData) {
@@ -369,10 +379,10 @@ function initTreemap(root) {
           }
         }
 
-        return Object.values(groups).filter((g) => g.total > 0);
+        return Object.values(groups).filter((g: DirGroup) => g.total > 0);
       }
 
-      function renderBreadcrumb(prefix) {
+      function renderBreadcrumb(prefix: string) {
         nav.html("");
         const parts = prefix ? prefix.split("/") : [];
 
@@ -403,7 +413,7 @@ function initTreemap(root) {
 
       let _pushHistory = true;
 
-      function showFiles(dirPath) {
+      function showFiles(dirPath: string) {
         fileListContainer.html("");
         const pfx = dirPath + "/";
         const files = allFiles.filter((f) => {
@@ -468,7 +478,7 @@ function initTreemap(root) {
         }
       }
 
-      function render(prefix) {
+      function render(prefix: string) {
         fileListContainer.html("");
         const children = groupAtDepth(prefix, 2);
         if (!children.length) return;
@@ -488,7 +498,7 @@ function initTreemap(root) {
 
         const rootNode = hierarchy({
           name: "root",
-          children: children.map((d) => ({ ...d, value: d.total })),
+          children: children.map((d: DirGroup) => ({ ...d, value: d.total })),
         })
           .sum((d) => d.value || 0)
           .sort((a, b) => b.value - a.value);
@@ -613,7 +623,7 @@ function initTreemap(root) {
       });
     });
 }
-document.addEventListener("htmx:load", (e) => initTreemap(e.detail.elt));
+document.addEventListener("htmx:load", ((e: CustomEvent) => initTreemap(e.detail.elt)) as EventListener);
 
 // ── Start Alpine ──
 

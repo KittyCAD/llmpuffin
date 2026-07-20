@@ -8,7 +8,7 @@ from pathlib import Path
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
-JS_SOURCE = Path("src/llmpuffin_fastapi/static/js/app.js")
+JS_SOURCE = Path("src/llmpuffin_fastapi/static/js/app.ts")
 JS_OUTPUT = Path("src/llmpuffin_fastapi/static/app.bundle.js")
 
 

@@ -1,8 +1,9 @@
 {
   "private": true,
   "scripts": {
-    "build": "esbuild src/llmpuffin_fastapi/static/js/app.js --bundle --minify --format=iife --outfile=src/llmpuffin_fastapi/static/app.bundle.js",
-    "watch": "esbuild src/llmpuffin_fastapi/static/js/app.js --bundle --format=iife --outfile=src/llmpuffin_fastapi/static/app.bundle.js --watch"
+    "build": "esbuild src/llmpuffin_fastapi/static/js/app.ts --bundle --minify --format=iife --outfile=src/llmpuffin_fastapi/static/app.bundle.js",
+    "watch": "esbuild src/llmpuffin_fastapi/static/js/app.ts --bundle --format=iife --outfile=src/llmpuffin_fastapi/static/app.bundle.js --watch",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@codemirror/language": "^6.12.4",
@@ -16,6 +17,7 @@
     "idiomorph": "^0.7.4"
   },
   "devDependencies": {
-    "esbuild": "^0.25"
+    "esbuild": "^0.25",
+    "typescript": "^5"
   }
 }
