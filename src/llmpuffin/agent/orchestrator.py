@@ -48,6 +48,7 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent.backend import ContainerBackend
 from llmpuffin.config import Config
+from llmpuffin.features import Flag
 from llmpuffin.services.coverage import CoverageTracker
 from llmpuffin.db import DB
 from llmpuffin.services.finding import FindingService
@@ -95,12 +96,13 @@ def _build_agent(
     p = config.profile
     agent_cfg = p.agent
     container_backend = ContainerBackend(execution, coverage=coverage)
-    routes: dict = {
-        "/memories/": StoreBackend(
+    features = config.resolve_features()
+    routes: dict = {}
+    if features.enabled(Flag.MEMORY):
+        routes["/memories/"] = StoreBackend(
             store=store,
             namespace=lambda rt, _n=p.name: ("llmpuffin", _n, "memories"),
         )
-    }
 
     # Load skills from DB into an in-memory store
     skills_list: list[str] = []

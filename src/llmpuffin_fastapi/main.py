@@ -17,6 +17,8 @@ from llmpuffin.services.finding import FindingService
 from llmpuffin.github import client_from_config
 from llmpuffin.agent.harness import Harness
 from llmpuffin.log import setup as setup_logging
+from llmpuffin.scheduler.service import SchedulerService
+from llmpuffin.scheduler.task import scheduler_loop
 from llmpuffin.services.profile import ProfileService
 from llmpuffin.services.project import ProjectService
 from llmpuffin.services.run import RunService
@@ -24,7 +26,7 @@ from llmpuffin.services.skill import SkillService
 from llmpuffin.services.threat_model import ThreatModelService
 
 from llmpuffin_fastapi.auth import get_current_user, setup_auth
-from llmpuffin_fastapi.deps import set_github_client
+from llmpuffin_fastapi.deps import get_github_client, set_github_client
 from llmpuffin_fastapi.routes import (
     about,
     checkpoints,
@@ -61,9 +63,26 @@ async def _lifespan(app: FastAPI):
         except Exception:
             log.warning("Embedding backfill failed", exc_info=True)
 
+    import asyncio
+
+    scheduler_task = asyncio.create_task(
+        scheduler_loop(
+            db=app.state.db,
+            config=config,
+            harness=app.state.harness,
+            github_client=get_github_client(),
+        )
+    )
+
     try:
         yield
     finally:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
+
         harness: Harness = app.state.harness
         running = harness.running_threads
         if running and config.web.wait_on_shutdown:
@@ -85,6 +104,7 @@ def create_app() -> FastAPI:
     app.state.run_service = RunService(app.state.db)
     app.state.skill_service = SkillService(app.state.db)
     app.state.threat_model_service = ThreatModelService(app.state.db)
+    app.state.scheduler_service = SchedulerService(app.state.db)
     # Shared harness for task tracking. Individual audits create their own
     # Harness instances for config/threat-model, but this one owns the
     # task registry so we can cancel running audits from the web UI.

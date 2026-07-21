@@ -32,6 +32,7 @@ dependencies = [
     "pydantic-settings>=2",
     "pgvector>=0.4.2",
     "sentence-transformers[onnx]>=4",
+    "croniter>=6.2.4",
 ]
 
 [project.optional-dependencies]

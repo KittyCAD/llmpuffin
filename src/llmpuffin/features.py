@@ -12,6 +12,7 @@ class Flag(StrEnum):
 
     FORK_RUNNING_THREADS = "fork_running_threads"
     DUPLICATE_DETECTION = "duplicate_detection"
+    MEMORY = "memory"
 
 
 class FeatureFlags(BaseModel):
@@ -24,6 +25,8 @@ class FeatureFlags(BaseModel):
     """Allow forking from threads that are still running (reads last checkpoint)."""
     duplicate_detection: bool = True
     """Check for duplicate findings before recording."""
+    memory: bool = True
+    """Enable persistent LLM memory across audit runs."""
 
     def enabled(self, flag: Flag) -> bool:
         """Check if a flag is enabled."""
@@ -38,6 +41,7 @@ class ProfileFeatureOverrides(BaseModel):
 
     fork_running_threads: bool | None = None
     duplicate_detection: bool | None = None
+    memory: bool | None = None
 
 
 def resolve_features(

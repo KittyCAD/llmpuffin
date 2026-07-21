@@ -16,6 +16,7 @@ from llmpuffin.agent.harness import HarnessConfig
 
 from llmpuffin.db import DB
 from llmpuffin.agent.harness import Harness
+from llmpuffin.scheduler.service import SchedulerService
 from llmpuffin.services.profile import ProfileService
 from llmpuffin.services.project import ProjectService
 from llmpuffin_fastapi.deps import (
@@ -25,6 +26,7 @@ from llmpuffin_fastapi.deps import (
     get_llmpuffin_db,
     get_profile_service,
     get_project_service,
+    get_scheduler_service,
     toast,
 )
 from llmpuffin_fastapi.templates_env import templates
@@ -112,11 +114,13 @@ async def profile_detail_get(
     request: Request,
     svc: Annotated[ProfileService, Depends(get_profile_service)],
     project_svc: Annotated[ProjectService, Depends(get_project_service)],
+    scheduler_svc: Annotated[SchedulerService, Depends(get_scheduler_service)],
 ):
     profile = await svc.get(profile_id, with_runs=True)
     if profile is None:
         raise HTTPException(status_code=404)
     projects = await project_svc.list_all()
+    schedule = await scheduler_svc.get_for_profile(profile_id)
     return templates.TemplateResponse(
         request,
         "profile_detail.html",
@@ -124,6 +128,7 @@ async def profile_detail_get(
             "profile": profile,
             "runs": profile.runs,
             "projects": [(p.id, p.name) for p, _, _ in projects],
+            "schedule": schedule,
         },
     )
 
@@ -219,3 +224,43 @@ async def profile_delete(
     return toast(
         request, "success", "Profile deleted", redirect_to="/profiles/", refresh=True
     )
+
+
+# ── Schedule routes ──
+
+
+@router.post("/profiles/{profile_id}/schedule/")
+async def schedule_upsert(
+    profile_id: int,
+    request: Request,
+    svc: Annotated[ProfileService, Depends(get_profile_service)],
+    scheduler_svc: Annotated[SchedulerService, Depends(get_scheduler_service)],
+    cron_expr: Annotated[str, Form()],
+    enabled: Annotated[bool, Form()] = True,
+):
+    profile = await svc.get(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404)
+    redirect = f"/profiles/{profile_id}/"
+    cron_expr = cron_expr.strip()
+    if not cron_expr:
+        return toast(request, "error", "Cron expression required", redirect_to=redirect)
+    try:
+        await scheduler_svc.upsert(profile_id, cron_expr, enabled=enabled)
+    except ValueError as exc:
+        return toast(request, "error", str(exc), redirect_to=redirect)
+    return toast(request, "success", "Schedule saved", redirect_to=redirect, refresh=True)
+
+
+@router.post("/profiles/{profile_id}/schedule/delete/")
+async def schedule_delete(
+    profile_id: int,
+    request: Request,
+    scheduler_svc: Annotated[SchedulerService, Depends(get_scheduler_service)],
+):
+    redirect = f"/profiles/{profile_id}/"
+    schedule = await scheduler_svc.get_for_profile(profile_id)
+    if schedule is None:
+        return toast(request, "error", "No schedule found", redirect_to=redirect)
+    await scheduler_svc.delete(schedule.id)
+    return toast(request, "success", "Schedule removed", redirect_to=redirect, refresh=True)

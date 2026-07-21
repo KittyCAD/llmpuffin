@@ -75,6 +75,9 @@
   <a class="tab {% if tab == 'runs' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=runs">
     Runs <span class="tab-count">{{ runs | length }}</span>
   </a>
+  <a class="tab {% if tab == 'schedule' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=schedule">
+    Schedule {% if schedule %}<span class="tab-count">{% if schedule.enabled %}on{% else %}off{% endif %}</span>{% endif %}
+  </a>
   <a class="tab {% if tab == 'profile' %}active{% endif %}" href="/profiles/{{ profile.id }}/?tab=profile">
     Profile
   </a>
@@ -121,6 +124,62 @@
   </form>
 </div>
 {% endif %}
+{% endif %}
+
+{# ─── Schedule tab ─── #}
+{% if tab == 'schedule' %}
+<div class="card col gap-3" style="max-width: 40rem;">
+  <h3>Scheduled audits</h3>
+  <form hx-post="/profiles/{{ profile.id }}/schedule/" class="col gap-3">
+    <div>
+      <label class="text-sm text-muted" for="cron_expr">Cron expression <span class="mono text-xs">(min hour dom mon dow)</span></label>
+      <input type="text" id="cron_expr" name="cron_expr" placeholder="0 2 * * 1"
+             value="{{ schedule.cron_expr if schedule else '' }}" style="max-width: 16rem;">
+    </div>
+    <div>
+      <label class="row gap-2" style="align-items: center;">
+        <input type="hidden" name="enabled" value="false">
+        <input type="checkbox" name="enabled" value="true" {% if not schedule or schedule.enabled %}checked{% endif %}>
+        <span class="text-sm">Enabled</span>
+      </label>
+    </div>
+    <div class="row gap-2">
+      <button type="submit" class="primary">Save schedule</button>
+      {% if schedule %}
+      <button type="button" class="destructive text-xs"
+              hx-post="/profiles/{{ profile.id }}/schedule/delete/"
+              hx-confirm="Remove schedule?">Remove</button>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if schedule and schedule.runs %}
+  <h4 class="mt-2">Recent runs</h4>
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Status</th>
+        <th>Run</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for sr in schedule.runs[:10] %}
+      <tr>
+        <td class="text-xs text-muted">{{ sr.created_at | datetimefmt }}</td>
+        <td>
+          {% if sr.status == "started" %}<span class="badge primary text-xs">started</span>
+          {% elif sr.status == "error" %}<span class="badge destructive text-xs">error</span>
+          {% else %}<span class="badge outline text-xs">{{ sr.status }}</span>{% endif %}
+        </td>
+        <td>{% if sr.audit_run_id %}<a href="/runs/{{ sr.audit_run_id }}/">#{{ sr.audit_run_id }}</a>{% else %}—{% endif %}</td>
+      </tr>
+      {% if sr.error %}<tr><td colspan="3" class="text-xs text-muted">{{ sr.error }}</td></tr>{% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
 {% endif %}
 
 {# ─── Profile tab ─── #}

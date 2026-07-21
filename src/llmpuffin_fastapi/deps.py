@@ -20,6 +20,7 @@ from llmpuffin.services.profile import ProfileService
 from llmpuffin.services.project import ProjectService
 from llmpuffin.services.run import RunService
 from llmpuffin.services.skill import SkillService
+from llmpuffin.scheduler.service import SchedulerService
 from llmpuffin.services.threat_model import ThreatModelService
 
 log = logging.getLogger("llmpuffin")
@@ -111,6 +112,10 @@ def get_run_service(request: Request) -> RunService:
 
 def get_skill_service(request: Request) -> SkillService:
     return request.app.state.skill_service
+
+
+def get_scheduler_service(request: Request) -> SchedulerService:
+    return request.app.state.scheduler_service
 
 
 def get_threat_model_service(request: Request) -> ThreatModelService:
