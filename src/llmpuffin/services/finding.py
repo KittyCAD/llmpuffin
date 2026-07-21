@@ -58,7 +58,7 @@ class FindingService:
         title: str,
         description: str,
         exploit_scenario: str,
-        threshold: float = 0.85,
+        threshold: float = 0.79,
     ) -> list[tuple[Finding, float]]:
         """Check if a candidate finding is a duplicate of an existing one.
 
