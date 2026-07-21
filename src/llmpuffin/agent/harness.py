@@ -51,6 +51,7 @@ from dataclasses import dataclass
 
 from llmpuffin.audit_environment import AuditExecution
 from llmpuffin.config import Config, Profile
+from llmpuffin.features import FeatureFlags, resolve_features
 from llmpuffin.threat_model import ThreatModel
 
 log = logging.getLogger("llmpuffin")
@@ -66,6 +67,16 @@ class HarnessConfig:
     # We keep the raw string rather than regenerating it from Profile so that
     # user comments and formatting are preserved.
     profile_toml: str = ""
+    _resolved_features: FeatureFlags | None = None
+
+    def resolve_features(self, global_config: Config | None = None) -> FeatureFlags:
+        """Resolved feature flags (profile overrides on top of global defaults)."""
+        if self._resolved_features is None:
+            global_flags = global_config.features if global_config else FeatureFlags()
+            self._resolved_features = resolve_features(
+                global_flags, self.profile.features
+            )
+        return self._resolved_features
 
 
 class Harness:

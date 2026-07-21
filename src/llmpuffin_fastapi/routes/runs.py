@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from llmpuffin.agent import fork_audit, run_audit
 from llmpuffin.config import Config, Profile
+from llmpuffin.features import Flag, resolve_features
 from llmpuffin.github import GitHubClient
 from llmpuffin.agent.harness import HarnessConfig
 from llmpuffin.services.sarif import export_sarif_for_run
@@ -236,19 +237,6 @@ async def run_fork(
     thread = next((t for t in run.threads if t.thread_id == thread_id), None)
     if thread is None:
         raise HTTPException(status_code=404)
-    if thread.status == "running" and not config.features.enabled(
-        "fork_running_threads"
-    ):
-        return toast(
-            request,
-            "error",
-            "Thread is still running, cannot fork",
-            redirect_to=redirect,
-        )
-    msg = message.strip()
-    if not msg:
-        return toast(request, "error", "Fork requires a message", redirect_to=redirect)
-
     toml_str = _toml_for_run(run)
     if not toml_str:
         return toast(
@@ -262,6 +250,19 @@ async def run_fork(
         profile = Profile.from_toml_string(toml_str)
     except Exception as exc:
         return toast(request, "error", f"Invalid config: {exc}", redirect_to=redirect)
+
+    flags = resolve_features(config.features, profile.features)
+    if thread.status == "running" and not flags.enabled(Flag.FORK_RUNNING_THREADS):
+        return toast(
+            request,
+            "error",
+            "Thread is still running, cannot fork",
+            redirect_to=redirect,
+        )
+    msg = message.strip()
+    if not msg:
+        return toast(request, "error", "Fork requires a message", redirect_to=redirect)
+
     harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
     harness.spawn(
         new_tid,

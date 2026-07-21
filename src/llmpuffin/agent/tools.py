@@ -10,11 +10,13 @@ from __future__ import annotations
 import logging
 from typing import Callable, Literal
 
+from langchain_core.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolRuntime
 from pydantic import BaseModel, Field
 
 from llmpuffin.agent.backend import ContainerBackend
 from llmpuffin.db import DB
+from llmpuffin.features import FeatureFlags, Flag
 from llmpuffin.services.finding import FindingService
 from llmpuffin.github import GitHubClient
 from llmpuffin.models import Finding, GitInfo
@@ -164,9 +166,11 @@ def make_tools(
     *,
     db: DB,
     finding_service: FindingService | None = None,
+    features: FeatureFlags | None = None,
 ) -> dict[str, Callable]:
     """Create threat model and finding tools."""
 
+    flags = features or FeatureFlags()
     svc = finding_service or FindingService(db)
 
     # Create a perspective view if we know the repo, otherwise show everything
@@ -250,7 +254,7 @@ Existing mitigations to verify:
         recommendations: str,
         locations: list[LocationInput] | None = None,
         runtime: ToolRuntime = None,  # pyright: ignore[reportArgumentType]  # injected by framework
-    ) -> str:
+    ) -> str | ToolMessage:
         """Record a security finding. Call this for each vulnerability you discover.
 
         Returns the finding_id (integer, starting from 0) which you must use
@@ -261,6 +265,36 @@ Existing mitigations to verify:
             raise RuntimeError("report_finding requires ToolRuntime")
         rt_tool_call_id = runtime.tool_call_id or ""
         rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
+
+        # Check for duplicates before inserting.
+        duplicates = (
+            await svc.check_duplicate(
+                audit_run_id,
+                title=title,
+                description=description,
+                exploit_scenario=exploit_scenario,
+            )
+            if flags.enabled(Flag.DUPLICATE_DETECTION)
+            else []
+        )
+        if duplicates:
+            lines = [
+                "This finding appears to be a duplicate of existing finding(s):"
+            ]
+            for dup, sim in duplicates:
+                lines.append(
+                    f"  - finding_id {dup.local_id}: \"{dup.title}\" "
+                    f"(similarity: {sim:.0%})"
+                )
+            lines.append(
+                "The finding was NOT recorded. If this is genuinely distinct, "
+                "re-report with a more differentiated description."
+            )
+            return ToolMessage(
+                content="\n".join(lines),
+                tool_call_id=rt_tool_call_id,
+                status="error",
+            )
 
         # Convert LocationInput models to dicts for the DB layer,
         # enriching each with git info from the container.

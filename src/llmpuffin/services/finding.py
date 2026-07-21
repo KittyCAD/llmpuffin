@@ -25,6 +25,9 @@ log = logging.getLogger("llmpuffin")
 # Fields whose changes should trigger an embedding refresh.
 _EMBEDDING_FIELDS = {"title", "description", "exploit_scenario"}
 
+# Max number of similar findings to return in duplicate checks.
+DUPLICATE_CHECK_LIMIT = 3
+
 
 class FindingService:
     """Finding CRUD operations.
@@ -47,6 +50,68 @@ class FindingService:
             embed_finding(finding_pk, db=self.db)
         except Exception as exc:
             log.debug("Embedding refresh skipped for finding %d: %s", finding_pk, exc)
+
+    async def check_duplicate(
+        self,
+        audit_run_id: int,
+        *,
+        title: str,
+        description: str,
+        exploit_scenario: str,
+        threshold: float = 0.85,
+    ) -> list[tuple[Finding, float]]:
+        """Check if a candidate finding is a duplicate of an existing one.
+
+        Builds an in-memory Finding, embeds it, and compares against existing
+        findings in the same audit run. Returns (Finding, similarity) pairs
+        above the threshold, highest first.
+        """
+        from llmpuffin.services.embeddings import (
+            _embed_texts,
+            _finding_text,
+            find_similar_by_vector,
+        )
+
+        candidate = Finding(
+            title=title,
+            description=description,
+            exploit_scenario=exploit_scenario,
+        )
+        text = _finding_text(candidate)
+        if not text.strip():
+            return []
+
+        try:
+            candidate_vec = _embed_texts([text])[0]
+        except Exception as exc:
+            log.debug("Duplicate check skipped (embedding failed): %s", exc)
+            return []
+
+        similar = find_similar_by_vector(
+            candidate_vec,
+            db=self.db,
+            audit_run_id=audit_run_id,
+            threshold=threshold,
+            limit=DUPLICATE_CHECK_LIMIT,
+        )
+        if not similar:
+            return []
+
+        finding_ids = [fid for fid, _ in similar]
+        scores = {fid: score for fid, score in similar}
+
+        async with self.db.async_session() as s:
+            rows = (
+                await s.execute(
+                    select(Finding).where(Finding.id.in_(finding_ids))
+                )
+            ).scalars().all()
+
+        return sorted(
+            [(f, scores[f.id]) for f in rows],
+            key=lambda x: x[1],
+            reverse=True,
+        )
 
     # ── local_id-based (agent tools) ──
 

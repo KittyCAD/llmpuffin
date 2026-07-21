@@ -251,6 +251,57 @@ def cluster_findings(
     return clusters
 
 
+def find_similar_by_vector(
+    vector: list[float],
+    *,
+    db: DB,
+    exclude_id: int | None = None,
+    audit_run_id: int | None = None,
+    threshold: float = 0.8,
+    limit: int = 10,
+) -> list[tuple[int, float]]:
+    """Find similar findings by comparing a vector against stored embeddings.
+
+    Returns list of (finding_id, similarity_score) pairs above threshold,
+    highest first. Optionally scope to a single audit run and/or exclude a
+    specific finding id.
+    """
+    vec_literal = "[" + ",".join(str(float(v)) for v in vector) + "]"
+
+    conditions = ["status != 'deleted'", "embedding IS NOT NULL"]
+    params: list = [vec_literal]
+
+    if exclude_id is not None:
+        conditions.append("id != %s")
+        params.append(exclude_id)
+    if audit_run_id is not None:
+        conditions.append("audit_run_id = %s")
+        params.append(audit_run_id)
+
+    where = " AND ".join(conditions)
+    params.extend([vec_literal, limit])
+
+    results = []
+    with psycopg.connect(db.url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT id, 1 - (embedding <=> %s::vector) AS similarity
+                FROM finding
+                WHERE {where}
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                params,
+            )
+            for row in cur.fetchall():
+                sim = float(row[1])
+                if sim >= threshold:
+                    results.append((row[0], round(sim, 3)))
+
+    return results
+
+
 def find_similar_global(
     finding_id: int, *, db: DB, threshold: float = 0.8, limit: int = 10
 ) -> list[tuple[int, float]]:
@@ -266,29 +317,13 @@ def find_similar_global(
         if finding is None or finding.embedding is None:
             return []
 
-    vec_literal = "[" + ",".join(str(float(v)) for v in finding.embedding) + "]"
-
-    results = []
-    with psycopg.connect(db.url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, 1 - (embedding <=> %s::vector) AS similarity
-                FROM finding
-                WHERE id != %s
-                  AND status != 'deleted'
-                  AND embedding IS NOT NULL
-                ORDER BY embedding <=> %s::vector
-                LIMIT %s
-                """,
-                (vec_literal, finding_id, vec_literal, limit),
-            )
-            for row in cur.fetchall():
-                sim = float(row[1])
-                if sim >= threshold:
-                    results.append((row[0], round(sim, 3)))
-
-    return results
+    return find_similar_by_vector(
+        finding.embedding,
+        db=db,
+        exclude_id=finding_id,
+        threshold=threshold,
+        limit=limit,
+    )
 
 
 async def find_similar_findings(

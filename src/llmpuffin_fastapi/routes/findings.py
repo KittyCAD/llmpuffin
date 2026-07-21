@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from llmpuffin.agent import fork_audit
 from llmpuffin.config import Config, Profile
+from llmpuffin.features import Flag, resolve_features
 from llmpuffin.github import GitHubClient
 from llmpuffin.agent.harness import HarnessConfig
 from llmpuffin.services.finding import FindingService
@@ -438,13 +439,6 @@ async def finding_fork(
             select(AuditThread).where(AuditThread.thread_id == finding.thread_id)
         )
     ).scalar_one_or_none()
-    if (
-        source_thread
-        and source_thread.status == "running"
-        and not config.features.enabled("fork_running_threads")
-    ):
-        return _fork_error("Source thread is still running, cannot fork")
-
     toml_str = run.profile_toml or (run.profile.profile_toml if run.profile else "")
     if not toml_str:
         return _fork_error("No config available for fork")
@@ -453,6 +447,14 @@ async def finding_fork(
         profile = Profile.from_toml_string(toml_str)
     except Exception as exc:
         return _fork_error(f"Invalid config: {exc}")
+
+    flags = resolve_features(config.features, profile.features)
+    if (
+        source_thread
+        and source_thread.status == "running"
+        and not flags.enabled(Flag.FORK_RUNNING_THREADS)
+    ):
+        return _fork_error("Source thread is still running, cannot fork")
 
     user_message = svc.build_fork_message(finding, message)
 

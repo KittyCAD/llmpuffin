@@ -49,6 +49,10 @@ Example profile.toml:
     [anthropic]
     # effort = "high"  # max, xhigh, high, medium, low
 
+    # Override feature flags for this profile (omit to inherit global defaults):
+    # [features]
+    # duplicate_detection = false
+
     # Or use OpenAI:
     # [agent]
     # model = "openai:o3"
@@ -67,7 +71,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from llmpuffin.features import FeatureFlags
+from llmpuffin.features import FeatureFlags, ProfileFeatureOverrides
 
 from llmpuffin.system_prompt import DEFAULT_SYSTEM_PROMPT
 
@@ -284,6 +288,7 @@ class _ProfileToml(BaseModel):
     anthropic: ProfileAnthropic = ProfileAnthropic()
     openai: ProfileOpenAI = ProfileOpenAI()
     repo: list[ProfileRepo] = []
+    features: ProfileFeatureOverrides = ProfileFeatureOverrides()
 
 
 class Profile(BaseModel):
@@ -297,6 +302,7 @@ class Profile(BaseModel):
     agent: ProfileAgent = ProfileAgent()
     anthropic: ProfileAnthropic = ProfileAnthropic()
     openai: ProfileOpenAI = ProfileOpenAI()
+    features: ProfileFeatureOverrides = ProfileFeatureOverrides()
 
     @property
     def provider(self) -> str:
@@ -334,6 +340,7 @@ class Profile(BaseModel):
             agent=parsed.agent,
             anthropic=parsed.anthropic,
             openai=parsed.openai,
+            features=parsed.features,
         )
 
 

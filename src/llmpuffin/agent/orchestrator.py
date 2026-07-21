@@ -143,6 +143,7 @@ def _build_agent(
         container_backend=container_backend,
         db=db,
         finding_service=finding_service,
+        features=config.resolve_features(),
     )
     main_tools: list = [tools[name] for name in MAIN_AGENT_TOOLS]
 
@@ -337,6 +338,9 @@ async def _execute_pipeline(
         input_messages,
         agent_run_result,
     )
+
+    # Resolve feature flags (profile overrides on top of global defaults).
+    config.resolve_features(harness.global_config)
 
     # Step 1: resolve thread
     resolved = await resolved_thread(
