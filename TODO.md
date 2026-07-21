@@ -1,5 +1,8 @@
 attach file should link to the tool call/message
 
+- Ability to query user for answers on a set of quetions, e.g. scoping clarification
+- Project context/prompt used for all profiles/projects
+- Capture network traffic
 
 ## Bugs:
 - Clone always gets latest ref. But we want to use the one of the audit run.
@@ -22,6 +25,17 @@ attach file should link to the tool call/message
 
 ## Resilience:
 - On shutdown, mark running audits as "interrupted" instead of "aborted" and persist their checkpoint state. On startup, auto-resume any interrupted threads so a new instance picks up where the old one left off.
+
+## Penetration tests:
+
+- Credentials, target endpoint and API schema as inputs
+- Multiple accounts at different privilege levels for IDOR/BOLA testing
+- Out-of-scope definition and enforcement
+- Resource ownership model:
+  - Per-user (each user owns their data)
+  - Per-organization (shared within an org)
+  - Mixed (combination of user-scoped, org-scoped, and public resources)
+- Workflow: recon and endpoint mapping, vulnerability identification, exploitation with PoC, severity rating, remediation guidance, final report with executive summary ranked by business impact
 
 ## Harness:
 - Multi-step flows:
