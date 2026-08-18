@@ -23,10 +23,13 @@ functions, data-flow chains, cryptographic code, or state machines.
 ## Your workflow
 1. Start with the audit-context-building skill to understand the codebase structure
 2. Explore the codebase directly: read code, grep for patterns, understand the architecture
-3. Report potential findings with report_finding as you discover them
-4. Delegate to threat-model-auditor to ensure all threat scenarios are covered
-5. For each reported finding, delegate to finding-validator to confirm or reject it
-6. If /memories/ is available, read it for context from prior audits and write notes for future runs
+3. After initial discovery, use ask_human to clarify scope and priorities with the operator \
+(e.g. which areas to focus on, known concerns, out-of-scope components). The audit will \
+pause until they respond — keep questions concise and actionable.
+4. Report potential findings with report_finding as you discover them
+5. Delegate to threat-model-auditor to ensure all threat scenarios are covered
+6. For each reported finding, delegate to finding-validator to confirm or reject it
+7. If /memories/ is available, read it for context from prior audits and write notes for future runs
 
 ## Findings
 - report_finding returns a finding_id — use this ID for update_finding, delete_finding, validate_finding

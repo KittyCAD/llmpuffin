@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import psycopg
+import psycopg.sql
 
 if TYPE_CHECKING:
     from llmpuffin.db import DB
@@ -285,13 +286,13 @@ def find_similar_by_vector(
     with psycopg.connect(db.url) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"""
-                SELECT id, 1 - (embedding <=> %s::vector) AS similarity
-                FROM finding
-                WHERE {where}
-                ORDER BY embedding <=> %s::vector
-                LIMIT %s
-                """,
+                psycopg.sql.SQL(
+                    "SELECT id, 1 - (embedding <=> %s::vector) AS similarity"
+                    " FROM finding"
+                    " WHERE {}"
+                    " ORDER BY embedding <=> %s::vector"
+                    " LIMIT %s"
+                ).format(psycopg.sql.SQL(where)),  # pyright: ignore[reportArgumentType]
                 params,
             )
             for row in cur.fetchall():

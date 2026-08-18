@@ -18,6 +18,27 @@
     stop_url="/checkpoints/" ~ conv_thread_id ~ "/stop/",
   ) }}
 
+  {# Pending human questions — between composer and messages. #}
+  {% set questions = conv_pending_questions | default([]) %}
+  {% for q in questions %}
+  <div class="card" style="border-left: 3px solid hsl(var(--primary)); margin: 0.75rem 0;">
+    <div class="text-sm text-muted" style="margin-bottom: 0.25rem;">LLM is asking:</div>
+    <div class="markdown" style="margin: 0.25rem 0 0.75rem;">{{ q.question | md }}</div>
+    <form hx-post="/checkpoints/{{ conv_thread_id }}/answer/{{ q.id }}/" class="col gap-2">
+      {% if q.choices %}
+        {% for choice in q.choices %}
+        <label class="row gap-2" style="align-items: center; cursor: pointer;">
+          <input type="checkbox" name="selected" value="{{ choice }}">
+          <span>{{ choice }}</span>
+        </label>
+        {% endfor %}
+      {% endif %}
+      <textarea name="answer" rows="2" placeholder="Additional context or free-text answer..." style="min-width: 0;"></textarea>
+      <div><button type="submit" class="primary">Answer</button></div>
+    </form>
+  </div>
+  {% endfor %}
+
   {# Messages — polled every 3s. Composer is NOT inside here so morph skips it. #}
   <div id="messages"
        hx-get="/checkpoints/{{ conv_thread_id }}/messages/"

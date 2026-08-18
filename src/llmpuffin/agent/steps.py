@@ -14,7 +14,14 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy import update
 
-from llmpuffin.agent.orchestrator import AuditStatus, _build_agent, _stream_agent
+from langchain.agents.middleware.types import InputAgentState
+from langgraph.types import Command
+
+from llmpuffin.agent.orchestrator import (
+    AuditStatus,
+    _build_agent,
+    _stream_agent,
+)
 from llmpuffin.audit_environment import AuditExecution, GitInfo
 from llmpuffin.services.coverage import CoverageTracker
 from llmpuffin.db import DB
@@ -293,7 +300,7 @@ async def input_messages(
 
 async def agent_run_result(
     agent: Any,
-    messages: list,
+    input_data: InputAgentState | Command,
     config: HarnessConfig,
     resolved: ResolvedThread,
     db: DB,
@@ -306,7 +313,7 @@ async def agent_run_result(
         "configurable": {"thread_id": resolved.tid},
     }
     status, error = await _stream_agent(
-        agent, messages, run_config, p.agent.max_iterations
+        agent, input_data, run_config, p.agent.max_iterations
     )
     return AgentRunResult(status=status, error=error)
 

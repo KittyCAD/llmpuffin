@@ -92,5 +92,6 @@ class TestToolDocumentation:
             "finding_list_attached_files",
             "get_coverage",
             "get_similar_findings",
+            "ask_human",
         }
         assert set(tools.keys()) == expected

@@ -26,6 +26,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     LargeBinary,
     String,
     Text,
@@ -203,6 +204,8 @@ class AuditRun(Base):
             return "pending"
         if "running" in statuses:
             return "running"
+        if "waiting_for_input" in statuses:
+            return "waiting_for_input"
         if "error" in statuses:
             return "error"
         if "recursion_limit" in statuses:
@@ -249,6 +252,38 @@ class AuditThread(Base):
 
     def __str__(self) -> str:
         return self.thread_id
+
+
+class HumanQuestion(Base):
+    """A question from the LLM agent to a human operator.
+
+    Created when the agent calls ask_human and the graph interrupts.
+    Answered via the web UI; the answer resumes the graph.
+    """
+
+    __tablename__ = "human_question"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("audit_thread.thread_id", ondelete="CASCADE"),
+        index=True,
+    )
+    tool_call_id: Mapped[str] = mapped_column(
+        String(128), default="", server_default=""
+    )
+    question: Mapped[str] = mapped_column(Text)
+    choices: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    """Optional list of choices for multiple-choice questions (stored as JSON)."""
+    answer: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    thread: Mapped[AuditThread] = relationship()
 
 
 class Finding(Base):

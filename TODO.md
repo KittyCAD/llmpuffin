@@ -1,5 +1,7 @@
 attach file should link to the tool call/message
 
+- extend coverage tool to query coverage combined of the past n runs with the same project
+
 - Ability to query user for answers on a set of quetions, e.g. scoping clarification
 - Project context/prompt used for all profiles/projects
 - Capture network traffic

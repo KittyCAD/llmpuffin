@@ -120,16 +120,15 @@ async def run_coverage(
     accessed_files = len(accessed & set(all_files))
     overall_pct = (100.0 * accessed_files / total_files) if total_files else 0
 
-    coverage_json = _json.dumps({
-        "dirs": [
-            {"path": d.path, "total": d.total_files, "reached": d.accessed_files}
-            for d in dirs
-        ],
-        "files": [
-            {"path": f, "reached": f in accessed}
-            for f in all_files
-        ],
-    })
+    coverage_json = _json.dumps(
+        {
+            "dirs": [
+                {"path": d.path, "total": d.total_files, "reached": d.accessed_files}
+                for d in dirs
+            ],
+            "files": [{"path": f, "reached": f in accessed} for f in all_files],
+        }
+    )
 
     return templates.TemplateResponse(
         request,

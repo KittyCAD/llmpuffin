@@ -45,11 +45,28 @@ log = logging.getLogger("llmpuffin")
 _PUBLIC_PATHS = frozenset({"/auth/login", "/auth/callback", "/auth/logout", "/healthz"})
 
 
+_LLM_API_KEY_ENVS = {
+    "ANTHROPIC_API_KEY": "Anthropic",
+    "OPENAI_API_KEY": "OpenAI",
+}
+
+
+def _warn_missing_config(config: Config) -> None:
+    import os
+
+    for env_var, provider in _LLM_API_KEY_ENVS.items():
+        if not os.environ.get(env_var):
+            log.warning("%s is not set — %s models will not work", env_var, provider)
+    if not config.github.configured:
+        log.warning("GitHub App not configured — GitHub integration disabled")
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     config: Config = app.state.config
     setup_logging(level=config.logging.level)
     log.info("llmpuffin starting on port %s", config.web.port)
+    _warn_missing_config(config)
     await app.state.db.setup()
     set_github_client(client_from_config(config.github))
 
@@ -157,7 +174,9 @@ def main() -> None:
         host="0.0.0.0",
         port=config.web.port,
         reload=config.web.debug,
-        reload_includes=["*.py", "*.html", "*.css", "*.js"] if config.web.debug else None,
+        reload_includes=["*.py", "*.html", "*.css", "*.js"]
+        if config.web.debug
+        else None,
     )
 
 

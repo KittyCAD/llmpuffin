@@ -34,12 +34,14 @@ from enum import StrEnum
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StoreBackend
 from deepagents.backends.utils import create_file_data
+from langchain.agents.middleware.types import InputAgentState
 from langchain_core.messages import AIMessage
+from langgraph.types import Command
 from typing import Any
 from langchain_quickjs import CodeInterpreterMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.errors import GraphRecursionError
+from langgraph.errors import GraphInterrupt, GraphRecursionError
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres.aio import AsyncPostgresStore
 from sqlalchemy import func, select, update
@@ -67,6 +69,7 @@ class AuditStatus(StrEnum):
     RECURSION_LIMIT = "recursion_limit"
     ABORTED = "aborted"
     ERROR = "error"
+    WAITING_FOR_INPUT = "waiting_for_input"
 
 
 @dataclass
@@ -218,20 +221,25 @@ def _build_agent(
     )
 
 
-async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
+async def _stream_agent(
+    agent: Any,
+    input_data: InputAgentState | Command,
+    run_config: dict,
+    max_iterations: int,
+) -> tuple[AuditStatus, str | None]:
     """Stream agent execution via event streaming and log progress.
 
     Uses astream_events (v2) for granular visibility into tool calls,
     model output, and subagent activity — including events from nested
     subgraphs that the old stream_mode="updates" approach missed.
 
-    Returns (status, error).
+    input_data is either {"messages": [...]} or a Command (for interrupt resume).
     """
     status = AuditStatus.COMPLETED
     error: str | None = None
     try:
         async for event in agent.astream_events(
-            {"messages": input_messages},
+            input_data,
             config=run_config,
             version="v2",
         ):
@@ -264,6 +272,9 @@ async def _stream_agent(agent, input_messages, run_config, max_iterations: int):
             elif kind == "on_tool_error":
                 err_data = event["data"].get("error", "")
                 log.warning("  tool error: %s", _truncate(str(err_data), 200))
+    except GraphInterrupt:
+        status = AuditStatus.WAITING_FOR_INPUT
+        log.info("Agent interrupted — waiting for human input")
     except GraphRecursionError:
         status = AuditStatus.RECURSION_LIMIT
         error = f"Agent hit recursion limit ({max_iterations} iterations)"
@@ -321,6 +332,7 @@ async def _execute_pipeline(
     thread_id: str | None = None,
     source_thread_id: str | None = None,
     user_message: str | None = None,
+    resume_answer: str | None = None,
     existing_container_id: str | None = None,
     is_fork: bool = False,
     github_client: GitHubClient | None = None,
@@ -382,19 +394,23 @@ async def _execute_pipeline(
             finding_service=finding_svc,
         )
 
-        # Step 5: prepare input messages
-        messages = await input_messages(
-            agent,
-            config,
-            resolved,
-            source_thread_id,
-            user_message,
-            is_fork,
-            thread_id,
-        )
+        # Step 5: prepare input
+        if resume_answer is not None:
+            agent_input: InputAgentState | Command = Command(resume=resume_answer)
+        else:
+            messages = await input_messages(
+                agent,
+                config,
+                resolved,
+                source_thread_id,
+                user_message,
+                is_fork,
+                thread_id,
+            )
+            agent_input = {"messages": messages}
 
         # Step 6: run agent
-        run_result = await agent_run_result(agent, messages, config, resolved, db)
+        run_result = await agent_run_result(agent, agent_input, config, resolved, db)
         status = run_result.status
         error = run_result.error
     except (KeyboardInterrupt, asyncio.CancelledError):
@@ -456,6 +472,7 @@ async def run_audit(
     global_config: Config,
     thread_id: str | None = None,
     user_message: str | None = None,
+    resume_answer: str | None = None,
     github_client: GitHubClient | None = None,
     profile_id: int | None = None,
     audit_run_id: int | None = None,
@@ -484,6 +501,7 @@ async def run_audit(
             checkpointer,
             store,
             user_message,
+            resume_answer=resume_answer,
             db=db,
             github_client=github_client,
             profile_id=profile_id,
@@ -499,6 +517,7 @@ async def _run_audit_inner(
     checkpointer: BaseCheckpointSaver,
     store: Any,
     user_message: str | None = None,
+    resume_answer: str | None = None,
     *,
     db: DB,
     github_client: GitHubClient | None = None,
@@ -523,6 +542,7 @@ async def _run_audit_inner(
         db=db,
         thread_id=thread_id,
         user_message=user_message,
+        resume_answer=resume_answer,
         existing_container_id=existing_container_id,
         is_fork=False,
         github_client=github_client,
@@ -656,11 +676,12 @@ async def _finalize_audit_run(
                 .where(AuditThread.thread_id == tid)
                 .values(status=status.value, error=error or "")
             )
-            await s.execute(
-                update(AuditRun)
-                .where(AuditRun.id == row)
-                .values(finished_at=datetime.now(timezone.utc))
-            )
+            if status != AuditStatus.WAITING_FOR_INPUT:
+                await s.execute(
+                    update(AuditRun)
+                    .where(AuditRun.id == row)
+                    .values(finished_at=datetime.now(timezone.utc))
+                )
             await s.commit()
     except Exception as exc:
         log.warning("Failed to finalize thread in DB: %s", exc)

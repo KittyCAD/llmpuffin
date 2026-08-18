@@ -23,9 +23,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("cron_expr", sa.String(128), nullable=False),
-        sa.Column(
-            "enabled", sa.Boolean, nullable=False, server_default="true"
-        ),
+        sa.Column("enabled", sa.Boolean, nullable=False, server_default="true"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

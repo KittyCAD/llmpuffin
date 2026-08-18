@@ -25,7 +25,7 @@
 </div>
 {% endif %}
 
-{% with conv_thread_id=session.thread_id, conv_session=session, conv_thread=audit_thread %}
+{% with conv_thread_id=session.thread_id, conv_session=session, conv_thread=audit_thread, conv_pending_questions=pending_questions %}
   {% include "_conversation.html" %}
 {% endwith %}
 

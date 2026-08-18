@@ -278,12 +278,10 @@ Existing mitigations to verify:
             else []
         )
         if duplicates:
-            lines = [
-                "This finding appears to be a duplicate of existing finding(s):"
-            ]
+            lines = ["This finding appears to be a duplicate of existing finding(s):"]
             for dup, sim in duplicates:
                 lines.append(
-                    f"  - finding_id {dup.local_id}: \"{dup.title}\" "
+                    f'  - finding_id {dup.local_id}: "{dup.title}" '
                     f"(similarity: {sim:.0%})"
                 )
             lines.append(
@@ -551,39 +549,29 @@ Existing mitigations to verify:
     def get_coverage() -> str:
         """Get file coverage summary for this audit run.
 
-        Shows which directories and files have been reached during the audit,
+        Shows which directories have been reached during the audit,
         with coverage percentages. Use this to identify areas of the codebase
         that have not been examined yet.
         """
         from llmpuffin.services.coverage import (
+            build_directory_coverage,
             load_coverage_for_run,
-            build_coverage_tree,
         )
 
         all_files, accessed = load_coverage_for_run(audit_run_id, db=db)
         if not all_files:
             return "No coverage data available."
 
-        tree = build_coverage_tree(all_files, accessed)
-        lines = [
-            f"Overall: {tree.accessed_files}/{tree.total_files} files ({tree.coverage_pct:.0f}%)",
-            "",
-        ]
+        dirs = build_directory_coverage(all_files, accessed)
+        total = len(all_files)
+        reached = len(accessed & set(all_files))
+        pct = (100.0 * reached / total) if total else 0
 
-        def _fmt(node, prefix: str = "", depth: int = 0) -> None:
-            dirs = sorted(
-                [(k, v) for k, v in node.children.items() if v.is_dir],
-                key=lambda x: x[0],
+        lines = [f"Overall: {reached}/{total} files ({pct:.0f}%)", ""]
+        for d in dirs:
+            lines.append(
+                f"{d.path}/ — {d.accessed_files}/{d.total_files} ({d.coverage_pct:.0f}%)"
             )
-            for name, child in dirs:
-                pct = child.coverage_pct
-                indent = "  " * depth
-                lines.append(
-                    f"{indent}{name}/ — {child.accessed_files}/{child.total_files} ({pct:.0f}%)"
-                )
-                _fmt(child, f"{prefix}{name}/", depth + 1)
-
-        _fmt(tree)
         return "\n".join(lines)
 
     async def get_similar_findings(finding_id: int, threshold: float = 0.8) -> str:
@@ -624,6 +612,49 @@ Existing mitigations to verify:
                 )
         return "\n".join(lines) if lines else "No similar findings found."
 
+    async def ask_human(
+        question: str,
+        choices: list[str] | None = None,
+        runtime: ToolRuntime = None,  # pyright: ignore[reportArgumentType]  # injected by framework
+    ) -> str:
+        """Ask the human operator a question and wait for their response.
+
+        Use this after initial reconnaissance to clarify scope, priorities,
+        or ask about specific areas of concern. The audit will pause until
+        the human responds. Supports markdown in the question text.
+
+        Args:
+            question: The question to ask (supports markdown).
+            choices: Optional list of options the human can select from.
+                     Multiple selections are allowed. The human can also
+                     provide free-text alongside their selections.
+        """
+        from langgraph.types import interrupt
+
+        from llmpuffin.models import HumanQuestion
+
+        rt_thread_id = ""
+        rt_tool_call_id = ""
+        if runtime:
+            rt_tool_call_id = runtime.tool_call_id or ""
+            rt_thread_id = runtime.config.get("configurable", {}).get("thread_id", "")
+
+        # Store the question in DB before interrupting.
+        async with db.async_session() as s:
+            s.add(
+                HumanQuestion(
+                    thread_id=rt_thread_id,
+                    tool_call_id=rt_tool_call_id,
+                    question=question,
+                    choices=choices,
+                )
+            )
+            await s.commit()
+
+        # Interrupt the graph. On resume, interrupt() returns the answer.
+        answer = interrupt(question)
+        return f"Human responded: {answer}"
+
     return {
         "get_threat_model": get_threat_model,
         "get_threat_scenario": get_threat_scenario,
@@ -638,4 +669,5 @@ Existing mitigations to verify:
         "finding_list_attached_files": finding_list_attached_files,
         "get_coverage": get_coverage,
         "get_similar_findings": get_similar_findings,
+        "ask_human": ask_human,
     }

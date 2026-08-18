@@ -16,4 +16,5 @@ MAIN_AGENT_TOOLS = (
     "finding_list_attached_files",
     "get_coverage",
     "get_similar_findings",
+    "ask_human",
 )

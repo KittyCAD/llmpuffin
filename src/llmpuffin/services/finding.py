@@ -102,10 +102,10 @@ class FindingService:
 
         async with self.db.async_session() as s:
             rows = (
-                await s.execute(
-                    select(Finding).where(Finding.id.in_(finding_ids))
-                )
-            ).scalars().all()
+                (await s.execute(select(Finding).where(Finding.id.in_(finding_ids))))
+                .scalars()
+                .all()
+            )
 
         return sorted(
             [(f, scores[f.id]) for f in rows],

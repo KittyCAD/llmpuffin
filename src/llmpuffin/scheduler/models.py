@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from llmpuffin.models import AuditProfile
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -29,9 +31,7 @@ class AuditSchedule(Base):
     )
     cron_expr: Mapped[str] = mapped_column(String(128))
     """Standard 5-field cron expression (minute hour dom month dow)."""
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true"
-    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -39,9 +39,10 @@ class AuditSchedule(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    profile: Mapped["AuditProfile"] = relationship()  # noqa: F821
+    profile: Mapped[AuditProfile] = relationship()
     runs: Mapped[list[ScheduleRun]] = relationship(
-        back_populates="schedule", cascade="all, delete-orphan",
+        back_populates="schedule",
+        cascade="all, delete-orphan",
         order_by="ScheduleRun.created_at.desc()",
     )
 

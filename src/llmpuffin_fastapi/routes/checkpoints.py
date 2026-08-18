@@ -15,7 +15,7 @@ from llmpuffin.agent import run_audit
 from llmpuffin.config import Config, Profile
 from llmpuffin.github import GitHubClient
 from llmpuffin.agent.harness import HarnessConfig
-from llmpuffin.models import AuditRun, AuditThread, Finding
+from llmpuffin.models import AuditRun, AuditThread, Finding, HumanQuestion
 
 from llmpuffin.agent.checkpoint import get_session, list_sessions
 from llmpuffin.db import DB
@@ -92,6 +92,25 @@ async def checkpoint_detail(
         rest = [f for f in all_findings if f.fork_thread_id != thread_id]
         findings = highlighted + rest
         highlighted_ids = {f.id for f in highlighted}
+
+    # Load pending human questions for this thread.
+    pending_questions: list[HumanQuestion] = []
+    if audit_thread is not None:
+        pending_questions = list(
+            (
+                await db.execute(
+                    select(HumanQuestion)
+                    .where(
+                        HumanQuestion.thread_id == thread_id,
+                        HumanQuestion.answered_at.is_(None),
+                    )
+                    .order_by(HumanQuestion.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
     return templates.TemplateResponse(
         request,
         "checkpoint_detail.html",
@@ -100,6 +119,7 @@ async def checkpoint_detail(
             "audit_thread": audit_thread,
             "findings": findings,
             "highlighted_finding_ids": highlighted_ids,
+            "pending_questions": pending_questions,
         },
     )
 
@@ -165,6 +185,73 @@ async def checkpoint_resume(
         ),
     )
     return toast(request, "success", "Resumed", redirect_to=redirect)
+
+
+@router.post("/checkpoints/{thread_id}/answer/{question_id}/")
+async def checkpoint_answer(
+    thread_id: str,
+    question_id: int,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    llmpuffin_db: Annotated[DB, Depends(get_llmpuffin_db)],
+    harness: Annotated[Harness, Depends(get_harness)],
+    config: Annotated[Config, Depends(get_config)],
+    gh: Annotated[GitHubClient | None, Depends(get_github_client)] = None,
+):
+    from datetime import datetime, timezone
+
+    audit_thread = await _get_audit_thread(db, thread_id)
+    if audit_thread is None:
+        raise HTTPException(status_code=404)
+    redirect = f"/checkpoints/{thread_id}/"
+
+    # Combine selected choices + free text into the answer.
+    form = await request.form()
+    selected = form.getlist("selected")
+    free_text = str(form.get("answer") or "").strip()
+    parts = []
+    if selected:
+        parts.append("Selected: " + ", ".join(str(s) for s in selected))
+    if free_text:
+        parts.append(free_text)
+    answer = "\n".join(parts)
+    if not answer:
+        return toast(request, "error", "Answer cannot be empty", redirect_to=redirect)
+
+    # Update the question.
+    question = (
+        await db.execute(select(HumanQuestion).where(HumanQuestion.id == question_id))
+    ).scalar_one_or_none()
+    if question is None:
+        return toast(request, "error", "Question not found", redirect_to=redirect)
+    if question.answered_at is not None:
+        return toast(request, "error", "Already answered", redirect_to=redirect)
+    question.answer = answer
+    question.answered_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    # Resume with Command(resume=answer).
+    run = audit_thread.audit_run
+    toml_str = run.profile_toml or (run.profile.profile_toml if run.profile else "")
+    if not toml_str:
+        return toast(request, "error", "No config available", redirect_to=redirect)
+
+    profile = Profile.from_toml_string(toml_str)
+    harness_config = HarnessConfig(profile=profile, profile_toml=toml_str)
+    harness.spawn(
+        thread_id,
+        run_audit(
+            harness_config,
+            db=llmpuffin_db,
+            global_config=config,
+            thread_id=thread_id,
+            resume_answer=answer,
+            github_client=gh,
+        ),
+    )
+    return toast(
+        request, "success", "Answer sent, audit resuming", redirect_to=redirect
+    )
 
 
 @router.post("/checkpoints/{thread_id}/stop/")

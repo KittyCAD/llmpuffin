@@ -249,7 +249,9 @@ async def schedule_upsert(
         await scheduler_svc.upsert(profile_id, cron_expr, enabled=enabled)
     except ValueError as exc:
         return toast(request, "error", str(exc), redirect_to=redirect)
-    return toast(request, "success", "Schedule saved", redirect_to=redirect, refresh=True)
+    return toast(
+        request, "success", "Schedule saved", redirect_to=redirect, refresh=True
+    )
 
 
 @router.post("/profiles/{profile_id}/schedule/delete/")
@@ -263,4 +265,6 @@ async def schedule_delete(
     if schedule is None:
         return toast(request, "error", "No schedule found", redirect_to=redirect)
     await scheduler_svc.delete(schedule.id)
-    return toast(request, "success", "Schedule removed", redirect_to=redirect, refresh=True)
+    return toast(
+        request, "success", "Schedule removed", redirect_to=redirect, refresh=True
+    )

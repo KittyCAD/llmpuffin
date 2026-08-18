@@ -21,6 +21,8 @@
       <span class="badge destructive"><span class="dot"></span>failed</span>
     {% elif run.status == "error" %}
       <span class="badge destructive"><span class="dot"></span>error</span>
+    {% elif run.status == "waiting_for_input" %}
+      <span class="badge warning"><span class="dot"></span>waiting for input</span>
     {% elif run.status == "aborted" %}
       <span class="badge warning"><span class="dot"></span>aborted</span>
     {% else %}
@@ -84,6 +86,7 @@
       {% if t.status == "running" %}<span class="badge primary"><span class="dot"></span>running</span>
       {% elif t.status == "completed" %}<span class="badge success"><span class="dot"></span>completed</span>
       {% elif t.status == "failed" %}<span class="badge destructive"><span class="dot"></span>failed</span>
+      {% elif t.status == "waiting_for_input" %}<span class="badge warning"><span class="dot"></span>waiting for input</span>
       {% elif t.status == "aborted" %}<span class="badge warning"><span class="dot"></span>aborted</span>
       {% elif t.status == "error" %}<span class="badge destructive"><span class="dot"></span>error</span>
       {% else %}<span class="badge outline">{{ t.status }}</span>{% endif %}
