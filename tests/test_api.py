@@ -66,6 +66,7 @@ def _setup_test_database():
     from sqlalchemy import create_engine, text
 
     from llmpuffin.models import Base
+    from llmpuffin.scheduler import models  # noqa: F401 — register scheduler tables
 
     _check_and_create_db()
 
@@ -92,6 +93,12 @@ def client():
     from llmpuffin.db import DB
     from llmpuffin.agent.harness import Harness
     from llmpuffin.models import Base
+    from llmpuffin.scheduler.service import SchedulerService
+    from llmpuffin.services.profile import ProfileService
+    from llmpuffin.services.project import ProjectService
+    from llmpuffin.services.run import RunService
+    from llmpuffin.services.skill import SkillService
+    from llmpuffin.services.threat_model import ThreatModelService
     from llmpuffin_fastapi.deps import set_github_client
     from llmpuffin_fastapi.routes import findings, profiles, runs, skills, threat_models
 
@@ -105,6 +112,12 @@ def client():
     db = DB(PostgresConfig(url=_TEST_DB_URL))
     app.state.config = config
     app.state.db = db
+    app.state.profile_service = ProfileService(db)
+    app.state.project_service = ProjectService(db)
+    app.state.run_service = RunService(db)
+    app.state.skill_service = SkillService(db)
+    app.state.threat_model_service = ThreatModelService(db)
+    app.state.scheduler_service = SchedulerService(db)
     app.state.harness = Harness(global_config=config)
 
     app.include_router(profiles.router)
@@ -232,7 +245,7 @@ class TestProfiles:
             profile_toml='[audit]\nname = "x"\nimage = "i"\nthreat_model = "t"',
         )
         resp = client.post(
-            f"/profiles/{pid}/",
+            f"/profiles/{pid}/edit/",
             data={
                 "name": "updated-name",
                 "profile_toml": '[audit]\nname = "y"\nimage = "i2"\nthreat_model = "t"',

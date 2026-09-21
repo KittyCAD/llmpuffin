@@ -557,33 +557,24 @@ Existing mitigations to verify:
         """
         from llmpuffin.services.coverage import (
             load_coverage_for_run,
-            build_coverage_tree,
+            build_directory_coverage,
         )
 
         all_files, accessed = load_coverage_for_run(audit_run_id, db=db)
         if not all_files:
             return "No coverage data available."
 
-        tree = build_coverage_tree(all_files, accessed)
+        dirs = build_directory_coverage(all_files, accessed)
+        total = len(all_files)
+        reached = len(accessed & set(all_files))
         lines = [
-            f"Overall: {tree.accessed_files}/{tree.total_files} files ({tree.coverage_pct:.0f}%)",
+            f"Overall: {reached}/{total} files ({100.0 * reached / total:.0f}%)",
             "",
         ]
-
-        def _fmt(node, prefix: str = "", depth: int = 0) -> None:
-            dirs = sorted(
-                [(k, v) for k, v in node.children.items() if v.is_dir],
-                key=lambda x: x[0],
+        for directory in dirs:
+            lines.append(
+                f"{directory.path}/ — {directory.accessed_files}/{directory.total_files} ({directory.coverage_pct:.0f}%)"
             )
-            for name, child in dirs:
-                pct = child.coverage_pct
-                indent = "  " * depth
-                lines.append(
-                    f"{indent}{name}/ — {child.accessed_files}/{child.total_files} ({pct:.0f}%)"
-                )
-                _fmt(child, f"{prefix}{name}/", depth + 1)
-
-        _fmt(tree)
         return "\n".join(lines)
 
     async def get_similar_findings(finding_id: int, threshold: float = 0.8) -> str:
