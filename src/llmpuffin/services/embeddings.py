@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import psycopg
+from psycopg import sql
 
 if TYPE_CHECKING:
     from llmpuffin.db import DB
@@ -268,30 +269,30 @@ def find_similar_by_vector(
     """
     vec_literal = "[" + ",".join(str(float(v)) for v in vector) + "]"
 
-    conditions = ["status != 'deleted'", "embedding IS NOT NULL"]
+    conditions = [sql.SQL("status != 'deleted'"), sql.SQL("embedding IS NOT NULL")]
     params: list = [vec_literal]
 
     if exclude_id is not None:
-        conditions.append("id != %s")
+        conditions.append(sql.SQL("id != %s"))
         params.append(exclude_id)
     if audit_run_id is not None:
-        conditions.append("audit_run_id = %s")
+        conditions.append(sql.SQL("audit_run_id = %s"))
         params.append(audit_run_id)
 
-    where = " AND ".join(conditions)
+    where = sql.SQL(" AND ").join(conditions)
     params.extend([vec_literal, limit])
 
     results = []
     with psycopg.connect(db.url) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"""
+                sql.SQL("""
                 SELECT id, 1 - (embedding <=> %s::vector) AS similarity
                 FROM finding
                 WHERE {where}
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s
-                """,
+                """).format(where=where),
                 params,
             )
             for row in cur.fetchall():

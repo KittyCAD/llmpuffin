@@ -15,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from llmpuffin.models import Base
+from llmpuffin.models import AuditProfile, Base
 
 
 class AuditSchedule(Base):
@@ -39,7 +39,7 @@ class AuditSchedule(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    profile: Mapped["AuditProfile"] = relationship()  # noqa: F821
+    profile: Mapped["AuditProfile"] = relationship()
     runs: Mapped[list[ScheduleRun]] = relationship(
         back_populates="schedule", cascade="all, delete-orphan",
         order_by="ScheduleRun.created_at.desc()",
