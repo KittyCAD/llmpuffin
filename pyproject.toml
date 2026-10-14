@@ -36,11 +36,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-nexecutor = ["nexecutor-client"]
+nexecutor = []  # Kept for existing installs; the HTTP client is a core dependency.
 microvm = ["boto3", "awscli"]
-
-[tool.uv.sources]
-nexecutor-client = { git = "https://github.com/KittyCAD/nexecutor.git", subdirectory = "clients/python" }
 
 [project.scripts]
 llmpuffin = "llmpuffin.__main__:main"

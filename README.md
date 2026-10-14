@@ -64,6 +64,38 @@ max_iterations = 200
 skills = ["audit-context-building"]
 ```
 
+### Nexecutor
+
+The nexecutor runtime uses persistent HTTP sessions with asynchronous command
+receipts. It requires a nexecutor server with session support and
+`NEXECUTOR_SESSIONS_ENABLED=true`; the old `nexecutor-client` SDK is no longer
+needed. Configure the existing server address and authentication as before:
+
+```toml
+runtime = "nexecutor"
+
+[nexecutor]
+url = "http://localhost:8080"
+backend = "k8s" # or "microvm" for a configured MicroVM backend
+session_lifetime_seconds = 14400
+```
+
+The token setting accepts a bearer token or projected-token file. An empty setting
+uses the standard Pod Identity token file when present. Kubernetes session images
+need `/bin/sh`, `sleep`, and GNU `timeout`; MicroVM images need the HTTP exec agent.
+
+Tool calls share the same filesystem. llmpuffin sends keepalives while the audit
+runs, polls command receipts, and retrieves lost responses by idempotency key.
+It stops on unknown command outcomes or changed session history instead of
+repeating commands or recreating an empty workspace. Stopping an audit requests
+termination of its session. Start new audits when switching from legacy workload
+IDs; existing legacy workloads cannot be resumed through the session API.
+
+Deploy nexecutor session support before updating llmpuffin. After other clients
+have migrated and old workloads have drained, the operator can set
+`NEXECUTOR_LEGACY_WORKLOADS_ENABLED=false`. The nexecutor execution-run guide
+contains the server rollout steps and recovery limits.
+
 ## Usage
 
 Build the container image and run an audit:

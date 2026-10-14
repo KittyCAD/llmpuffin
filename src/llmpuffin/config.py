@@ -68,7 +68,7 @@ import tomllib
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import Field, BaseModel, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from llmpuffin.features import FeatureFlags, ProfileFeatureOverrides
@@ -133,6 +133,8 @@ class NexecutorConfig(BaseModel):
     token: str = ""
     backend: Literal["k8s", "microvm", ""] = ""
     """Backend type. Empty string = server default (microvm)."""
+    session_lifetime_seconds: int = Field(default=14400, ge=1, le=14400)
+    """Maximum lifetime of a persistent nexecutor workspace."""
 
 
 class MicrovmConfig(BaseModel):

@@ -278,12 +278,10 @@ Existing mitigations to verify:
             else []
         )
         if duplicates:
-            lines = [
-                "This finding appears to be a duplicate of existing finding(s):"
-            ]
+            lines = ["This finding appears to be a duplicate of existing finding(s):"]
             for dup, sim in duplicates:
                 lines.append(
-                    f"  - finding_id {dup.local_id}: \"{dup.title}\" "
+                    f'  - finding_id {dup.local_id}: "{dup.title}" '
                     f"(similarity: {sim:.0%})"
                 )
             lines.append(

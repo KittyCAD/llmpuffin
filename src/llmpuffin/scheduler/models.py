@@ -29,9 +29,7 @@ class AuditSchedule(Base):
     )
     cron_expr: Mapped[str] = mapped_column(String(128))
     """Standard 5-field cron expression (minute hour dom month dow)."""
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true"
-    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -41,7 +39,8 @@ class AuditSchedule(Base):
 
     profile: Mapped["AuditProfile"] = relationship()
     runs: Mapped[list[ScheduleRun]] = relationship(
-        back_populates="schedule", cascade="all, delete-orphan",
+        back_populates="schedule",
+        cascade="all, delete-orphan",
         order_by="ScheduleRun.created_at.desc()",
     )
 

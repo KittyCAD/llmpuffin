@@ -34,7 +34,9 @@ async def scheduler_loop(
 
     while True:
         try:
-            await _tick(svc, db=db, config=config, harness=harness, github_client=github_client)
+            await _tick(
+                svc, db=db, config=config, harness=harness, github_client=github_client
+            )
         except asyncio.CancelledError:
             log.info("Scheduler stopped")
             return
@@ -67,7 +69,8 @@ async def _tick(
         except Exception as exc:
             log.warning(
                 "Scheduler: invalid config for profile %d: %s",
-                sched.profile_id, exc,
+                sched.profile_id,
+                exc,
             )
             await svc.record_error(sched.id, str(exc))
             continue
@@ -82,7 +85,9 @@ async def _tick(
                 harness_config, tid, db=db, profile_id=sched.profile_id
             )
         except Exception as exc:
-            log.warning("Scheduler: failed to create run for schedule %d: %s", sched.id, exc)
+            log.warning(
+                "Scheduler: failed to create run for schedule %d: %s", sched.id, exc
+            )
             await svc.record_error(sched.id, str(exc))
             continue
 
@@ -101,5 +106,7 @@ async def _tick(
         )
         log.info(
             "Scheduler: launched audit run %d for profile %d (schedule %d)",
-            run_id, sched.profile_id, sched.id,
+            run_id,
+            sched.profile_id,
+            sched.id,
         )

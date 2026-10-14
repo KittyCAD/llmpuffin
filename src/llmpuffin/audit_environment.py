@@ -12,7 +12,7 @@ container.  This provides both security isolation and reproducibility.
 
 Two runtimes are supported:
   - podman: local Podman/Docker daemon via docker-py
-  - nexecutor: remote nexecutor service via nexecutor-client
+  - nexecutor: remote nexecutor service via persistent HTTP sessions
 """
 
 from __future__ import annotations

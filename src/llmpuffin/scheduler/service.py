@@ -51,9 +51,7 @@ class SchedulerService:
         async with self.db.async_session() as s:
             existing = (
                 await s.execute(
-                    select(AuditSchedule).where(
-                        AuditSchedule.profile_id == profile_id
-                    )
+                    select(AuditSchedule).where(AuditSchedule.profile_id == profile_id)
                 )
             ).scalar_one_or_none()
 
@@ -105,15 +103,19 @@ class SchedulerService:
 
         async with self.db.async_session() as s:
             schedules = (
-                await s.execute(
-                    select(AuditSchedule)
-                    .where(AuditSchedule.enabled.is_(True))
-                    .options(
-                        selectinload(AuditSchedule.runs),
-                        selectinload(AuditSchedule.profile),
+                (
+                    await s.execute(
+                        select(AuditSchedule)
+                        .where(AuditSchedule.enabled.is_(True))
+                        .options(
+                            selectinload(AuditSchedule.runs),
+                            selectinload(AuditSchedule.profile),
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         due = []
         for sched in schedules:
@@ -136,9 +138,7 @@ class SchedulerService:
 
     # ── Run recording ──
 
-    async def record_start(
-        self, schedule_id: int, audit_run_id: int
-    ) -> ScheduleRun:
+    async def record_start(self, schedule_id: int, audit_run_id: int) -> ScheduleRun:
         async with self.db.async_session() as s:
             run = ScheduleRun(
                 schedule_id=schedule_id,
@@ -150,9 +150,7 @@ class SchedulerService:
             await s.refresh(run)
             return run
 
-    async def record_error(
-        self, schedule_id: int, error: str
-    ) -> ScheduleRun:
+    async def record_error(self, schedule_id: int, error: str) -> ScheduleRun:
         async with self.db.async_session() as s:
             run = ScheduleRun(
                 schedule_id=schedule_id,

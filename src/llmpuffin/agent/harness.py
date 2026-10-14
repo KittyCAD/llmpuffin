@@ -137,21 +137,16 @@ class Harness:
             raise RuntimeError("global_config is required to start an environment")
         cfg = self.global_config
         if cfg.runtime == "nexecutor":
-            try:
-                from llmpuffin.runtime.nexecutor import NexecutorRuntime
-            except ImportError as exc:
-                raise RuntimeError(
-                    f"nexecutor-client is not installed or outdated: {exc}. "
-                    "Install with: pip install llmpuffin[nexecutor]"
-                ) from exc
+            from llmpuffin.runtime.nexecutor import NexecutorRuntime
 
-            return await NexecutorRuntime.start(  # pyright: ignore[reportReturnType]
+            return await NexecutorRuntime.start(
                 image=p.image,
                 code_dir=p.code_dir,
                 base_url=cfg.nexecutor.url,
                 token=cfg.nexecutor.token,
                 container_id=container_id,
                 backend=cfg.nexecutor.backend or None,
+                session_lifetime_seconds=cfg.nexecutor.session_lifetime_seconds,
             )
         elif cfg.runtime == "microvm":
             try:
